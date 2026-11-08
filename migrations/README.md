@@ -40,9 +40,11 @@ returns all of them.
 - **Send the whole `fields` list** when you change a collection's fields.
   PocketBase removes any field the list leaves out, and the data in it.
 - **Address collections by name**, never by their generated id.
-- **Every collection holding someone's data is theirs alone.** Its rules
-  compare an owner field with `@request.auth.id`; `tests/api/` proves that
-  another person's token sees nothing.
+- **Every collection holding someone's data is theirs alone, and only with
+  two-step sign-in on.** Each of its rules reads
+  `owner = @request.auth.id && @request.auth.mfa_enabled = true` (create:
+  `@request.body.owner = @request.auth.id && …`); `tests/api/` proves that
+  another person's token, and a password-only session, see nothing.
 - **Open with a comment saying what changes and why.** For a rule, say what
   it stops someone doing.
 - **No `down`.** To undo a migration, write a new one.

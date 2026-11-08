@@ -1,0 +1,164 @@
+# nginx in front of Nuxt: behind the Cloudflare Tunnel in the cluster, and in
+# front of the production build in CI. It does the country block, the rate
+# limits and the holding page; the app sets its own security headers.
+#
+# A template: the container fills in three settings as it starts
+# (nginx/start.sh), so the cluster, CI and a local run share one config:
+#   NUXT_UPSTREAM   where Nuxt answers, host:port
+#   RESOLVER        the DNS server that names it (cluster: kube-dns)
+#   REAL_IP_FROM    the proxy trusted to say who the client is (cluster: the pod network)
+
+# A bare "nginx" in the Server header, not the version.
+server_tokens off;
+
+# Only cloudflared may assert the client's address, and cloudflared is a pod,
+# so only the pod network is trusted. Cloudflare appends the address that
+# connected to it to any X-Forwarded-For the client sent, and the recursive
+# search takes the right-most untrusted address -- that one -- so a forged
+# header changes nothing.
+set_real_ip_from ${REAL_IP_FROM};
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+
+# The country block. Cloudflare puts the visitor's country in CF-IPCountry,
+# and only cloudflared reaches nginx, so the header is Cloudflare's. China,
+# Russia and India are the largest sources of bot traffic; North Korea, Iran
+# and Belarus are under US sanctions. An address Cloudflare can't place (no
+# header, or XX/T1) is allowed. Noise reduction, not access control: a VPN
+# walks past it, so the rate limits and two-step sign-in are what hold.
+map $http_cf_ipcountry $blocked_country {
+    default 0;
+    CN 1;
+    RU 1;
+    IN 1;
+    KP 1;
+    IR 1;
+    BY 1;
+}
+
+# Only POSTs count: reading two-step sign-in's status as a page loads
+# (GET /api/auth/two-step) guesses nothing. An empty key is never limited.
+map $request_method $limit_key {
+    POST    $binary_remote_addr;
+    default "";
+}
+
+# Sign-in and anything else that checks a password or a code.
+limit_req_zone $limit_key zone=auth:10m rate=10r/m;
+# Routes that send mail: each costs Mailjet quota (200 a day, free).
+limit_req_zone $limit_key zone=mail:10m rate=5r/m;
+# Sign-up: creates accounts.
+limit_req_zone $limit_key zone=signup:10m rate=10r/m;
+
+# The browser spoke HTTPS to Cloudflare; nginx sees cloudflared's plain HTTP.
+# Cloudflare sets X-Forwarded-Proto, and Nuxt's Origin check
+# (server/utils/auth.ts) needs the browser's scheme, or it refuses every POST.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# Looked up per request: a restarted pod gets a new address, and a name
+# resolved once at start would go on dialling the old one.
+resolver ${RESOLVER} valid=10s ipv6=off;
+
+server {
+    # Unprivileged port: the container runs as the nginx user.
+    listen 8080 default_server;
+    server_name _;
+
+    set $nuxt_upstream ${NUXT_UPSTREAM};
+
+    if ($blocked_country) {
+        return 403 "Cheddar isn't available in your country.\n";
+    }
+
+    # Cloudflare must never keep a copy of anything: every page is someone's
+    # finances. Browsers follow the app's Cache-Control; only Cloudflare
+    # reads this.
+    add_header Cloudflare-CDN-Cache-Control "no-store" always;
+
+    # Nothing takes uploads yet; statement imports will raise this.
+    client_max_body_size 1M;
+
+    # While Nuxt or PocketBase restarts, a deploy, an upstream 502/503/504
+    # becomes a 503: JSON under /api/, a page that reloads itself elsewhere.
+    proxy_intercept_errors on;
+    error_page 502 503 504 =503 @unavailable;
+    # A refused rate limit answers in the app's error shape, which the pages
+    # show as written (app/utils/errors.ts).
+    limit_req_status 429;
+    error_page 429 @limited;
+
+    location = /api/auth/login {
+        limit_req zone=auth burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    location = /api/auth/code {
+        limit_req zone=auth burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    # Setting up an app or new recovery codes: each checks the password or a code.
+    location ^~ /api/auth/two-step {
+        limit_req zone=auth burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    # Deleting an account checks the password.
+    location = /api/auth/delete-account {
+        limit_req zone=auth burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    # Guesses at an emailed token.
+    location ~ ^/api/auth/confirm-(password-reset|verification)$ {
+        limit_req zone=auth burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    location ~ ^/api/auth/request-(password-reset|verification)$ {
+        limit_req zone=mail burst=3 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    location = /api/auth/register {
+        limit_req zone=signup burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    location / {
+        include snippets/proxy-to-nuxt.conf;
+        # Mitigated: $connection_upgrade (above) sends "close" without an Upgrade header.
+        proxy_http_version 1.1; # nosemgrep: generic.nginx.security.possible-h2c-smuggling.possible-nginx-h2c-smuggling
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+
+    location @limited {
+        add_header Cloudflare-CDN-Cache-Control "no-store" always;
+        add_header Retry-After 60 always;
+        default_type application/json;
+        return 429 '{"statusCode":429,"message":"Too many tries. Wait a minute and try again."}';
+    }
+
+    location @unavailable {
+        # add_header here replaces the server's, so it is repeated.
+        add_header Cloudflare-CDN-Cache-Control "no-store" always;
+        add_header Retry-After 5 always;
+        add_header Cache-Control "no-store" always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline';" always;
+        default_type application/json;
+        if ($uri ~ ^/api/) {
+            return 503 '{"statusCode":503,"message":"Cheddar is updating. Try again in a few seconds."}';
+        }
+        root /usr/share/nginx/holding;
+        try_files /unavailable.html =503;
+    }
+}

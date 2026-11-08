@@ -1,7 +1,7 @@
 # The public front door: cloudflared holds an outbound connection to
 # Cloudflare, which serves APP_HOST and sends its requests down that tunnel to
-# Nuxt. Nothing listens to the internet, and DNS shows Cloudflare's addresses.
-# The tunnel's route (APP_HOST -> http://nuxt.cheddar.svc.cluster.local:3000)
+# nginx. Nothing listens to the internet, and DNS shows Cloudflare's addresses.
+# The tunnel's route (APP_HOST -> http://nginx.cheddar.svc.cluster.local:80)
 # lives in Cloudflare's dashboard (k8s/README.md).
 apiVersion: apps/v1
 kind: Deployment

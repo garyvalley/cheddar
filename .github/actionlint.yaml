@@ -1,0 +1,3 @@
+self-hosted-runner:
+  # The runner on `primary` that deploys (k8s/README.md).
+  labels: [cheddar]

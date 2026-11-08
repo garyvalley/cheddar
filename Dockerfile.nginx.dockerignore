@@ -1,0 +1,3 @@
+# Everything Dockerfile.nginx may read, and nothing else.
+*
+!nginx

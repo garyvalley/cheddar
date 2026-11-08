@@ -5,9 +5,11 @@
 import { mkdirSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { chromium } from 'playwright-core'
+import { loadHookModule } from '../tests/load-hook-module.mjs'
 
 const APP = (process.env.APP_URL || 'http://localhost:3005').replace(/\/$/, '')
 const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
+const totp = loadHookModule('pb_hooks/lib/totp.js')
 const out = new URL('../docs/screenshots/', import.meta.url).pathname
 mkdirSync(out, { recursive: true })
 const email = `shots-${randomBytes(4).toString('hex')}@cheddar.test`
@@ -21,6 +23,10 @@ try {
   await page.screenshot({ path: `${out}sign-in.png` })
   await page.request.post(`${APP}/api/auth/register`, { data: { email, password, name: 'Alex Rivera' }, headers: { origin: APP } })
   await page.request.post(`${APP}/api/auth/login`, { data: { email, password }, headers: { origin: APP } })
+  await page.goto(`${APP}/setup`)
+  await page.screenshot({ path: `${out}setup.png` })
+  const { secret } = await (await page.request.post(`${APP}/api/auth/two-step/app`, { data: { password }, headers: { origin: APP } })).json()
+  await page.request.post(`${APP}/api/auth/two-step/app/confirm`, { data: { code: totp.codeAt(secret, totp.stepAt(Date.now())) }, headers: { origin: APP } })
   await page.request.patch(`${APP}/api/profile`, { data: { state: 'CA', filing_status: 'married_joint' }, headers: { origin: APP } })
   await page.goto(`${APP}/`)
   await page.screenshot({ path: `${out}overview.png` })

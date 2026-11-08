@@ -100,7 +100,8 @@ console.log(`
     pnpm dev
 
   App          ${APP}
-  Demo login   ${DEMO_EMAIL} / ${DEMO_PASS}
+  Demo login   ${DEMO_EMAIL} / ${DEMO_PASS} (sets up two-step sign-in on first sign-in)
+  nginx        docker compose up -d nginx, then http://localhost:8085
   PocketBase   ${PB.replace('127.0.0.1', 'localhost')}/_/  (superuser in .env: PB_SU_EMAIL, PB_SU_PASS)
   Stop it      pnpm dev:stop
 `)

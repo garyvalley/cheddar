@@ -5,7 +5,6 @@ const { me } = useAuth()
 
 const steps = computed(() => [
   { done: !!me.value?.verified, label: 'Confirm your email', hint: 'So you can reset your password if you forget it.' },
-  { done: !!me.value?.mfa_enabled, label: 'Turn on two-step sign-in', hint: 'A code from your phone as well as your password.' },
   {
     done: !!(me.value?.state && me.value?.filing_status),
     label: 'Choose your state and filing status',

@@ -43,13 +43,6 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Server-only: the browser never talks to PocketBase.
     pocketbaseUrl: 'http://127.0.0.1:8095',
-    // The request header holding the real client address, set only where a
-    // trusted proxy writes it (NUXT_CLIENT_IP_HEADER=cf-connecting-ip in the
-    // cluster). Empty: the connection's own address.
-    clientIpHeader: '',
-    // Tries per address per 5 minutes on the sign-in routes
-    // (server/middleware/rate-limit.ts).
-    authRateLimit: 10,
   },
 
   // Security headers come from nuxt-security: script-src needs a per-request
@@ -82,9 +75,9 @@ export default defineNuxtConfig({
       permissionsPolicy: { camera: [], microphone: [], geolocation: [], payment: [] },
       crossOriginEmbedderPolicy: false,
     },
-    // The module's request-side middleware stays off: the rate limiter is
-    // server/middleware/rate-limit.ts, keyed to the real client address;
-    // xssValidator rewrites request bodies; CORS is never wanted.
+    // The module's request-side middleware stays off: nginx rate-limits by
+    // the real client address (nginx/nginx.conf.template); xssValidator
+    // rewrites request bodies; CORS is never wanted.
     rateLimiter: false,
     xssValidator: false,
     corsHandler: false,
