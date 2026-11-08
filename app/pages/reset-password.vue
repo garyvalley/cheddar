@@ -6,15 +6,15 @@ useHead({ title: 'Choose a new password' })
 
 const route = useRoute()
 const { me } = useAuth()
-const { busy, error, run } = useAction()
+const { busy, error, succeed } = useAction()
 const password = ref('')
 const done = ref(false)
 
 async function save() {
-  const ok = await run(() => $fetch('/api/auth/confirm-password-reset', {
+  const ok = await succeed(() => $fetch('/api/auth/confirm-password-reset', {
     method: 'POST', body: { token: String(route.query.token || ''), password: password.value },
   }))
-  if (ok === undefined) return
+  if (!ok) return
   // Every session ended with the old password, this browser's too.
   me.value = null
   done.value = true

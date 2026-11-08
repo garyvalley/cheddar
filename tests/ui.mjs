@@ -26,8 +26,11 @@ const watch = (page) => {
   page.on('pageerror', e => errors.push(e.message))
 }
 
+// The page in use, for a screenshot if a step fails (ui-failure.png, ignored by git).
+let current
 try {
   const page = await browser.newPage()
+  current = page
   watch(page)
 
   // A signed-out visitor is sent to sign in.
@@ -71,9 +74,37 @@ try {
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await page.getByText('Saved').waitFor()
 
+  // Requests that succeed with 204 No Content show their success. (A 204
+  // once read as a failure, so the confirm button seemed to do nothing.)
+  await page.getByRole('button', { name: 'Send confirmation email' }).click()
+  await page.getByText('Sent. Check your inbox.').waitFor()
+  // The emailed links carry tokens only mail delivers, so the server's
+  // answer is stood in for: exactly the 204 the pages must read as success.
+  await page.route('**/api/auth/confirm-verification', route => route.fulfill({ status: 204 }))
+  await page.goto(`${APP}/verify-email?token=from-the-email`)
+  await page.getByRole('button', { name: 'Confirm email' }).click()
+  await page.getByText('Your email is confirmed.').waitFor()
+  await page.unroute('**/api/auth/confirm-verification')
+
   // Out, and back in with a code.
+  await page.goto(`${APP}/`)
   await page.getByRole('button', { name: 'Sign out', exact: true }).first().click()
   await page.waitForURL(/\/login/)
+
+  await page.getByRole('link', { name: 'Forgot password?' }).click()
+  await page.getByRole('heading', { name: 'Reset your password' }).waitFor()
+  await page.getByLabel('Email').fill(email)
+  await page.getByRole('button', { name: 'Send link' }).click()
+  await page.getByText('an email with a reset link is on its way').waitFor()
+  await page.route('**/api/auth/confirm-password-reset', route => route.fulfill({ status: 204 }))
+  await page.goto(`${APP}/reset-password?token=from-the-email`)
+  await page.getByLabel('New password').fill('another long password')
+  await page.getByRole('button', { name: 'Save password' }).click()
+  await page.getByText('Your password is changed').waitFor()
+  await page.unroute('**/api/auth/confirm-password-reset')
+
+  await page.goto(`${APP}/login`)
+  await page.getByRole('heading', { name: 'Sign in' }).waitFor()
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
@@ -85,6 +116,7 @@ try {
   // On a phone: the tab bar, and Settings in the header.
   const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, storageState: await page.context().storageState() })
   const p = await phone.newPage()
+  current = p
   watch(p)
   await p.goto(`${APP}/`)
   await p.getByRole('link', { name: 'Spending' }).last().click()
@@ -92,8 +124,18 @@ try {
   await p.getByRole('link', { name: 'Settings' }).click()
   await p.getByRole('heading', { name: 'Settings' }).waitFor()
 
+  // Deleting the account ends on the sign-in page.
+  await p.getByRole('button', { name: 'Delete…' }).click()
+  await p.getByLabel('Enter your password to delete your account for good').fill(password)
+  await p.getByRole('button', { name: 'Delete my account' }).click()
+  await p.waitForURL(/\/login/)
+
   assert.deepEqual(errors, [], 'console errors')
   console.log('✔ ui smoke test passed')
+}
+catch (e) {
+  await current?.screenshot({ path: 'ui-failure.png' }).catch(() => {})
+  throw e
 }
 finally {
   await browser.close()
