@@ -83,15 +83,17 @@ jobs:
             -e PB_SU_EMAIL -e PB_SU_PASS -e APP_URL="$APP_URL" cheddar-pb:ci
           node scripts/migrate.mjs
       - name: Start the app behind nginx
-        # nginx on a user-defined network, where Docker's DNS (127.0.0.11)
-        # answers, reaching the runner's Nuxt as host.docker.internal. It
-        # trusts any X-Forwarded-For here, so each test client has an address.
+        # nginx on a user-defined network, reaching the runner's Nuxt by the
+        # network's gateway address: Docker's DNS doesn't serve --add-host
+        # names, and nginx resolves through it. It trusts any X-Forwarded-For
+        # here, so each test client has an address of its own.
         run: |
           pnpm build
           PORT=3012 NUXT_POCKETBASE_URL="$PB_URL" nohup node .output/server/index.mjs > nuxt.log 2>&1 &
           docker build --build-arg IMAGE_TAG="$GITHUB_SHA" -f Dockerfile.nginx -t cheddar-nginx:ci .
-          docker run -d --name cheddar-nginx --network cheddar-ci --add-host host.docker.internal:host-gateway \
-            -p 127.0.0.1:8085:8080 -e NUXT_UPSTREAM=host.docker.internal:3012 -e RESOLVER=127.0.0.11 \
+          gateway=$(docker network inspect cheddar-ci -f '{{(index .IPAM.Config 0).Gateway}}')
+          docker run -d --name cheddar-nginx --network cheddar-ci \
+            -p 127.0.0.1:8085:8080 -e NUXT_UPSTREAM="$gateway:3012" -e RESOLVER=127.0.0.11 \
             -e REAL_IP_FROM=0.0.0.0/0 cheddar-nginx:ci
           for _ in $(seq 1 30); do curl -sf "$APP_URL/login" >/dev/null && exit 0; sleep 1; done
           cat nuxt.log; docker logs cheddar-nginx; exit 1
