@@ -39,7 +39,7 @@ printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$auth" > "$tmp/dockerconfig.json"
 apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson="$tmp/dockerconfig.json"
 
 # PocketBase's environment. Without Mailjet's keys it sends no mail at all;
-# without BANK_LINK_KEY no bank can be linked.
+# without BANK_LINK_KEY and Plaid's keys no bank can be linked.
 {
   echo "MAILJET_API_KEY=${MAILJET_API_KEY:-}"
   echo "MAILJET_SECRET_KEY=${MAILJET_SECRET_KEY:-}"
@@ -48,6 +48,10 @@ apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfi
   # Without it, bank linking is off. Changing it means every link must be
   # made again: its access can't be read with a new key.
   echo "BANK_LINK_KEY=${BANK_LINK_KEY:-}"
+  # From dashboard.plaid.com, Developers -> Keys; PLAID_SECRET is the one for PLAID_ENV.
+  echo "PLAID_CLIENT_ID=${PLAID_CLIENT_ID:-}"
+  echo "PLAID_SECRET=${PLAID_SECRET:-}"
+  echo "PLAID_ENV=${PLAID_ENV:-sandbox}"
 } > "$tmp/pocketbase.env"
 apply_secret pocketbase-env --from-env-file="$tmp/pocketbase.env"
 

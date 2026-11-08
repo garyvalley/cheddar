@@ -53,13 +53,16 @@ export default defineNuxtConfig({
       contentSecurityPolicy: {
         'default-src': ['\'self\''],
         'manifest-src': ['\'self\''],
+        // Plaid Link's script must come from Plaid itself (BankLinks.vue loads it
+        // when someone links a bank), and it opens the bank sign-in in a frame.
         'script-src': dev
-          ? ['\'self\'', '\'nonce-{{nonce}}\'', '\'unsafe-inline\'', '\'unsafe-eval\'']
-          : ['\'self\'', '\'nonce-{{nonce}}\''],
+          ? ['\'self\'', '\'nonce-{{nonce}}\'', '\'unsafe-inline\'', '\'unsafe-eval\'', 'https://cdn.plaid.com']
+          : ['\'self\'', '\'nonce-{{nonce}}\'', 'https://cdn.plaid.com'],
+        'frame-src': ['https://cdn.plaid.com'],
         // Vue writes component styles inline; a style can't run code.
         'style-src': ['\'self\'', '\'unsafe-inline\''],
         'img-src': ['\'self\'', 'data:', 'blob:'],
-        'connect-src': ['\'self\''],
+        'connect-src': ['\'self\'', 'https://production.plaid.com', 'https://sandbox.plaid.com'],
         'font-src': ['\'self\''],
         'object-src': ['\'none\''],
         'frame-ancestors': ['\'none\''],

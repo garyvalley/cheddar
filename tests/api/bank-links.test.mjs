@@ -1,17 +1,17 @@
-// Linking banks through SimpleFIN, end to end through nginx and Nuxt against
-// a real PocketBase and a stand-in SimpleFIN server (simplefin-mock.mjs).
+// Linking banks through Plaid, end to end through nginx and Nuxt against a
+// real PocketBase and a stand-in Plaid (plaid-mock.mjs). Plaid Link itself,
+// where the person signs in to their bank, runs in Plaid's own frame; here
+// the stand-in hands out the public_token Link would.
 //
-// Needs what auth.test.mjs needs, plus PocketBase started with BANK_LINK_KEY
-// set and SIMPLEFIN_ALLOWED_ORIGINS including SIMPLEFIN_MOCK_ORIGIN, the
-// address PocketBase reaches the stand-in at (tests/README.md). Skipped
-// without SIMPLEFIN_MOCK_ORIGIN.
+// Needs what auth.test.mjs needs, plus PocketBase started with BANK_LINK_KEY,
+// PLAID_CLIENT_ID and PLAID_SECRET set to the stand-in's, and PLAID_API_URL
+// pointing at it (tests/README.md). Skipped without PLAID_MOCK_PORT.
 
-import { after, before, describe, test } from 'node:test'
+import { before, after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { client, PB, ready, signedIn, superuser } from './helpers.mjs'
-import { sampleAccounts, startMock } from './simplefin-mock.mjs'
+import { sampleBank, startMock } from './plaid-mock.mjs'
 
-const MOCK = process.env.SIMPLEFIN_MOCK_ORIGIN
 let mock
 
 /** A new account, signed in; with two-step sign-in on unless `passwordOnly`. Its `token` is the session's PocketBase token. */
@@ -29,7 +29,18 @@ async function pb(method, path, token, body) {
   return { status: r.status, json: await r.json().catch(() => null) }
 }
 
-/** Lets the next sync through at once: the routes answer the last result for 10 minutes. */
+/** Links a bank for `c` the way the page does: a link token, then Link's public_token. */
+async function link(c, bank = sampleBank()) {
+  const t = await c.call('POST', '/api/bank-links/link-token', {})
+  assert.equal(t.status, 200, JSON.stringify(t.json))
+  assert.match(t.json.link_token, /^link-sandbox-/)
+  const { token } = mock.publicToken(bank)
+  const r = await c.call('POST', '/api/bank-links', { public_token: token, institution: 'From Link' })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  return { ...r.json, bank }
+}
+
+/** Lets the next sync through at once: the routes answer the last result for two minutes. */
 async function allowSync(linkId) {
   const r = await pb('PATCH', `/api/collections/bank_links/records/${linkId}`, await superuser(), { last_attempt: '2000-01-01 00:00:00.000Z' })
   assert.equal(r.status, 200)
@@ -38,144 +49,144 @@ async function allowSync(linkId) {
 const transactions = async (c, accountId) =>
   (await pb('GET', `/api/collections/transactions/records?perPage=200&sort=posted&filter=${encodeURIComponent(`account='${accountId}'`)}`, c.token)).json.items
 
-describe('bank links', { skip: !MOCK && 'SIMPLEFIN_MOCK_ORIGIN is not set' }, () => {
-  before(async () => { mock = await startMock({ origin: MOCK }) })
-
+describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT is not set' }, () => {
+  before(async () => { mock = await startMock() })
   after(() => mock?.close())
 
   test('need a session with two-step sign-in on', async () => {
     assert.equal((await client().call('GET', '/api/bank-links')).status, 401)
     const c = await person({ passwordOnly: true })
     assert.equal((await c.call('GET', '/api/bank-links')).status, 403)
-    assert.equal((await c.call('POST', '/api/bank-links', { setup_token: mock.token().token })).status, 403)
+    assert.equal((await c.call('POST', '/api/bank-links/link-token', {})).status, 403)
+    assert.equal((await c.call('POST', '/api/bank-links', { public_token: mock.publicToken().token })).status, 403)
   })
 
-  test('a setup token links its accounts and syncs balances and transactions', async () => {
+  test('signing in to a bank links its accounts and syncs balances and every page of transactions', async () => {
     const c = await person()
     assert.deepEqual((await c.call('GET', '/api/bank-links')).json, { enabled: true, links: [] })
 
-    const { token, state } = mock.token()
-    const r = await c.call('POST', '/api/bank-links', { setup_token: token })
-    assert.equal(r.status, 200, JSON.stringify(r.json))
-    assert.deepEqual(r.json.sync, { ok: true, added: 4, updated: 0, removed: 0 })
-    assert.deepEqual(r.json.link.institutions, ['Mock Bank'])
-    assert.equal(r.json.link.status, 'ok')
-    assert.ok(!JSON.stringify(r.json).includes('@'), 'the access URL stays in PocketBase')
-    // The first sync reaches 90 days back, with pending transactions.
-    assert.equal(state.requests.length, 1)
-    assert.equal(state.requests[0].pending, '1')
-    assert.ok(Math.abs(Number(state.requests[0]['start-date']) - (Date.now() / 1000 - 90 * 86400)) < 120)
+    const r = await link(c)
+    assert.deepEqual(r.sync, { ok: true, added: 4, updated: 0, removed: 0 })
+    assert.deepEqual(r.link.institutions, ['First Platypus Bank'], 'Plaid\'s name for the bank wins over the page\'s')
+    assert.equal(r.link.status, 'ok')
+    assert.ok(!JSON.stringify({ link: r.link, sync: r.sync }).includes('access-sandbox'), 'the access token stays in PocketBase')
+    // Two pages of two, then the cursor is kept.
+    assert.deepEqual(r.bank.calls.filter(x => x.path === '/transactions/sync').map(x => x.cursor), [null, '2'])
 
     const accounts = (await pb('GET', '/api/collections/accounts/records?sort=name', c.token)).json.items
     assert.deepEqual(accounts.map(a => [a.name, a.kind, a.last4, a.institution, a.balance_cents, a.source]), [
-      ['Everyday Checking ...4821', 'checking', '4821', 'Mock Bank', 245017, 'sync'],
-      ['Rewards Visa', 'credit_card', '', 'Mock Bank', -31055, 'sync'],
+      ['Plaid Checking', 'checking', '0000', 'First Platypus Bank', 245017, 'sync'],
+      ['Plaid Credit Card', 'credit_card', '3333', 'First Platypus Bank', -31055, 'sync'],
     ])
     const rows = await transactions(c, accounts[0].id)
     assert.deepEqual(rows.map(t => [t.amount_cents, t.pending, t.source]), [[320000, false, 'sync'], [-180000, false, 'sync'], [-4210, true, 'sync']])
 
-    // A token works once; a second try says it may have been taken.
-    const again = await c.call('POST', '/api/bank-links', { setup_token: token })
-    assert.equal(again.status, 400)
-    assert.match(again.json.message, /already used/)
+    // A public_token works once.
+    const used = await c.call('POST', '/api/bank-links', { public_token: 'public-sandbox-0123456789abcdef' })
+    assert.equal(used.status, 400)
 
     const list = (await c.call('GET', '/api/bank-links')).json
     assert.equal(list.links.length, 1)
     assert.equal(list.links[0].accounts.length, 2)
   })
 
-  test('a later sync adds what\'s new, updates what changed and drops a pending charge that posted under a new id', async () => {
+  test('a later sync carries on from the cursor: a pending charge that posts is replaced, a change is applied', async () => {
     const c = await person()
-    const accounts = sampleAccounts()
-    const { token, state } = mock.token(accounts)
-    const { json: { link } } = await c.call('POST', '/api/bank-links', { setup_token: token })
+    const { link: l, bank } = await link(c)
 
-    // Right after a sync, another answers the last one without asking SimpleFIN.
-    const soon = await c.call('POST', `/api/bank-links/${link.id}/sync`)
+    // Right after a sync, another answers the last one without asking Plaid.
+    const soon = await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
     assert.equal(soon.json.sync.recent, true)
-    assert.equal(state.requests.length, 1)
 
-    const checking = accounts[0]
-    checking.balance = '2407.07'
-    checking.transactions = checking.transactions.filter(t => t.id !== 't-pend')
-    checking.transactions.push({ id: 't-posted', posted: checking.transactions[0].posted + 19 * 86400, amount: '-43.10', description: 'GROCER' })
-    checking.transactions[1].description = 'RENT NOVEMBER'
-    await allowSync(link.id)
-    const r = await c.call('POST', `/api/bank-links/${link.id}/sync`)
+    const pend = bank.events[2].t
+    const rent = bank.events[1].t
+    bank.accounts[0].balances.current = 2407.07
+    bank.events.push(
+      { kind: 'removed', t: pend },
+      { kind: 'added', t: { ...pend, transaction_id: `${pend.transaction_id}-posted`, amount: 43.1, pending: false } },
+      { kind: 'modified', t: { ...rent, name: 'RENT NOVEMBER' } },
+    )
+    const calls = bank.calls.length
+    await allowSync(l.id)
+    const r = await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
     assert.deepEqual(r.json.sync, { ok: true, added: 1, updated: 1, removed: 1 })
-    // The window now starts 10 days before the last sync.
-    assert.ok(Math.abs(Number(state.requests[1]['start-date']) - (Date.now() / 1000 - 10 * 86400)) < 120)
+    assert.deepEqual(bank.calls.slice(calls).filter(x => x.path === '/transactions/sync').map(x => x.cursor), ['4', '6'])
 
-    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'4821\'')}`, c.token)).json.items[0]
+    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
     assert.equal(account.balance_cents, 240707)
-    const rows = await transactions(c, account.id)
-    assert.deepEqual(rows.map(t => [t.description, t.amount_cents, t.pending]),
+    assert.deepEqual((await transactions(c, account.id)).map(t => [t.description, t.amount_cents, t.pending]),
       [['PAYROLL ACME', 320000, false], ['RENT NOVEMBER', -180000, false], ['GROCER', -4310, false]])
   })
 
-  test('SimpleFIN refusing the access marks the link to be made again', async () => {
+  test('a bank that needs signing in again says so, and signing in again brings it back', async () => {
     const c = await person()
-    const { token, state } = mock.token()
-    const { json: { link } } = await c.call('POST', '/api/bank-links', { setup_token: token })
-    state.status = 403
-    await allowSync(link.id)
-    const r = await c.call('POST', `/api/bank-links/${link.id}/sync`)
+    const { link: l, bank } = await link(c)
+    bank.status = 'ITEM_LOGIN_REQUIRED'
+    await allowSync(l.id)
+    const r = await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
     assert.equal(r.status, 200)
     assert.equal(r.json.sync.ok, false)
     assert.equal(r.json.link.status, 'reconnect')
-    assert.match(r.json.link.message, /Link the bank again/)
+    assert.match(r.json.link.message, /sign in again/)
+
+    // Update mode: a link token for this link, Link run again, then a sync straight away.
+    const t = await c.call('POST', '/api/bank-links/link-token', { link: l.id })
+    assert.equal(t.status, 200)
+    bank.status = null
+    const back = await c.call('POST', `/api/bank-links/${l.id}/sync`, { reconnected: true })
+    assert.equal(back.json.sync.ok, true)
+    assert.equal(back.json.link.status, 'ok')
+    assert.equal(back.json.link.message, '')
   })
 
-  test('a token pointing anywhere but an allowed SimpleFIN server is refused before any request', async () => {
+  test('refuses what isn\'t a public_token before calling Plaid', async () => {
     const c = await person()
-    for (const url of ['https://evil.example/claim/x', 'http://127.0.0.1:8090/api/health']) {
-      const r = await c.call('POST', '/api/bank-links', { setup_token: Buffer.from(url).toString('base64') })
-      assert.equal(r.status, 400)
-      assert.match(r.json.message, /doesn't use/)
+    for (const token of ['', 'access-sandbox-0123456789', 'public-sandbox-x;drop', 'not a token']) {
+      assert.equal((await c.call('POST', '/api/bank-links', { public_token: token })).status, 400, token)
     }
-    assert.equal((await c.call('POST', '/api/bank-links', { setup_token: 'not a token' })).status, 400)
   })
 
   test('one person\'s link and accounts are hidden from another, and the record API can\'t reach a link', async () => {
     const owner = await person()
-    const { json: { link } } = await owner.call('POST', '/api/bank-links', { setup_token: mock.token().token })
+    const { link: l } = await link(owner)
     const other = await person()
 
     assert.deepEqual((await other.call('GET', '/api/bank-links')).json.links, [])
-    assert.equal((await other.call('POST', `/api/bank-links/${link.id}/sync`)).status, 404)
-    assert.equal((await other.call('POST', `/api/bank-links/${link.id}/remove`)).status, 404)
+    assert.equal((await other.call('POST', `/api/bank-links/${l.id}/sync`, {})).status, 404)
+    assert.equal((await other.call('POST', `/api/bank-links/${l.id}/remove`)).status, 404)
+    assert.equal((await other.call('POST', '/api/bank-links/link-token', { link: l.id })).status, 404)
     assert.equal((await pb('GET', '/api/collections/accounts/records', other.token)).json.items.length, 0)
 
-    // Not even the owner reads a link, or its access, through the record API.
-    assert.equal((await pb('GET', `/api/collections/bank_links/records/${link.id}`, owner.token)).status, 403)
+    assert.equal((await pb('GET', `/api/collections/bank_links/records/${l.id}`, owner.token)).status, 403)
     assert.equal((await pb('GET', '/api/collections/bank_links/records', owner.token)).status, 403)
-    assert.equal((await pb('PATCH', `/api/collections/bank_links/records/${link.id}`, owner.token, { status: 'ok' })).status, 403)
-    const su = await pb('GET', `/api/collections/bank_links/records/${link.id}`, await superuser())
+    assert.equal((await pb('PATCH', `/api/collections/bank_links/records/${l.id}`, owner.token, { status: 'ok' })).status, 403)
     // A superuser sees the field, but only as ciphertext.
+    const su = await pb('GET', `/api/collections/bank_links/records/${l.id}`, await superuser())
     assert.ok(su.json.access.length > 40)
-    assert.ok(!su.json.access.includes(MOCK.split('://')[1]), 'stored encrypted')
+    assert.ok(!su.json.access.includes('access-sandbox'), 'stored encrypted')
   })
 
   test('the record API can\'t point an account at a link', async () => {
     const owner = await person()
-    const { json: { link } } = await owner.call('POST', '/api/bank-links', { setup_token: mock.token().token })
+    const { link: l } = await link(owner)
     const other = await person()
     const me = (await other.call('GET', '/api/auth/me')).json.me
-    const created = await pb('POST', '/api/collections/accounts/records', other.token, { owner: me.id, name: 'Mine', kind: 'checking', link: link.id })
+    const created = await pb('POST', '/api/collections/accounts/records', other.token, { owner: me.id, name: 'Mine', kind: 'checking', link: l.id })
     assert.equal(created.status, 200, JSON.stringify(created.json))
     assert.equal(created.json.link, '')
-    const changed = await pb('PATCH', `/api/collections/accounts/records/${created.json.id}`, other.token, { link: link.id })
+    const changed = await pb('PATCH', `/api/collections/accounts/records/${created.json.id}`, other.token, { link: l.id })
     assert.equal(changed.json.link, '')
   })
 
-  test('removing a link keeps its accounts and transactions, no longer syncing', async () => {
+  test('unlinking tells Plaid to forget the access, and keeps the accounts and transactions', async () => {
     const c = await person()
-    const { json: { link } } = await c.call('POST', '/api/bank-links', { setup_token: mock.token().token })
-    assert.equal((await c.call('POST', `/api/bank-links/${link.id}/remove`)).status, 204)
+    const { link: l, bank } = await link(c)
+    assert.equal((await c.call('POST', `/api/bank-links/${l.id}/remove`)).status, 204)
+    assert.equal(mock.removed(bank), true)
     assert.deepEqual((await c.call('GET', '/api/bank-links')).json.links, [])
     const accounts = (await pb('GET', '/api/collections/accounts/records', c.token)).json.items
     assert.equal(accounts.length, 2)
     assert.ok(accounts.every(a => a.link === ''))
-    assert.equal((await transactions(c, accounts.find(a => a.last4 === '4821').id)).length, 3)
+    assert.equal((await transactions(c, accounts.find(a => a.last4 === '0000').id)).length, 3)
   })
 })

@@ -2,7 +2,7 @@
 import { ACCOUNT_KINDS, kindLabel, type Account, type AccountKind } from '~~/shared/accounts'
 import type { BankLinks } from '~~/shared/bank-links'
 
-// The one place accounts are set up: linked through SimpleFIN, or added here
+// The one place accounts are set up: linked by signing in to the bank (Plaid), or added here
 // and filled from statement files. Every other page only reads them.
 const { data, refresh } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
@@ -78,7 +78,7 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
       <h2 id="add-title" class="group-title">Add an account yourself</h2>
       <form v-if="adding" class="card" @submit.prevent="save">
         <p v-if="!accounts.length" class="field footnote">
-          For an account you'd rather not link, or a bank SimpleFIN doesn't reach: add it here, then import the CSV, OFX or QFX file your bank's website lets you download.
+          For an account you'd rather not link, or a bank that can't be linked: add it here, then import the CSV, OFX or QFX file your bank's website lets you download.
         </p>
         <label class="field">
           <span class="field-label">Name</span>
