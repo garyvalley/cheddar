@@ -4,14 +4,13 @@ useHead({ title: 'Confirm email' })
 
 const route = useRoute()
 const { me, load } = useAuth()
-const { busy, error, run } = useAction()
+const { busy, error, succeed } = useAction()
 const done = ref(false)
 
 // Confirming changes server state, so it waits for a tap rather than
 // running on page load, where a mail scanner opening the link would do it.
 async function confirm() {
-  const ok = await run(() => $fetch('/api/auth/confirm-verification', { method: 'POST', body: { token: String(route.query.token || '') } }))
-  if (ok === undefined) return
+  if (!await succeed(() => $fetch('/api/auth/confirm-verification', { method: 'POST', body: { token: String(route.query.token || '') } }))) return
   done.value = true
   if (me.value) await load()
 }
