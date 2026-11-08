@@ -295,8 +295,12 @@ const month = (name: string) => ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul'
 
 /** One element's value: OFX 1 (SGML) often leaves elements unclosed, so the value runs to the next tag or line end. */
 function element(block: string, tag: string): string {
-  const m = new RegExp(`<${tag}>([^<\\r\\n]*)`, 'i').exec(block)
-  return m ? decodeEntities(m[1]!.trim()) : ''
+  const open = `<${tag}>`
+  const at = block.toUpperCase().indexOf(open)
+  if (at < 0) return ''
+  const rest = block.slice(at + open.length)
+  const end = rest.search(/[<\r\n]/)
+  return decodeEntities((end < 0 ? rest : rest.slice(0, end)).trim())
 }
 
 function decodeEntities(s: string): string {
