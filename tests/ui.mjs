@@ -1,8 +1,9 @@
 // Browser smoke test: sign up, be held at two-step setup until it's on, set
-// the profile, sign out and back in with a code, on a desktop and a
-// phone-sized screen, with no console errors. Run it through nginx in front of
-// the production build, where the strict CSP applies: an inline script the
-// nonce doesn't cover would break hydration here first (tests/README.md).
+// the profile, import a statement and undo it, sign out and back in with a
+// code, on a desktop and a phone-sized screen, with no console errors. Run it
+// through nginx in front of the production build, where the strict CSP
+// applies: an inline script the nonce doesn't cover would break hydration
+// here first (tests/README.md).
 //
 //   APP_URL=http://localhost:8085 node tests/ui.mjs
 //
@@ -85,6 +86,30 @@ try {
   await page.getByRole('button', { name: 'Confirm email' }).click()
   await page.getByText('Your email is confirmed.').waitFor()
   await page.unroute('**/api/auth/confirm-verification')
+
+  // Money: an account, a statement file previewed and imported, its
+  // transactions on Spending, and the import undone.
+  await page.goto(`${APP}/accounts`)
+  await page.getByLabel('Name').fill('Everyday checking')
+  await page.getByRole('button', { name: 'Add account' }).click()
+  await page.getByRole('link', { name: 'Import a statement into Everyday checking' }).click()
+  await page.getByRole('heading', { name: 'Import', exact: true }).waitFor()
+  await page.getByLabel('CSV, OFX or QFX file').setInputFiles({
+    name: 'november.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('Posting Date,Description,Amount\n11/01/2026,COFFEE,-4.50\n11/02/2026,"GROCERY, INC",-82.10\n11/03/2026,PAYCHECK,2500.00\nTotal,,\n'),
+  })
+  await page.getByText('1 line won\'t be imported').waitFor()
+  assert.equal(await page.locator('table.preview tbody tr').count(), 3)
+  assert.equal(await page.locator('table.preview tbody td').first().textContent(), '2026-11-01')
+  await page.getByRole('button', { name: 'Import 3 transactions' }).click()
+  await page.getByText('Imported 3 transactions into Everyday checking.').waitFor()
+  await page.getByRole('link', { name: 'See transactions' }).click()
+  await page.getByRole('heading', { name: 'Spending' }).waitFor()
+  await page.getByText('GROCERY, INC').waitFor()
+  assert.equal(await page.getByText('\u2212$82.10').count(), 1)
+  await page.getByRole('link', { name: 'Import', exact: true }).click()
+  await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()
+  await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
 
   // Out, and back in with a code.
   await page.goto(`${APP}/`)

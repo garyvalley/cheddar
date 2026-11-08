@@ -23,3 +23,9 @@ export function required(value: unknown, what: string): string {
   }
   return value
 }
+
+/** A record id from the path or the query (PocketBase's 15 lowercase letters and digits), or a 404. */
+export function recordId(value: unknown, what = 'Not found'): string {
+  if (typeof value !== 'string' || !/^[a-z0-9]{15}$/.test(value)) throw createError({ statusCode: 404, statusMessage: what })
+  return value
+}

@@ -6,7 +6,8 @@ nothing to install from an app store.
 
 **Status:** the foundation is in place: accounts with required two-step
 sign-in, your profile (state and filing status), the app shell and the deploy
-pipeline.
+pipeline. You can add your bank and card accounts and import their
+statement files (CSV, OFX or QFX) as transactions.
 The finance features arrive in this order:
 
 1. **Accounts and net worth.** Checking, savings, credit, brokerage,
@@ -79,6 +80,21 @@ tunnel, repository secrets) and day-to-day operations.
 - **Install it on a phone:**
   - In Safari, tap Share, then Add to Home Screen.
   - In Chrome on Android, tap ⋮, then Install app.
+- **Add your accounts** (Accounts): a name, the kind (checking, savings,
+  credit card, loan…), and optionally the bank and the last four digits.
+- **Import a statement** (Import, on Accounts or Spending):
+  - On your bank's website, download your transactions as CSV, or as
+    Quicken (QFX) or Money (OFX).
+  - Choose the account and the file. Cheddar shows what it read before
+    saving anything. For a CSV you can change which column is the date,
+    description and amount (or separate money out and money in columns),
+    whether dates are day first, and whether the file shows money out as
+    positive (many card exports do; Cheddar guesses this for cards).
+  - Transactions already in the account are skipped, so importing the same
+    file twice, or overlapping date ranges, is safe. Two identical rows on the
+    same day in one file are both kept.
+  - **Undo** next to an import removes the transactions it added.
+- **See your transactions** (Spending), newest first, for one account or all.
 - **Sign out everywhere** (Settings) ends every session on every device.
 - **Delete account** (Settings) removes your account and everything in it.
   It asks for your password.

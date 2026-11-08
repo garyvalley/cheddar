@@ -37,7 +37,7 @@ const greeting = computed(() => (me.value?.name ? `Hi, ${me.value.name.split(' '
       <h2 id="soon" class="group-title">Net worth</h2>
       <div class="card card-pad">
         <p class="num large-title muted">—</p>
-        <p class="footnote">Add your accounts to see your net worth here. Accounts arrive in the next update.</p>
+        <p class="footnote">Net worth from your accounts' balances arrives in the next update.</p>
       </div>
       <p v-if="me?.state" class="group-footer">Tax rules: federal and {{ stateByCode(me.state)?.name }}.</p>
     </section>
