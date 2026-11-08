@@ -1,0 +1,5 @@
+# Everything Dockerfile.pocketbase may read, and nothing else. See
+# Dockerfile.nuxt.dockerignore.
+*
+!pb_hooks
+!scripts/pocketbase-start.sh

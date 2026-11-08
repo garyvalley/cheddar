@@ -1,0 +1,74 @@
+# The public front door: cloudflared holds an outbound connection to
+# Cloudflare, which serves APP_HOST and sends its requests down that tunnel to
+# Nuxt. Nothing listens to the internet, and DNS shows Cloudflare's addresses.
+# The tunnel's route (APP_HOST -> http://nuxt.cheddar.svc.cluster.local:3000)
+# lives in Cloudflare's dashboard (k8s/README.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+      annotations:
+        cheddar/config: "${CLOUDFLARED_CONFIG}"
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: primary
+      securityContext:
+        runAsNonRoot: true
+        # The image's `nonroot` user.
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudflared
+          # Cloudflare publishes it only on Docker Hub. Pinned by digest, and
+          # pulled once per version, then cached on primary.
+          image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
+          # The token (TUNNEL_TOKEN) names the tunnel and carries its route.
+          # Updates come with a new pinned image, never by itself.
+          args: [tunnel, --no-autoupdate, --metrics, "0.0.0.0:2000", run]
+          envFrom:
+            - secretRef:
+                name: cloudflared
+          ports:
+            - containerPort: 2000
+          # /ready answers 200 once at least one connection to Cloudflare is up.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

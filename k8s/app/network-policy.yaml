@@ -1,0 +1,117 @@
+# Only the path a request takes is open: cloudflared -> Nuxt -> PocketBase.
+# Nothing else in the cluster reaches Nuxt or PocketBase, which is also what
+# makes Nuxt's trust in cf-connecting-ip safe (k8s/app/nuxt.yaml).
+#
+# Outbound is closed the same way: each pod reaches DNS, the next pod on that
+# path, and the public internet only where it needs it -- never the home
+# network, the tailnet, the nodes or the cluster's API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: ${NAMESPACE}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-dns
+  namespace: ${NAMESPACE}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+---
+# The tunnel to Cloudflare's edge (7844 over QUIC or TCP, 443 for its API),
+# and the requests it brings in, to Nuxt.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflared
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudflared
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nuxt
+      ports:
+        - port: 3000
+    # The public internet: everything but private, link-local and tailnet
+    # ranges (10/8 holds pods and services, 192.168/16 the home network).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16]
+      ports:
+        - { port: 7844, protocol: UDP }
+        - { port: 7844, protocol: TCP }
+        - { port: 443, protocol: TCP }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nuxt
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: nuxt
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: cloudflared
+      ports:
+        - port: 3000
+  # PocketBase only: Nuxt calls nothing on the internet.
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: pocketbase
+      ports:
+        - port: 8090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pocketbase
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: pocketbase
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: nuxt
+      ports:
+        - port: 8090
+  # Mailjet's HTTPS API, for account mail (pb_hooks/mailjet.pb.js).
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16]
+      ports:
+        - { port: 443, protocol: TCP }

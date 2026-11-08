@@ -1,0 +1,14 @@
+# Everything Dockerfile.nuxt may read, and nothing else (BuildKit uses this in
+# place of .dockerignore for this Dockerfile).
+*
+!app
+!server
+!shared
+!public
+!nuxt.config.ts
+!tsconfig.json
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!migrations
+!scripts/migrate.mjs

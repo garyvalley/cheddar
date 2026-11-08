@@ -1,0 +1,25 @@
+# PocketBase for local development (pnpm run setup). Nuxt runs on the host
+# with `pnpm dev`. Data stays in ./pb_data; the hooks are mounted, so editing
+# pb_hooks/ reloads PocketBase.
+services:
+  pocketbase:
+    build:
+      context: .
+      dockerfile: Dockerfile.pocketbase
+    ports:
+      # Loopback only: nothing else on the network reaches the dev database.
+      - "127.0.0.1:${PB_HOST_PORT:-8095}:8090"
+    volumes:
+      - ./pb_data:/pb/pb_data
+      - ./pb_hooks:/pb/pb_hooks
+    environment:
+      APP_URL: http://localhost:${NUXT_DEV_PORT:-3005}
+      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
+      MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
+      MAILJET_SENDER_EMAIL: ${MAILJET_SENDER_EMAIL:-}
+      MAILJET_SENDER_NAME: ${MAILJET_SENDER_NAME:-Cheddar}
+      # The superuser scripts/migrate.mjs signs in with; PocketBase makes it
+      # on start (scripts/pocketbase-start.sh).
+      PB_SU_EMAIL: ${PB_SU_EMAIL:-}
+      PB_SU_PASS: ${PB_SU_PASS:-}
+    restart: unless-stopped
