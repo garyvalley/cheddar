@@ -1,0 +1,101 @@
+# Nuxt: the pages and the /api routes, which hold the PocketBase token in an
+# httpOnly cookie. One replica: the sign-in rate limit is in memory
+# (server/middleware/rate-limit.ts). A new pod is ready before the old goes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nuxt
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: nuxt
+  template:
+    metadata:
+      labels:
+        app: nuxt
+      annotations:
+        cheddar/config: "${NUXT_CONFIG}"
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: primary
+      imagePullSecrets:
+        - name: ghcr
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # The schema first (migrations/README.md): a new version never serves
+      # before its collections exist, and a failed migration stops the
+      # rollout here while the old pod keeps serving.
+      initContainers:
+        - name: migrate
+          image: ${IMAGE_PREFIX}/nuxt:${NUXT_TAG}
+          command: ["node", "scripts/migrate.mjs"]
+          env:
+            - name: PB_URL
+              value: http://pocketbase:8090
+          envFrom:
+            - secretRef:
+                name: pocketbase-superuser
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: nuxt
+          image: ${IMAGE_PREFIX}/nuxt:${NUXT_TAG}
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NUXT_POCKETBASE_URL
+              value: http://pocketbase:8090
+            # Only cloudflared reaches this pod (network-policy.yaml), so the
+            # address Cloudflare reports is the client's.
+            - name: NUXT_CLIENT_IP_HEADER
+              value: cf-connecting-ip
+          readinessProbe:
+            httpGet: { path: /login, port: 3000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /login, port: 3000 }
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nuxt
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: nuxt
+  ports:
+    - port: 3000
+      targetPort: 3000

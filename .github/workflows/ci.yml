@@ -1,0 +1,223 @@
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  # Checks run on PRs so a branch is verified before it reaches main: main
+  # deploys straight to production.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  # Weekly, Monday 15:00 UTC: rescans for advisories published since.
+  schedule:
+    - cron: "0 15 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  # A production deploy is never cancelled halfway; PR runs supersede each other.
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.head_ref) || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Lint, typecheck, unit tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+      - run: pnpm build
+      - run: shellcheck scripts/*.sh
+
+  audit:
+    # Its own job: a new advisory can turn it red with no code change, and
+    # that must not hide whether the code still builds.
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
+
+  integration:
+    # The API suite and the browser smoke test, against the production build
+    # and the real PocketBase image.
+    name: Integration and regression tests
+    runs-on: ubuntu-latest
+    env:
+      PB_URL: http://127.0.0.1:8095
+      APP_URL: http://127.0.0.1:3012
+      PB_SU_EMAIL: ci@cheddar.test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Make this run's superuser password
+        run: |
+          pass=$(openssl rand -hex 24)
+          echo "::add-mask::$pass"
+          echo "PB_SU_PASS=$pass" >> "$GITHUB_ENV"
+      - name: Start PocketBase
+        run: |
+          docker build --build-arg IMAGE_TAG="$GITHUB_SHA" -f Dockerfile.pocketbase -t cheddar-pb:ci .
+          docker run -d --name cheddar-pb -p 127.0.0.1:8095:8090 \
+            -e PB_SU_EMAIL -e PB_SU_PASS -e APP_URL="$APP_URL" cheddar-pb:ci
+          node scripts/migrate.mjs
+      - name: Start the app
+        run: |
+          pnpm build
+          PORT=3012 NUXT_POCKETBASE_URL="$PB_URL" NUXT_CLIENT_IP_HEADER=x-test-ip \
+            nohup node .output/server/index.mjs > nuxt.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf "$APP_URL/login" >/dev/null && exit 0; sleep 1; done
+          cat nuxt.log; exit 1
+      - name: API suite
+        run: node --test 'tests/api/*.test.mjs'
+      - name: Browser smoke test
+        # GitHub's Ubuntu image has Chrome installed.
+        run: node tests/ui.mjs
+      - name: Logs on failure
+        if: failure()
+        run: |
+          cat nuxt.log || true
+          docker logs cheddar-pb || true
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    # gitleaks lists a PR's commits through the API, which needs this.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: Static analysis (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: |
+          docker run --rm -v "$PWD:/src" -w /src \
+            semgrep/semgrep@sha256:67319956da3dcb58baf5b322899c15458e3963e7018a86aeeb5cd224e69cb77a \
+            semgrep scan --config auto --error .
+
+  trivy:
+    name: CVE scan (dependencies and images)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Scan dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: 1
+      - run: docker build --build-arg IMAGE_TAG="$GITHUB_SHA" -f Dockerfile.nuxt -t cheddar-nuxt:scan .
+      - name: Scan the Nuxt image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cheddar-nuxt:scan
+          severity: CRITICAL,HIGH
+          exit-code: 1
+      - run: docker build --build-arg IMAGE_TAG="$GITHUB_SHA" -f Dockerfile.pocketbase -t cheddar-pb:scan .
+      - name: Scan the PocketBase image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cheddar-pb:scan
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+  images:
+    # arm64 images for the Raspberry Pi cluster, tagged with the commit. Built
+    # on PRs too, so a Dockerfile that breaks on arm64 is caught before main;
+    # pushed to GHCR only from main.
+    name: Pi image (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - { name: nuxt, dockerfile: Dockerfile.nuxt }
+          - { name: pocketbase, dockerfile: Dockerfile.pocketbase }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        if: github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Nuxt's build itself runs natively (Dockerfile.nuxt); only small steps
+      # pay for emulation.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.name }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          provenance: false
+          build-args: IMAGE_TAG=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    # Production: the Raspberry Pi cluster (k8s/README.md), from the
+    # self-hosted runner on `primary`. Off until the repository variable
+    # DEPLOY_ENABLED is "true" -- the runner, secrets and tunnel route are set
+    # up by hand first (k8s/README.md, "First deploy").
+    name: Deploy to the Raspberry Pi cluster
+    needs: [verify, audit, integration, secret-scan, sast, trivy, images]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'schedule' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, cheddar]
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    env:
+      APP_HOST: ${{ vars.CLUSTER_HOST }}
+      IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+      NUXT_TAG: ${{ github.sha }}
+      PB_TAG: ${{ github.sha }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+      MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+      MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
+      MAILJET_SENDER_EMAIL: ${{ secrets.MAILJET_SENDER_EMAIL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Apply the manifests and wait for the rollout
+        run: ./scripts/deploy-k8s.sh
+      - name: Verify the deploy is healthy
+        run: ./scripts/healthcheck-k8s.sh

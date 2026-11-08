@@ -1,0 +1,16 @@
+packages: []
+
+onlyBuiltDependencies:
+  - esbuild
+
+# Supply-chain guards: no git or tarball sub-dependencies, nothing published
+# less than 7 days ago, and no package whose provenance got weaker.
+blockExoticSubdeps: true
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+# Exceptions to trustPolicy, each a release that predates its line's
+# provenance and is not a takeover.
+trustPolicyExclude:
+  # Published 2023-07, before npm provenance existed for the 6.x line; reaches
+  # us through nuxt-security > unplugin-remove > @babel/core (build time only).
+  - semver@6.3.1

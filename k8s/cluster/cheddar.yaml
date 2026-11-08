@@ -1,0 +1,66 @@
+# The namespace and the identity CI deploys with. Applied once by a cluster
+# admin (k8s/README.md). CI's deploy job can change what runs inside the
+# namespace and nothing outside it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cheddar
+  labels:
+    # Every pod must run as non-root, without privilege escalation, with all
+    # capabilities dropped and the default seccomp profile.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: cheddar
+---
+# A long-lived token for the runner's kubeconfig on primary (k8s/README.md).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: deployer-token
+  namespace: cheddar
+  annotations:
+    kubernetes.io/service-account.name: deployer
+type: kubernetes.io/service-account-token
+---
+# Apply and watch what k8s/app/ declares, read logs on failure. No delete:
+# a resource removed from k8s/app/ has to be deleted by hand.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer
+  namespace: cheddar
+rules:
+  - apiGroups: [""]
+    resources: [secrets, configmaps, services, persistentvolumeclaims]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer
+  namespace: cheddar
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: cheddar
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer

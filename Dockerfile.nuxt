@@ -1,0 +1,49 @@
+# The build runs on the CI machine's own architecture even when the image is
+# for arm64: .output is plain JavaScript (no native modules), and building
+# Nuxt under QEMU emulation takes many times longer.
+FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:24-alpine3.24 AS builder
+
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm nuxt prepare
+
+COPY . .
+RUN pnpm build
+
+# The same Node, for the target platform: only its binary is kept, without
+# its debug symbols (about 19 MB, used only to debug a crash inside Node
+# itself, never the app's JavaScript).
+FROM public.ecr.aws/docker/library/node:24-alpine3.24 AS node
+RUN apk add --no-cache binutils && strip /usr/local/bin/node
+
+# Plain Alpine with just the node binary and the two libraries it links
+# : the node image also carries npm, corepack and yarn (about 24 MB),
+# which deleting in a later layer could never take out of the image. Keep
+# both Alpine versions the same: the binary is built against that release's
+# libstdc++.
+FROM public.ecr.aws/docker/library/alpine:3.24
+
+# CI passes the commit as IMAGE_TAG: as an ARG it keys this layer's cache,
+# so each build picks up Alpine's security updates.
+ARG IMAGE_TAG
+RUN apk upgrade --no-cache && apk add --no-cache libstdc++
+
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+
+WORKDIR /app
+
+COPY --from=builder /app/.output .output
+# The schema's migrations and their runner, which the web pod's init
+# container runs before the app starts (k8s/app/nuxt.yaml).
+COPY --from=builder /app/scripts/migrate.mjs scripts/migrate.mjs
+COPY --from=builder /app/migrations migrations
+
+USER 10001:10001
+
+EXPOSE 3000
+
+CMD ["node", ".output/server/index.mjs"]

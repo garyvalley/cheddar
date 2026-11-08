@@ -1,0 +1,28 @@
+# Weekly update PRs; CI runs on each. The cooldown matches pnpm's
+# minimumReleaseAge (pnpm-workspace.yaml): nothing newer than 7 days.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directories: [/, /k8s/app]
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      docker: { patterns: ["*"] }
+    ignore:
+      # Node 24 is the LTS line chosen; the next one is a decision.
+      - dependency-name: "*node"
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      actions: { patterns: ["*"] }

@@ -1,0 +1,103 @@
+# PocketBase: the database, auth and hooks. SQLite allows one writer, so one
+# replica, and Recreate so an old and a new pod never share the volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pb-data
+  namespace: ${NAMESPACE}
+spec:
+  accessModes: [ReadWriteOnce]
+  # local-path keeps the data on primary's SSD; it does not enforce the size.
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pocketbase
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pocketbase
+  template:
+    metadata:
+      labels:
+        app: pocketbase
+      annotations:
+        cheddar/config: "${PB_CONFIG}"
+    spec:
+      automountServiceAccountToken: false
+      # Primary: the Pi 4 with the SSD and the RAM; the workers are too small.
+      nodeSelector:
+        kubernetes.io/hostname: primary
+      imagePullSecrets:
+        - name: ghcr
+      securityContext:
+        runAsNonRoot: true
+        # The image's `pb` user (Dockerfile.pocketbase).
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pocketbase
+          image: ${IMAGE_PREFIX}/pocketbase:${PB_TAG}
+          ports:
+            - containerPort: 8090
+          env:
+            - name: APP_URL
+              value: https://${APP_HOST}
+          envFrom:
+            - secretRef:
+                name: pocketbase-env
+            # PB_SU_EMAIL and PB_SU_PASS: the superuser Nuxt's init container
+            # migrates the schema with.
+            - secretRef:
+                name: pocketbase-superuser
+          startupProbe:
+            httpGet: { path: /api/health, port: 8090 }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /api/health, port: 8090 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: 8090 }
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - { name: data, mountPath: /pb/pb_data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pb-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocketbase
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: pocketbase
+  ports:
+    - port: 8090
+      targetPort: 8090
