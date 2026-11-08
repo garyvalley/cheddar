@@ -39,4 +39,5 @@ Multi-user from day one: every user's data is theirs alone; state and filing sta
 - The preview server's launch config lives at ~/dev/.claude/launch.json (`cheddar`), not in this repo.
 - Cloudflare sends `CF-IPCountry` and `X-Forwarded-Proto: https` down the tunnel (verified live 2026-11-08); nginx logs `country=` per request.
 - A route that answers 204 hands `$fetch` nothing: check it with `useAction().succeed()`, never by `run()`'s return value.
+- `BANK_LINK_KEY` encrypts every bank link's access: changing it means each person links again. Links live in `bank_links`, which only the hooks read (all rules null).
 - On the cluster, use `ssh ubuntu@primary sudo k3s kubectl -n cheddar …`: the Mac's kubeconfig can't reach the API off the home network.

@@ -2,8 +2,8 @@
 
 | Suite | What it covers | Needs |
 | --- | --- | --- |
-| `pnpm test:unit` (`tests/*.test.mjs`) | Pure logic: authenticator codes (RFC 6238 vectors), recovery codes, lockout, passwords, profile rules, the state list, sign-in redirects, reading bank CSV, OFX and QFX files, account rules | Nothing |
-| `pnpm test:api` (`tests/api/*.test.mjs`) | Sign-up, sign-in, required two-step sign-in, sessions, deletion, profile, accounts, statement imports (dedup, undo, a few-megabyte file through nginx), one person's data hidden from another, even straight from PocketBase, CSRF, nginx's rate limits and country block, security headers | PocketBase, Nuxt and nginx running |
+| `pnpm test:unit` (`tests/*.test.mjs`) | Pure logic: authenticator codes (RFC 6238 vectors), recovery codes, lockout, passwords, profile rules, the state list, sign-in redirects, reading bank CSV, OFX and QFX files, account rules, reading SimpleFIN tokens and answers | Nothing |
+| `pnpm test:api` (`tests/api/*.test.mjs`) | Sign-up, sign-in, required two-step sign-in, sessions, deletion, profile, accounts, statement imports (dedup, undo, a few-megabyte file through nginx), linking and syncing banks against a stand-in SimpleFIN, one person's data hidden from another, even straight from PocketBase, CSRF, nginx's rate limits and country block, security headers | PocketBase, Nuxt and nginx running |
 | `pnpm test:ui` (`tests/ui.mjs`) | A browser signs up, is held at two-step setup until it's on, sets the profile, adds an account, previews and imports a CSV, sees it on Spending and undoes it, signs back in with a code, on desktop and phone sizes, with no console errors | PocketBase, the **production build** behind nginx, Chrome |
 
 `tests/api/helpers.mjs` holds what the API suites share (the client, new
@@ -28,6 +28,17 @@ nginx here trusts any `X-Forwarded-For` (`REAL_IP_FROM=0.0.0.0/0` in
 `docker-compose.yml`), so each test client signs in from a made-up address
 of its own and only the rate-limit tests reach a limit. The cluster trusts
 only the pod network.
+
+The bank-link tests start a stand-in SimpleFIN server on port 8097
+(`tests/api/simplefin-mock.mjs`) and run only when `SIMPLEFIN_MOCK_ORIGIN`
+says where PocketBase reaches it. PocketBase must allow that origin and have
+a key. Locally, with PocketBase in Docker, put these in `.env` and restart it
+(`docker compose up -d pocketbase`):
+
+```bash
+SIMPLEFIN_ALLOWED_ORIGINS=https://beta-bridge.simplefin.org,https://bridge.simplefin.org,http://host.docker.internal:8097
+SIMPLEFIN_MOCK_ORIGIN=http://host.docker.internal:8097
+```
 
 The UI test runs against the production build, where the strict CSP applies,
 with a second nginx in front of it:

@@ -38,12 +38,16 @@ auth=$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 | tr -d '\n')
 printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$auth" > "$tmp/dockerconfig.json"
 apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson="$tmp/dockerconfig.json"
 
-# PocketBase's environment. Without Mailjet's keys it sends no mail at all.
+# PocketBase's environment. Without Mailjet's keys it sends no mail at all;
+# without BANK_LINK_KEY no bank can be linked.
 {
   echo "MAILJET_API_KEY=${MAILJET_API_KEY:-}"
   echo "MAILJET_SECRET_KEY=${MAILJET_SECRET_KEY:-}"
   echo "MAILJET_SENDER_EMAIL=${MAILJET_SENDER_EMAIL:-}"
   echo "MAILJET_SENDER_NAME=${MAILJET_SENDER_NAME:-Cheddar}"
+  # Without it, bank linking is off. Changing it means every link must be
+  # made again: its access can't be read with a new key.
+  echo "BANK_LINK_KEY=${BANK_LINK_KEY:-}"
 } > "$tmp/pocketbase.env"
 apply_secret pocketbase-env --from-env-file="$tmp/pocketbase.env"
 

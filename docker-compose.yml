@@ -18,6 +18,10 @@ services:
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
       MAILJET_SENDER_EMAIL: ${MAILJET_SENDER_EMAIL:-}
       MAILJET_SENDER_NAME: ${MAILJET_SENDER_NAME:-Cheddar}
+      # Bank linking through SimpleFIN (pb_hooks/bank_links.pb.js): off
+      # without the key. `pnpm run setup` makes one.
+      BANK_LINK_KEY: ${BANK_LINK_KEY:-}
+      SIMPLEFIN_ALLOWED_ORIGINS: ${SIMPLEFIN_ALLOWED_ORIGINS:-}
       # The superuser scripts/migrate.mjs signs in with; PocketBase makes it
       # on start (scripts/pocketbase-start.sh).
       PB_SU_EMAIL: ${PB_SU_EMAIL:-}

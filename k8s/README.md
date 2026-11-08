@@ -73,7 +73,13 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```sh
    cd ~/dev/cheddar && for k in MAILJET_API_KEY MAILJET_SECRET_KEY MAILJET_SENDER_EMAIL; do grep "^$k=" ../homefile/.env | cut -d= -f2- | tr -d '\n' | gh secret set "$k" --env production -R garyvalley/cheddar; done && gh variable set DEPLOY_ENABLED --body true -R garyvalley/cheddar && gh workflow run ci.yml --ref main -R garyvalley/cheddar
    ```
-6. 👤 **Route,** once the tunnel shows **Healthy**: delete any DNS record for
+6. 👤 **Bank links** (optional; without it, linking stays off). One key,
+   made once: changing it later means every link must be made again.
+   ```sh
+   openssl rand -hex 16 | tr -d '\n' | gh secret set BANK_LINK_KEY --env production -R garyvalley/cheddar
+   ```
+   Then run the deploy again (`gh workflow run ci.yml --ref main -R garyvalley/cheddar`).
+7. 👤 **Route,** once the tunnel shows **Healthy**: delete any DNS record for
    the host, then add the tunnel's public hostname
    `cheddar.poweredbycheese.com` → `http://nginx.cheddar.svc.cluster.local:80`.
    Cloudflare creates the DNS record. Until the pods are up and the tunnel

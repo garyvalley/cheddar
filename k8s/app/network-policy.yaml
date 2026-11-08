@@ -132,7 +132,8 @@ spec:
               app: nuxt
       ports:
         - port: 8090
-  # Mailjet's HTTPS API, for account mail (pb_hooks/mailjet.pb.js).
+  # Mailjet's HTTPS API, for account mail (pb_hooks/mailjet.pb.js), and
+  # SimpleFIN's, for linked banks (pb_hooks/bank_links.pb.js).
   egress:
     - to:
         - ipBlock:
