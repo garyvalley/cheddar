@@ -8,40 +8,17 @@
 
 import { after, before, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
-import { loadHookModule } from '../load-hook-module.mjs'
+import { client, PB, ready, signedIn, superuser } from './helpers.mjs'
 import { sampleAccounts, startMock } from './simplefin-mock.mjs'
 
-const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
-const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
 const MOCK = process.env.SIMPLEFIN_MOCK_ORIGIN
-const totp = loadHookModule('pb_hooks/lib/totp.js')
-const PASSWORD = 'correct horse battery'
-const made = []
 let mock
 
-const ip = () => `10.${[1, 2, 3].map(() => randomBytes(1)[0]).join('.')}`
-
-/** A browser: keeps the session cookie and sends this site's Origin, from one address. */
-function client(from = ip()) {
-  let cookie = ''
-  return {
-    get token() { return decodeURIComponent(cookie.slice('pb_token='.length)) },
-    async call(method, path, body) {
-      const r = await fetch(`${APP}${path}`, {
-        method,
-        headers: { 'origin': APP, 'x-forwarded-for': from, ...(body ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) },
-        body: body ? JSON.stringify(body) : undefined,
-        redirect: 'manual',
-      })
-      const set = r.headers.getSetCookie().find(c => c.startsWith('pb_token='))
-      if (set) cookie = /pb_token=;|Max-Age=0/i.test(set) ? '' : set.split(';')[0]
-      const text = await r.text()
-      let json
-      try { json = text ? JSON.parse(text) : null } catch { json = text }
-      return { status: r.status, json }
-    },
-  }
+/** A new account, signed in; with two-step sign-in on unless `passwordOnly`. Its `token` is the session's PocketBase token. */
+async function person({ passwordOnly = false } = {}) {
+  const { c } = passwordOnly ? await signedIn() : await ready()
+  Object.defineProperty(c, 'token', { get: () => decodeURIComponent(c.cookie.slice('pb_token='.length)) })
+  return c
 }
 
 /** PocketBase's record API as `token`, as anyone holding a session could call it. */
@@ -50,27 +27,6 @@ async function pb(method, path, token, body) {
     method, headers: { authorization: token, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
   })
   return { status: r.status, json: await r.json().catch(() => null) }
-}
-
-async function superuser() {
-  const r = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ identity: process.env.PB_SU_EMAIL, password: process.env.PB_SU_PASS }),
-  })
-  return (await r.json()).token
-}
-
-/** A new account, signed in; with two-step sign-in on unless `passwordOnly`. */
-async function person({ passwordOnly = false } = {}) {
-  const c = client()
-  const address = `t-${randomBytes(6).toString('hex')}@cheddar.test`
-  assert.equal((await c.call('POST', '/api/auth/register', { email: address, password: PASSWORD, name: 'Test' })).status, 201)
-  made.push(address)
-  assert.equal((await c.call('POST', '/api/auth/login', { email: address, password: PASSWORD })).status, 200)
-  if (passwordOnly) return c
-  const { json: { secret } } = await c.call('POST', '/api/auth/two-step/app', { password: PASSWORD })
-  assert.equal((await c.call('POST', '/api/auth/two-step/app/confirm', { code: totp.codeAt(secret, totp.stepAt(Date.now())) })).status, 200)
-  return c
 }
 
 /** Lets the next sync through at once: the routes answer the last result for 10 minutes. */
@@ -85,14 +41,7 @@ const transactions = async (c, accountId) =>
 describe('bank links', { skip: !MOCK && 'SIMPLEFIN_MOCK_ORIGIN is not set' }, () => {
   before(async () => { mock = await startMock({ origin: MOCK }) })
 
-  after(async () => {
-    await mock?.close()
-    const token = await superuser()
-    for (const address of made) {
-      const r = await fetch(`${PB}/api/collections/users/records?filter=${encodeURIComponent(`email='${address}'`)}`, { headers: { authorization: token } })
-      for (const u of (await r.json()).items) await fetch(`${PB}/api/collections/users/records/${u.id}`, { method: 'DELETE', headers: { authorization: token } })
-    }
-  })
+  after(() => mock?.close())
 
   test('need a session with two-step sign-in on', async () => {
     assert.equal((await client().call('GET', '/api/bank-links')).status, 401)
@@ -212,10 +161,10 @@ describe('bank links', { skip: !MOCK && 'SIMPLEFIN_MOCK_ORIGIN is not set' }, ()
     const { json: { link } } = await owner.call('POST', '/api/bank-links', { setup_token: mock.token().token })
     const other = await person()
     const me = (await other.call('GET', '/api/auth/me')).json.me
-    const made = await pb('POST', '/api/collections/accounts/records', other.token, { owner: me.id, name: 'Mine', kind: 'checking', link: link.id })
-    assert.equal(made.status, 200, JSON.stringify(made.json))
-    assert.equal(made.json.link, '')
-    const changed = await pb('PATCH', `/api/collections/accounts/records/${made.json.id}`, other.token, { link: link.id })
+    const created = await pb('POST', '/api/collections/accounts/records', other.token, { owner: me.id, name: 'Mine', kind: 'checking', link: link.id })
+    assert.equal(created.status, 200, JSON.stringify(created.json))
+    assert.equal(created.json.link, '')
+    const changed = await pb('PATCH', `/api/collections/accounts/records/${created.json.id}`, other.token, { link: link.id })
     assert.equal(changed.json.link, '')
   })
 

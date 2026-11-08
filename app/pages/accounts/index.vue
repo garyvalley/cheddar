@@ -33,6 +33,7 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
   <div>
     <AppHeader title="Accounts">
       <NuxtLink v-if="accounts.length" to="/accounts/import" class="btn btn-tinted">Import</NuxtLink>
+      <NuxtLink to="/settings#linked-banks" class="btn btn-tinted">Link a bank</NuxtLink>
     </AppHeader>
 
     <section v-if="accounts.length" class="group" aria-labelledby="list-title">
