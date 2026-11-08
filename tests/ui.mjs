@@ -63,11 +63,12 @@ try {
   assert.equal(await page.locator('.codes li').count(), 10)
   await page.getByRole('button', { name: 'I\'ve saved them' }).click()
   await page.getByRole('heading', { name: 'Hi, Ui' }).waitFor()
-  assert.equal(await page.getByText('Set up · 2 left').count(), 1)
+  assert.equal(await page.getByText('Set up · 3 left').count(), 1)
 
   // Profile: every state is offered.
   await page.goto(`${APP}/settings`)
   await page.getByText('10 recovery codes left.').waitFor()
+  assert.equal(await page.getByRole('heading', { name: 'Linked banks and cards' }).count(), 0)
   assert.equal(await page.getByRole('button', { name: 'Turn off' }).count(), 0)
   assert.equal(await page.getByLabel('State you file taxes in').locator('option').count(), 52)
   await page.getByLabel('State you file taxes in').selectOption('CA')
@@ -87,9 +88,16 @@ try {
   await page.getByText('Your email is confirmed.').waitFor()
   await page.unroute('**/api/auth/confirm-verification')
 
+  // Accounts are set up in one place, Accounts, which the Overview's checklist leads to.
+  await page.goto(`${APP}/`)
+  await page.getByRole('link', { name: /Connect your accounts/ }).click()
+  await page.getByRole('heading', { name: 'Accounts', exact: true }).waitFor()
+  await page.getByRole('heading', { name: 'Linked banks and cards' }).waitFor()
+  await page.getByRole('button', { name: 'Link a bank or card' }).waitFor()
+
   // Money: an account, a statement file previewed and imported, its
   // transactions on Spending, and the import undone.
-  await page.goto(`${APP}/accounts`)
+  await page.getByRole('button', { name: 'Add an account…' }).click()
   await page.getByLabel('Name').fill('Everyday checking')
   await page.getByRole('button', { name: 'Add account' }).click()
   await page.getByRole('link', { name: 'Import a statement into Everyday checking' }).click()
@@ -107,6 +115,8 @@ try {
   await page.getByRole('heading', { name: 'Spending' }).waitFor()
   await page.getByText('GROCERY, INC').waitFor()
   assert.equal(await page.getByText('\u2212$82.10').count(), 1)
+  assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
+  await page.goto(`${APP}/accounts`)
   await page.getByRole('link', { name: 'Import', exact: true }).click()
   await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()
   await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
