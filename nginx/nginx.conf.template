@@ -36,6 +36,11 @@ map $http_cf_ipcountry $blocked_country {
     BY 1;
 }
 
+# The access log, with the country Cloudflare reported ("-" when none came):
+# what shows the country block is fed, and what it refuses.
+log_format cheddar '$remote_addr [$time_local] "$request" $status $body_bytes_sent '
+                   'country=$http_cf_ipcountry "$http_user_agent"';
+
 # Only POSTs count: reading two-step sign-in's status as a page loads
 # (GET /api/auth/two-step) guesses nothing. An empty key is never limited.
 map $request_method $limit_key {
@@ -73,6 +78,10 @@ server {
     server_name _;
 
     set $nuxt_upstream ${NUXT_UPSTREAM};
+
+    # In the server block, so it replaces the image's own log rather than
+    # adding a second line per request.
+    access_log /dev/stdout cheddar;
 
     if ($blocked_country) {
         return 403 "Cheddar isn't available in your country.\n";
