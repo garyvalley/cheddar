@@ -1,14 +1,23 @@
 <script setup lang="ts">
+import type { Account } from '~~/shared/accounts'
 import { stateByCode } from '~~/shared/states'
 
 const { me } = useAuth()
+const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 
 const steps = computed(() => [
-  { done: !!me.value?.verified, label: 'Confirm your email', hint: 'So you can reset your password if you forget it.' },
+  { done: !!me.value?.verified, label: 'Confirm your email', hint: 'So you can reset your password if you forget it.', to: '/settings' },
   {
     done: !!(me.value?.state && me.value?.filing_status),
     label: 'Choose your state and filing status',
     hint: 'Tax ideas use your own state\'s rules.',
+    to: '/settings',
+  },
+  {
+    done: list.value.accounts.length > 0,
+    label: 'Connect your accounts',
+    hint: 'Link your banks and cards, or import their statements. Everything here is worked out from them.',
+    to: '/accounts',
   },
 ])
 const left = computed(() => steps.value.filter(s => !s.done).length)
@@ -22,7 +31,7 @@ const greeting = computed(() => (me.value?.name ? `Hi, ${me.value.name.split(' '
     <section v-if="left" class="group" aria-labelledby="setup">
       <h2 id="setup" class="group-title">Set up · {{ left }} left</h2>
       <div class="card">
-        <NuxtLink v-for="s in steps" :key="s.label" to="/settings" class="row step">
+        <NuxtLink v-for="s in steps" :key="s.label" :to="s.to" class="row step">
           <span class="tick" :class="{ on: s.done }" aria-hidden="true"><AppIcon v-if="s.done" name="check" /></span>
           <span class="row-label">
             <span class="step-label">{{ s.label }}</span><span class="visually-hidden">{{ s.done ? ', done' : '' }}</span>

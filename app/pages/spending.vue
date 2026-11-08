@@ -18,15 +18,14 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
 
 <template>
   <div>
-    <AppHeader title="Spending">
-      <NuxtLink v-if="list.accounts.length" :to="{ path: '/accounts/import', query: account ? { account } : {} }" class="btn btn-tinted">Import</NuxtLink>
-    </AppHeader>
+    <!-- Spending only reads the accounts set up on Accounts: no setup here. -->
+    <AppHeader title="Spending" />
 
     <section v-if="!list.accounts.length" class="group">
       <div class="card card-pad stack">
         <p class="headline">No accounts yet</p>
-        <p class="muted">Add your accounts, then import the files your bank lets you download. Your transactions show up here.</p>
-        <NuxtLink to="/accounts" class="btn btn-primary">Add an account</NuxtLink>
+        <p class="muted">Link your banks and cards, or add accounts and import their statements, on Accounts. Their transactions show up here.</p>
+        <NuxtLink to="/accounts" class="btn btn-primary">Set up accounts</NuxtLink>
       </div>
     </section>
 
@@ -47,8 +46,8 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
         <h2 id="tx-title" class="group-title">Transactions<template v-if="data.total"> · {{ data.total.toLocaleString() }}</template></h2>
         <p v-if="error" class="notice notice-error" role="alert">{{ errorMessage(error) }}</p>
         <div v-else-if="!data.items.length" class="card card-pad stack">
-          <p class="muted">No transactions yet. Import a statement to see them here.</p>
-          <NuxtLink :to="{ path: '/accounts/import', query: account ? { account } : {} }" class="btn btn-primary">Import a statement</NuxtLink>
+          <p class="muted">No transactions yet. They arrive when a linked bank syncs, or when you import a statement on Accounts.</p>
+          <NuxtLink to="/accounts" class="btn btn-tinted">Go to Accounts</NuxtLink>
         </div>
         <ul v-else class="card list" :aria-busy="pending">
           <li v-for="t in data.items" :key="t.id" class="row">

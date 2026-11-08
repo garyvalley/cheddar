@@ -79,7 +79,14 @@ tunnel, repository secrets) and day-to-day operations.
   - **Confirm your email.** The link comes by email.
   - **Choose your state and filing status** in Settings. Every state and DC
     is available, and tax features use your choice.
-- **Link a bank or card** (Settings → Linked banks and cards), so balances
+  - **Connect your accounts** on Accounts (below).
+- **Install it on a phone:**
+  - In Safari, tap Share, then Add to Home Screen.
+  - In Chrome on Android, tap ⋮, then Install app.
+- **Set up your accounts** (Accounts). It's the only place accounts are
+  added; Overview, Spending, Projections and Taxes have no setup of their
+  own, and are worked out from what these accounts hold.
+- **Link a bank or card** (Accounts → Linked banks and cards), so balances
   and transactions arrive on their own:
   - Sign up at [SimpleFIN Bridge](https://beta-bridge.simplefin.org) ($15 a
     year) and connect your banks and cards there.
@@ -91,12 +98,10 @@ tunnel, repository secrets) and day-to-day operations.
     own access, remove the bank in SimpleFIN too.
   - To try it without a bank, paste SimpleFIN's demo token,
     `aHR0cHM6Ly9icmlkZ2Uuc2ltcGxlZmluLm9yZy9zaW1wbGVmaW4vY2xhaW0vZGVtbw==`.
-- **Install it on a phone:**
-  - In Safari, tap Share, then Add to Home Screen.
-  - In Chrome on Android, tap ⋮, then Install app.
-- **Add your accounts** (Accounts): a name, the kind (checking, savings,
-  credit card, loan…), and optionally the bank and the last four digits.
-- **Import a statement** (Import, on Accounts or Spending):
+- **Or add an account yourself** (Accounts), for one you'd rather not link:
+  a name, the kind (checking, savings, credit card, loan…), and optionally
+  the bank and the last four digits. Then import its statements.
+- **Import a statement** (Import, on Accounts):
   - On your bank's website, download your transactions as CSV, or as
     Quicken (QFX) or Money (OFX).
   - Choose the account and the file. Cheddar shows what it read before
@@ -109,6 +114,7 @@ tunnel, repository secrets) and day-to-day operations.
     same day in one file are both kept.
   - **Undo** next to an import removes the transactions it added.
 - **See your transactions** (Spending), newest first, for one account or all.
+  Spending only shows what your accounts hold: to add more, go to Accounts.
 - **Sign out everywhere** (Settings) ends every session on every device.
 - **Delete account** (Settings) removes your account and everything in it.
   It asks for your password.

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { formatCents, type BankLink, type BankLinks, type SyncResult } from '~~/shared/bank-links'
 
-const { data, refresh } = await useFetch<BankLinks>('/api/bank-links', { default: () => ({ enabled: false, links: [] }) })
+// The Accounts page reads the same key, to tell linked accounts from the ones added by hand.
+const { data, refresh } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
+/** A link was added, synced or removed, so the accounts it brings in may have changed. */
+const emit = defineEmits<{ changed: [] }>()
 
 const adding = ref(false)
 const token = ref('')
@@ -27,6 +30,7 @@ async function link() {
   adding.value = false
   notice.value = said(r.sync)
   await refresh()
+  emit('changed')
 }
 
 async function sync(l: BankLink) {
@@ -36,6 +40,7 @@ async function sync(l: BankLink) {
   if (!r) return
   notice.value = said(r.sync)
   await refresh()
+  emit('changed')
 }
 
 async function remove(l: BankLink) {
@@ -46,6 +51,7 @@ async function remove(l: BankLink) {
   if (!ok) return
   notice.value = 'Removed. Its accounts and transactions stay in Cheddar, and no longer sync.'
   await refresh()
+  emit('changed')
 }
 
 function title(l: BankLink) {
@@ -64,7 +70,7 @@ function when(pb: string) {
     <h2 id="links-title" class="group-title">Linked banks and cards</h2>
 
     <div v-if="!data.enabled" class="card card-pad">
-      <p class="subhead">Linking banks isn't switched on for this Cheddar yet. You can still import the files your bank exports.</p>
+      <p class="subhead">Linking banks isn't switched on for this Cheddar yet. You can still add accounts below and import the files your bank exports.</p>
     </div>
 
     <template v-else>
