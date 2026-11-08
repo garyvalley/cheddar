@@ -4,6 +4,8 @@ declare module '#app' {
     public?: boolean
     /** Only for someone signed out: a signed-in visitor goes to the overview. */
     guestOnly?: boolean
+    /** The page that turns on two-step sign-in: the only one an account without it may see. */
+    twoStepSetup?: boolean
   }
 }
 

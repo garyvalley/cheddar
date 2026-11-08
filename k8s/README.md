@@ -5,16 +5,21 @@ Homefile, and is public at `https://<CLUSTER_HOST>` through a Cloudflare
 Tunnel.
 
 ```
-browser ──https──▶ Cloudflare ──tunnel──▶ cloudflared ──▶ nuxt :3000 ──▶ pocketbase :8090
-                                          (outbound only)                 (pb-data volume on primary's SSD)
+browser ──https──▶ Cloudflare ──tunnel──▶ cloudflared ──▶ nginx :8080 ──▶ nuxt :3000 ──▶ pocketbase :8090
+                                          (outbound only)   country block,                (pb-data volume on
+                                                            rate limits                     primary's SSD)
 ```
 
 - **Nothing in the house listens to the internet.** cloudflared opens an
   outbound connection to Cloudflare; the router forwards no ports.
 - **Only the request path is open** inside the cluster
-  (`app/network-policy.yaml`): cloudflared → Nuxt → PocketBase. Nuxt reaches
-  nothing else; PocketBase reaches only HTTPS on the internet (Mailjet). That
-  is also why Nuxt may trust `cf-connecting-ip` for the sign-in rate limit.
+  (`app/network-policy.yaml`): cloudflared → nginx → Nuxt → PocketBase.
+  Nothing else reaches nginx, which is why it may trust the client address
+  in `X-Forwarded-For` (from the pod network only) and the country in
+  `CF-IPCountry`. PocketBase reaches only HTTPS on the internet (Mailjet).
+- **The country block** is nginx's (`nginx/nginx.conf.template`): China,
+  Russia, India, North Korea, Iran and Belarus get a 403. Change the list
+  there. It reduces noise and isn't access control: a VPN walks past it.
 - **Every pod is locked down:** non-root, read-only root filesystem, no
   privilege escalation, all capabilities dropped, no Kubernetes API token.
   The namespace enforces the `restricted` Pod Security Standard.
@@ -33,7 +38,8 @@ browser ──https──▶ Cloudflare ──tunnel──▶ cloudflared ──
 | --- | --- |
 | `cluster/cheddar.yaml` | Namespace, `deployer` account and its role. Applied by hand, once. |
 | `app/pocketbase.yaml` | PocketBase, its 10 Gi volume and Service. One replica, `Recreate`. |
-| `app/nuxt.yaml` | Nuxt and its `migrate` init container. One replica (the rate limit is in memory). |
+| `app/nuxt.yaml` | Nuxt and its `migrate` init container. |
+| `app/nginx.yaml` | nginx: country block, rate limits, holding page. |
 | `app/cloudflared.yaml` | The tunnel. |
 | `app/network-policy.yaml` | Ingress and egress, closed except the request path. |
 
@@ -55,8 +61,14 @@ The `deploy` job is off until the repository variable `DEPLOY_ENABLED` is
    as `KUBECONFIG=…`. Install it as a second systemd service.
 3. **Tunnel.** In Cloudflare Zero Trust → Networks → Tunnels, create a tunnel
    `cheddar` with the public hostname `cheddar.poweredbycheese.com` →
-   `http://nuxt.cheddar.svc.cluster.local:3000`. Keep Rocket Loader and Email
+   `http://nginx.cheddar.svc.cluster.local:80`. Keep Rocket Loader and Email
    Address Obfuscation off for the zone: they inject script the CSP refuses.
+   Keep **IP Geolocation** on (Network settings; on by default): it's what
+   sends `CF-IPCountry` for the country block.
+   Optionally, also block those countries at Cloudflare's edge, so their
+   requests never reach the house: add `"cheddar.poweredbycheese.com"` to the
+   host list in Homefile's `Country block` custom rule (its k8s/README.md,
+   "Country block").
 4. **Repository settings** (GitHub → Settings → Secrets and variables → Actions):
    - variable `CLUSTER_HOST` = `cheddar.poweredbycheese.com`
    - secret `CLOUDFLARE_TUNNEL_TOKEN` = the tunnel's token
@@ -83,7 +95,8 @@ The `deploy` job is off until the repository variable `DEPLOY_ENABLED` is
   (`kubectl -n cheddar get secret pocketbase-superuser -o jsonpath='{.data.PB_SU_PASS}' | base64 -d`).
   Never change the schema there: write a migration.
 - Someone who lost their phone and recovery codes: in the admin UI, clear
-  `mfa_enabled` on their user record, after proving who they are some other way.
+  `mfa_enabled` on their user record, after proving who they are some other
+  way. Their next sign-in takes them to set up a new app.
 - Rotate the superuser: delete the `pocketbase-superuser` Secret (as admin)
   and deploy; PocketBase sets the new password on start.
 

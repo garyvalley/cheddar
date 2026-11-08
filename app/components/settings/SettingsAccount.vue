@@ -63,7 +63,7 @@ async function deleteAccount() {
       <form v-else class="field stack" @submit.prevent="deleteAccount">
         <label>
           <span class="field-label">Enter your password to delete your account for good</span>
-          <input v-model="password" class="input" type="password" autocomplete="current-password" required v-focus>
+          <input v-model="password" v-focus class="input" type="password" autocomplete="current-password" required>
         </label>
         <div class="btn-row">
           <button class="btn btn-danger" :disabled="remove.busy.value">

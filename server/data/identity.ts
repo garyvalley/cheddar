@@ -75,10 +75,6 @@ export function confirmApp(s: Session, code: string): Promise<{ recovery_codes: 
   return s.send('/api/two-step/app/confirm', { method: 'POST', body: { code } })
 }
 
-export async function turnOffTwoStep(s: Session, password: string): Promise<void> {
-  await s.send('/api/two-step/off', { method: 'POST', body: { password } })
-}
-
 /** New recovery codes in place of the old ones. */
 export function newRecoveryCodes(s: Session, password: string): Promise<{ recovery_codes: string[] }> {
   return s.send('/api/two-step/recovery-codes', { method: 'POST', body: { password } })

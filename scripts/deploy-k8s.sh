@@ -16,6 +16,7 @@ set -euo pipefail
 : "${IMAGE_PREFIX:?IMAGE_PREFIX is required}"
 : "${NUXT_TAG:?NUXT_TAG is required}"
 : "${PB_TAG:?PB_TAG is required}"
+: "${NGINX_TAG:?NGINX_TAG is required}"
 : "${GHCR_USER:?GHCR_USER is required}"
 : "${GHCR_TOKEN:?GHCR_TOKEN is required}"
 : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}"
@@ -68,15 +69,15 @@ CLOUDFLARED_CONFIG=$(checksum < "$tmp/cloudflared.env")
 NUXT_CONFIG=$(echo "$APP_HOST" | checksum)
 
 # Only these names are substituted.
-export NAMESPACE=$NS APP_HOST IMAGE_PREFIX NUXT_TAG PB_TAG PB_CONFIG NUXT_CONFIG CLOUDFLARED_CONFIG
+export NAMESPACE=$NS APP_HOST IMAGE_PREFIX NUXT_TAG PB_TAG NGINX_TAG PB_CONFIG NUXT_CONFIG CLOUDFLARED_CONFIG
 for f in k8s/app/*.yaml; do
   # shellcheck disable=SC2016 # the names are envsubst's to expand, not the shell's
-  envsubst '${NAMESPACE} ${APP_HOST} ${IMAGE_PREFIX} ${NUXT_TAG} ${PB_TAG} ${PB_CONFIG} ${NUXT_CONFIG} ${CLOUDFLARED_CONFIG}' < "$f"
+  envsubst '${NAMESPACE} ${APP_HOST} ${IMAGE_PREFIX} ${NUXT_TAG} ${PB_TAG} ${NGINX_TAG} ${PB_CONFIG} ${NUXT_CONFIG} ${CLOUDFLARED_CONFIG}' < "$f"
   echo '---'
 done > "$tmp/app.yaml"
 kubectl apply -f "$tmp/app.yaml"
 
 # PocketBase first: Nuxt's migrate step and readiness check need it.
-for d in pocketbase nuxt cloudflared; do
+for d in pocketbase nuxt nginx cloudflared; do
   kubectl -n "$NS" rollout status "deployment/$d" --timeout=6m
 done

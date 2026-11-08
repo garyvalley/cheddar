@@ -32,7 +32,7 @@ async function save() {
       <div class="card">
         <label class="field">
           <span class="field-label">New password</span>
-          <input v-model="password" class="input" type="password" autocomplete="new-password" :minlength="MIN_LENGTH" required v-focus>
+          <input v-model="password" v-focus class="input" type="password" autocomplete="new-password" :minlength="MIN_LENGTH" required>
           <span class="caption">At least {{ MIN_LENGTH }} characters.</span>
         </label>
       </div>

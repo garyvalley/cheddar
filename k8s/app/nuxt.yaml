@@ -1,6 +1,5 @@
 # Nuxt: the pages and the /api routes, which hold the PocketBase token in an
-# httpOnly cookie. One replica: the sign-in rate limit is in memory
-# (server/middleware/rate-limit.ts). A new pod is ready before the old goes.
+# httpOnly cookie. Stateless, so a new pod is ready before the old goes.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -63,10 +62,6 @@ spec:
           env:
             - name: NUXT_POCKETBASE_URL
               value: http://pocketbase:8090
-            # Only cloudflared reaches this pod (network-policy.yaml), so the
-            # address Cloudflare reports is the client's.
-            - name: NUXT_CLIENT_IP_HEADER
-              value: cf-connecting-ip
           readinessProbe:
             httpGet: { path: /login, port: 3000 }
             periodSeconds: 10

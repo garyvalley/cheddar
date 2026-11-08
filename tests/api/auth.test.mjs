@@ -1,17 +1,17 @@
 // Accounts, sign-in, two-step sign-in and the guards around them, end to end
-// through the Nuxt server against a real PocketBase.
+// through nginx and Nuxt against a real PocketBase.
 //
-// Needs the stack running: PocketBase (PB_URL, superuser PB_SU_EMAIL /
-// PB_SU_PASS, to clean up) and Nuxt (APP_URL) started with
-// NUXT_CLIENT_IP_HEADER=x-test-ip, so each test signs in from an address of
-// its own and only the rate-limit test reaches the limit. tests/README.md.
+// Needs the stack running (tests/README.md): PocketBase (PB_URL, superuser
+// PB_SU_EMAIL / PB_SU_PASS, to clean up), Nuxt, and nginx in front of it
+// (APP_URL) trusting any X-Forwarded-For, so each client signs in from a
+// made-up address of its own and only the rate-limit tests reach a limit.
 
 import { after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { loadHookModule } from '../load-hook-module.mjs'
 
-const APP = (process.env.APP_URL || 'http://localhost:3005').replace(/\/$/, '')
+const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
 const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
 const totp = loadHookModule('pb_hooks/lib/totp.js')
 const PASSWORD = 'correct horse battery'
@@ -30,7 +30,7 @@ function client(from = ip()) {
       const r = await fetch(`${APP}${path}`, {
         method,
         headers: {
-          'origin': APP, 'x-test-ip': from,
+          'origin': APP, 'x-forwarded-for': from,
           ...(body ? { 'content-type': 'application/json' } : {}),
           ...(cookie ? { cookie } : {}),
           ...headers,
@@ -57,7 +57,7 @@ async function superuser() {
   return (await r.json()).token
 }
 
-/** A new, signed-in account. */
+/** A new account, signed in with its password only: two-step sign-in is not on yet. */
 async function signedIn() {
   const c = client()
   const address = email()
@@ -74,6 +74,12 @@ async function withTwoStep(c) {
   const r = await c.call('POST', '/api/auth/two-step/app/confirm', { code: totp.codeAt(secret, totp.stepAt(Date.now())) })
   assert.equal(r.status, 200)
   return { secret, codes: r.json.recovery_codes }
+}
+
+/** A new account with two-step sign-in on, as every account that uses the app has. */
+async function ready() {
+  const account = await signedIn()
+  return { ...account, ...(await withTwoStep(account.c)) }
 }
 
 after(async () => {
@@ -139,7 +145,7 @@ describe('signing in', () => {
 
 describe('the profile', () => {
   test('saves name, state and filing status', async () => {
-    const { c } = await signedIn()
+    const { c } = await ready()
     const r = await c.call('PATCH', '/api/profile', { name: 'Pat', state: 'CA', filing_status: 'married_joint' })
     assert.equal(r.status, 200)
     assert.deepEqual([r.json.me.name, r.json.me.state, r.json.me.filing_status], ['Pat', 'CA', 'married_joint'])
@@ -149,16 +155,23 @@ describe('the profile', () => {
   })
 
   test('refuses a place that is not a state, and a made-up filing status', async () => {
-    const { c } = await signedIn()
+    const { c } = await ready()
     assert.equal((await c.call('PATCH', '/api/profile', { state: 'ZZ' })).status, 400)
     assert.equal((await c.call('PATCH', '/api/profile', { state: 'ca' })).status, 400)
     assert.equal((await c.call('PATCH', '/api/profile', { filing_status: 'pirate' })).status, 400)
   })
 
   test('ignores fields that are not the profile\'s', async () => {
-    const { c, address } = await signedIn()
+    const { c, address } = await ready()
     const r = await c.call('PATCH', '/api/profile', { name: 'X', email: 'other@cheddar.test', verified: true, mfa_enabled: true })
-    assert.deepEqual([r.json.me.email, r.json.me.verified, r.json.me.mfa_enabled], [address, false, false])
+    assert.deepEqual([r.json.me.email, r.json.me.verified, r.json.me.mfa_enabled], [address, false, true])
+  })
+
+  test('stays closed until two-step sign-in is on', async () => {
+    const { c } = await signedIn()
+    const r = await c.call('PATCH', '/api/profile', { name: 'X', state: 'CA' })
+    assert.equal(r.status, 404)
+    assert.equal((await c.call('GET', '/api/auth/me')).json.me.state, '')
   })
 
   test('needs a session', async () => {
@@ -168,7 +181,7 @@ describe('the profile', () => {
 
 describe('guards', () => {
   test('a state-changing request from another site is refused', async () => {
-    const { c } = await signedIn()
+    const { c } = await ready()
     const r = await c.call('PATCH', '/api/profile', { name: 'Evil' }, { origin: 'https://evil.example' })
     assert.equal(r.status, 403)
   })
@@ -193,16 +206,47 @@ describe('guards', () => {
     assert.equal(r.status, 400)
   })
 
-  test('the 11th sign-in try from one address in 5 minutes is refused', async () => {
+  test('a burst of sign-in tries from one address is refused, in the app\'s error shape', async () => {
     const c = client()
-    for (let i = 0; i < 10; i++) {
-      assert.equal((await c.call('POST', '/api/auth/login', { email: email(), password: 'x' })).status, 400)
-    }
+    const statuses = []
+    for (let i = 0; i < 8; i++) statuses.push((await c.call('POST', '/api/auth/login', { email: email(), password: 'x' })).status)
+    // nginx allows 1 at once plus a burst of 5, then 10 a minute.
+    assert.deepEqual(statuses, [400, 400, 400, 400, 400, 400, 429, 429])
     const r = await c.call('POST', '/api/auth/login', { email: email(), password: 'x' })
-    assert.equal(r.status, 429)
+    assert.match(r.json.message, /Too many tries/)
     assert.ok(Number(r.headers.get('retry-after')) > 0)
     // Another address is not held back.
     assert.equal((await client().call('POST', '/api/auth/login', { email: email(), password: 'x' })).status, 400)
+  })
+
+  test('reading two-step status as pages load never counts toward the limit', async () => {
+    const { c } = await ready()
+    for (let i = 0; i < 10; i++) assert.equal((await c.call('GET', '/api/auth/two-step')).status, 200)
+    assert.equal((await c.call('POST', '/api/auth/two-step/recovery-codes', { password: PASSWORD })).status, 200)
+  })
+
+  test('requests that send mail have a tighter limit', async () => {
+    const c = client()
+    const statuses = []
+    for (let i = 0; i < 6; i++) statuses.push((await c.call('POST', '/api/auth/request-password-reset', { email: email() })).status)
+    assert.deepEqual(statuses, [204, 204, 204, 204, 429, 429])
+  })
+
+  test('visitors from a blocked country are refused, and others and the unplaced are not', async () => {
+    for (const country of ['CN', 'RU', 'IN', 'KP', 'IR', 'BY']) {
+      assert.equal((await client().call('GET', '/login', null, { 'cf-ipcountry': country })).status, 403, country)
+    }
+    assert.equal((await client().call('POST', '/api/auth/login', { email: email(), password: 'x' }, { 'cf-ipcountry': 'RU' })).status, 403)
+    for (const country of ['US', 'CA', 'GB', 'XX']) {
+      assert.equal((await client().call('GET', '/login', null, { 'cf-ipcountry': country })).status, 200, country)
+    }
+    assert.equal((await client().call('GET', '/login')).status, 200)
+  })
+
+  test('no response may be kept by Cloudflare', async () => {
+    const r = await client().call('GET', '/login')
+    assert.equal(r.headers.get('cloudflare-cdn-cache-control'), 'no-store')
+    assert.equal(r.headers.get('server'), 'nginx', 'no version in the Server header')
   })
 
   test('pages carry the security headers', async () => {
@@ -223,7 +267,7 @@ describe('two-step sign-in', () => {
     const setup = await c.call('POST', '/api/auth/two-step/app', { password: PASSWORD })
     assert.match(setup.json.uri, /^otpauth:\/\/totp\/Cheddar:/)
     assert.equal((await c.call('POST', '/api/auth/two-step/app/confirm', { code: '000000' })).status, 400)
-    assert.equal((await c.call('GET', '/api/auth/two-step')).json.method, 'off')
+    assert.equal((await client().call('GET', '/api/auth/two-step', null, { cookie: c.cookie })).json.method, 'off')
   })
 
   test('once on, a password alone is not enough, and each code works once', async () => {
@@ -270,28 +314,35 @@ describe('two-step sign-in', () => {
   })
 
   test('five wrong codes lock the codes', async () => {
-    const { c, address } = await signedIn()
-    await withTwoStep(c)
-    const b = client()
+    const { address } = await ready()
     let last
     for (let i = 0; i < 5; i++) {
+      // From a new address each time, so it is the lock that answers, not nginx's limit.
+      const b = client()
       const s = await b.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
       last = await b.call('POST', '/api/auth/code', { mfaId: s.json.twoStep.mfaId, code: '000000' })
     }
     assert.equal(last.status, 429)
   })
 
-  test('the setting cannot be switched off without the password, nor through the record API', async () => {
-    const { c, id } = await signedIn()
-    await withTwoStep(c)
-    assert.equal((await c.call('POST', '/api/auth/two-step/off', { password: 'wrong password!' })).status, 400)
+  test('once on, it cannot be switched off', async () => {
+    const { c, id } = await ready()
+    assert.equal((await c.call('POST', '/api/auth/two-step/off', { password: PASSWORD })).status, 404)
     const token = c.cookie.slice('pb_token='.length)
     await fetch(`${PB}/api/collections/users/records/${id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json', 'authorization': token }, body: JSON.stringify({ mfa_enabled: false }),
     })
-    assert.equal((await c.call('GET', '/api/auth/me')).json.me.mfa_enabled, true)
-    assert.equal((await c.call('POST', '/api/auth/two-step/off', { password: PASSWORD })).status, 204)
-    assert.equal((await c.call('GET', '/api/auth/two-step')).json.method, 'off')
+    assert.equal((await client().call('GET', '/api/auth/me', null, { cookie: c.cookie })).json.me.mfa_enabled, true)
+  })
+
+  test('a new account may still set it up, sign out and delete itself', async () => {
+    const { c } = await signedIn()
+    assert.equal((await c.call('GET', '/api/auth/me')).json.me.mfa_enabled, false)
+    const { secret } = await withTwoStep(c)
+    assert.ok(secret)
+    assert.equal((await client().call('POST', '/api/auth/logout', null, { cookie: c.cookie })).status, 204)
+    const other = await signedIn()
+    assert.equal((await other.c.call('POST', '/api/auth/delete-account', { password: PASSWORD })).status, 204)
   })
 })
 

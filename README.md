@@ -4,8 +4,9 @@ Cheddar keeps your accounts, net worth, spending and taxes in one place, on
 desktop and phone. It's a web app you can add to your Home Screen, so there's
 nothing to install from an app store.
 
-**Status:** the foundation is in place: accounts with two-step sign-in, your
-profile (state and filing status), the app shell and the deploy pipeline.
+**Status:** the foundation is in place: accounts with required two-step
+sign-in, your profile (state and filing status), the app shell and the deploy
+pipeline.
 The finance features arrive in this order:
 
 1. **Accounts and net worth.** Checking, savings, credit, brokerage,
@@ -21,6 +22,7 @@ The finance features arrive in this order:
 | --- | --- |
 | ![Overview](docs/screenshots/overview.png) | ![Overview on a phone](docs/screenshots/phone-dark.png) |
 | ![Settings](docs/screenshots/settings.png) | ![Sign in](docs/screenshots/sign-in.png) |
+| ![Two-step setup, required for every account](docs/screenshots/setup.png) | |
 
 Cheddar costs nothing to run. Your data comes from files you export from
 your bank, not from a paid aggregator. It runs on a home Raspberry Pi
@@ -42,7 +44,12 @@ pnpm dev
 `pnpm run setup` installs dependencies, writes `.env`, starts PocketBase in
 Docker on port 8095 with a random superuser, applies the schema, and adds a
 demo account. Open http://localhost:3005 and sign in as `demo@example.com` /
-`Cheddar-demo-1`. `pnpm dev:stop` stops PocketBase.
+`Cheddar-demo-1`. The demo account sets up two-step sign-in on its first
+sign-in, like every account. `pnpm dev:stop` stops PocketBase.
+
+`docker compose up -d nginx` adds nginx in front of the dev server at
+http://localhost:8085, as in production: the country block and rate limits
+apply there, and the API suite runs through it.
 
 Without Mailjet keys in `.env`, no mail is sent. To confirm an address
 locally, open PocketBase's admin UI at http://localhost:8095/_/ and switch on
@@ -60,11 +67,13 @@ tunnel, repository secrets) and day-to-day operations.
 
 - **Create an account.** Passwords need at least 12 characters, and the
   100,000 most common passwords are refused.
-- **Set up** (the checklist on the Overview):
+- **Turn on two-step sign-in.** Every account must, before anything else:
+  scan the QR code with an authenticator app (Passwords on iPhone, Google
+  Authenticator, 1Password…), and save the ten recovery codes. It can't be
+  turned off. You can move to a new app, or get new recovery codes, in
+  Settings.
+- **Finish setting up** (the checklist on the Overview):
   - **Confirm your email.** The link comes by email.
-  - **Turn on two-step sign-in.** Go to Settings → Two-step sign-in, scan
-    the QR code with an authenticator app (Passwords on iPhone, Google
-    Authenticator, 1Password…), and save the ten recovery codes.
   - **Choose your state and filing status** in Settings. Every state and DC
     is available, and tax features use your choice.
 - **Install it on a phone:**
@@ -77,8 +86,9 @@ tunnel, repository secrets) and day-to-day operations.
 ## System design and architecture
 
 ```
-browser ──▶ Nuxt 4 (pages + /api routes) ──▶ PocketBase 0.40 (SQLite, auth, hooks)
-            httpOnly session cookie            collection rules: each person sees only their own records
+browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages + /api routes) ──▶ PocketBase 0.40 (SQLite, auth, hooks)
+                                   country block,  httpOnly session cookie       collection rules: each person sees only
+                                   rate limits                                   their own records, and only with two-step on
 ```
 
 - **The browser never talks to PocketBase.**
@@ -89,14 +99,24 @@ browser ──▶ Nuxt 4 (pages + /api routes) ──▶ PocketBase 0.40 (SQLite
     person*, so PocketBase's collection rules decide what they can see. No
     web request uses a superuser.
 - **Sign-in:**
-  - The second step needs a password and then a code from an authenticator
-    app (TOTP, RFC 6238) or a single-use recovery code (`pb_hooks/two_step.pb.js`).
+  - Two-step sign-in is required. Signing in needs a password and then a
+    code from an authenticator app (TOTP, RFC 6238) or a single-use recovery
+    code (`pb_hooks/two_step.pb.js`).
+  - The requirement is enforced by PocketBase's collection rules
+    (`migrations/0002_require_two_step.mjs`), not only by the pages. A
+    password-only session can set up two-step, sign out or delete the
+    account, and nothing else.
   - Emailed codes are refused, since whoever reads the inbox can also reset
     the password.
   - Five wrong codes lock the codes for 15 minutes.
-  - Sign-in routes allow 10 tries per address in 5 minutes
-    (`server/middleware/rate-limit.ts`).
   - Sessions last 3 days and renew on use.
+- **nginx** (`nginx/nginx.conf.template`) sits between the tunnel and Nuxt:
+  - It refuses visitors from China, Russia, India, North Korea, Iran and
+    Belarus, by Cloudflare's `CF-IPCountry`.
+  - It rate-limits every POST that checks a password or a code (10 a minute
+    per address, bursts of 5), sends mail (5 a minute) or creates an account.
+  - It shows a holding page while the app restarts, and tells Cloudflare
+    never to cache anything.
 - **Guards on every request:**
   - Mutating requests must come from this site (an Origin check).
   - The CSP is strict and nonce-based (`nuxt.config.ts`).
@@ -114,6 +134,7 @@ browser ──▶ Nuxt 4 (pages + /api routes) ──▶ PocketBase 0.40 (SQLite
   | `shared/` | Rules both sides use: the state list, filing statuses, the profile check, password rules |
   | `pb_hooks/` | PocketBase hooks. `lib/` is pure and unit-tested, `glue/` touches PocketBase |
   | `migrations/` | The schema |
+  | `nginx/` | nginx's config, holding page and start script |
   | `k8s/`, `scripts/deploy-k8s.sh` | The cluster |
   | `tests/` | Unit, API and browser tests ([tests/README.md](tests/README.md)) |
 
@@ -132,11 +153,11 @@ again weekly:
 
 - lint, typecheck, unit tests, build and shellcheck
 - `pnpm audit` (high and above fails)
-- the API suite and a browser smoke test, against the production build and
-  the real PocketBase image
+- the API suite and a browser smoke test, through the nginx image, against
+  the production build and the real PocketBase image
 - gitleaks (secrets)
 - Semgrep (static analysis)
-- Trivy (CVEs in dependencies and both images)
+- Trivy (CVEs in dependencies and all three images)
 - arm64 image builds
 
 The deploy runs only after all of them pass, and only once deployment is

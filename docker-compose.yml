@@ -23,3 +23,21 @@ services:
       PB_SU_EMAIL: ${PB_SU_EMAIL:-}
       PB_SU_PASS: ${PB_SU_PASS:-}
     restart: unless-stopped
+
+  # nginx as in the cluster, in front of Nuxt on this machine
+  # (http://localhost:8085): the country block, the rate limits and the
+  # holding page. `pnpm dev` serves :3005; for the production build on :3012
+  # start it with NUXT_UPSTREAM=host.docker.internal:3012.
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "127.0.0.1:${NGINX_HOST_PORT:-8085}:8080"
+    environment:
+      NUXT_UPSTREAM: ${NUXT_UPSTREAM:-host.docker.internal:3005}
+      RESOLVER: 127.0.0.11
+      # Local only: trusts any X-Forwarded-For, so the API suite can sign in
+      # from a made-up address per test. The cluster trusts only the pod network.
+      REAL_IP_FROM: 0.0.0.0/0
+    restart: unless-stopped

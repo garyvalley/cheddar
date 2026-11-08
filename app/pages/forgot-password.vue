@@ -23,7 +23,7 @@ async function send() {
       <div class="card">
         <label class="field">
           <span class="field-label">Email</span>
-          <input v-model="email" class="input" type="email" autocomplete="email" required v-focus>
+          <input v-model="email" v-focus class="input" type="email" autocomplete="email" required>
         </label>
       </div>
       <p v-if="error" class="notice notice-error" role="alert">{{ error }}</p>

@@ -1,6 +1,6 @@
-# Only the path a request takes is open: cloudflared -> Nuxt -> PocketBase.
-# Nothing else in the cluster reaches Nuxt or PocketBase, which is also what
-# makes Nuxt's trust in cf-connecting-ip safe (k8s/app/nuxt.yaml).
+# Only the path a request takes is open: cloudflared -> nginx -> Nuxt ->
+# PocketBase. Nothing else in the cluster reaches any of them, which is also
+# what makes nginx's trust in X-Forwarded-For and CF-IPCountry safe.
 #
 # Outbound is closed the same way: each pod reaches DNS, the next pod on that
 # path, and the public internet only where it needs it -- never the home
@@ -35,7 +35,7 @@ spec:
         - { port: 53, protocol: TCP }
 ---
 # The tunnel to Cloudflare's edge (7844 over QUIC or TCP, 443 for its API),
-# and the requests it brings in, to Nuxt.
+# and the requests it brings in, to nginx.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -50,9 +50,9 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app: nuxt
+              app: nginx
       ports:
-        - port: 3000
+        - port: 8080
     # The public internet: everything but private, link-local and tailnet
     # ranges (10/8 holds pods and services, 192.168/16 the home network).
     - to:
@@ -63,6 +63,31 @@ spec:
         - { port: 7844, protocol: UDP }
         - { port: 7844, protocol: TCP }
         - { port: 443, protocol: TCP }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nginx
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: nginx
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: cloudflared
+      ports:
+        - port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nuxt
+      ports:
+        - port: 3000
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -78,7 +103,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app: cloudflared
+              app: nginx
       ports:
         - port: 3000
   # PocketBase only: Nuxt calls nothing on the internet.

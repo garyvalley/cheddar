@@ -1,10 +1,10 @@
-// Browser smoke test: sign up, set up two-step sign-in, sign out and back in
-// with a code, on a desktop and a phone-sized screen, with no console errors.
-// Run it against the production build (`pnpm build`, then
-// `node .output/server/index.mjs`), where the strict CSP applies: an inline
-// script the nonce doesn't cover would break hydration here first.
+// Browser smoke test: sign up, be held at two-step setup until it's on, set
+// the profile, sign out and back in with a code, on a desktop and a
+// phone-sized screen, with no console errors. Run it through nginx in front of
+// the production build, where the strict CSP applies: an inline script the
+// nonce doesn't cover would break hydration here first (tests/README.md).
 //
-//   APP_URL=http://127.0.0.1:3012 node tests/ui.mjs
+//   APP_URL=http://localhost:8085 node tests/ui.mjs
 //
 // Uses installed Chrome, or CHROME_PATH. Cleans up its account through
 // PocketBase as the superuser (PB_URL, PB_SU_EMAIL, PB_SU_PASS).
@@ -13,7 +13,7 @@ import { randomBytes } from 'node:crypto'
 import { chromium } from 'playwright-core'
 import { loadHookModule } from './load-hook-module.mjs'
 
-const APP = (process.env.APP_URL || 'http://127.0.0.1:3012').replace(/\/$/, '')
+const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
 const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
 const totp = loadHookModule('pb_hooks/lib/totp.js')
 const email = `ui-${randomBytes(6).toString('hex')}@cheddar.test`
@@ -39,18 +39,12 @@ try {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByRole('heading', { name: 'Hi, Ui' }).waitFor()
-  assert.equal(await page.getByText('Set up · 3 left').count(), 1)
 
-  // Profile: every state is offered.
+  // Two-step sign-in comes first: every other page sends a new account back here.
+  await page.getByRole('heading', { name: 'Protect your account' }).waitFor()
   await page.goto(`${APP}/settings`)
-  assert.equal(await page.getByLabel('State you file taxes in').locator('option').count(), 52)
-  await page.getByLabel('State you file taxes in').selectOption('CA')
-  await page.getByLabel('Federal filing status').selectOption('single')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await page.getByText('Saved').waitFor()
-
-  // Two-step sign-in.
+  await page.getByRole('heading', { name: 'Protect your account' }).waitFor()
+  assert.match(page.url(), /\/setup$/)
   await page.getByRole('button', { name: 'Turn on' }).click()
   // A field a tap reveals takes the focus, so typing goes straight into it.
   assert.ok(await page.getByLabel('Enter your password to continue').evaluate(el => el === document.activeElement), 'password field focused')
@@ -64,7 +58,18 @@ try {
   await page.getByText('Save your recovery codes').waitFor()
   assert.equal(await page.locator('.codes li').count(), 10)
   await page.getByRole('button', { name: 'I\'ve saved them' }).click()
+  await page.getByRole('heading', { name: 'Hi, Ui' }).waitFor()
+  assert.equal(await page.getByText('Set up · 2 left').count(), 1)
+
+  // Profile: every state is offered.
+  await page.goto(`${APP}/settings`)
   await page.getByText('10 recovery codes left.').waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Turn off' }).count(), 0)
+  assert.equal(await page.getByLabel('State you file taxes in').locator('option').count(), 52)
+  await page.getByLabel('State you file taxes in').selectOption('CA')
+  await page.getByLabel('Federal filing status').selectOption('single')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByText('Saved').waitFor()
 
   // Out, and back in with a code.
   await page.getByRole('button', { name: 'Sign out', exact: true }).first().click()

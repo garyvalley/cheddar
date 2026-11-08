@@ -1,0 +1,84 @@
+# nginx between the Cloudflare Tunnel and Nuxt: the country block, the rate
+# limits and the holding page (nginx/nginx.conf.template).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: primary
+      imagePullSecrets:
+        - name: ghcr
+      securityContext:
+        runAsNonRoot: true
+        # The image's `nginx` user.
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: ${IMAGE_PREFIX}/nginx:${NGINX_TAG}
+          env:
+            - name: NUXT_UPSTREAM
+              value: nuxt.${NAMESPACE}.svc.cluster.local:3000
+            # k3s's kube-dns Service.
+            - name: RESOLVER
+              value: 10.43.0.10
+            # Only cloudflared, a pod, may say who the client is.
+            - name: REAL_IP_FROM
+              value: 10.42.0.0/16
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket: { port: 8080 }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 8080 }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 20m, memory: 16Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # The root filesystem is read-only: the site config (written at
+          # start), the pid and temp files go on these.
+          volumeMounts:
+            - { name: conf, mountPath: /etc/nginx/conf.d }
+            - { name: tmp, mountPath: /tmp }
+            - { name: cache, mountPath: /var/cache/nginx }
+      volumes:
+        - { name: conf, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+        - { name: cache, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+      targetPort: 8080

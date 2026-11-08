@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { encode } from 'uqr'
 
+/** Emitted once the recovery codes are saved: two-step sign-in is on. */
+const emit = defineEmits<{ done: [] }>()
+
 const { me } = useAuth()
 const { busy, error, run } = useAction()
 
 // 'idle' -> 'password' (confirm it's you) -> 'scan' -> 'codes' (shown once)
 type Stage = 'idle' | 'password' | 'scan' | 'codes'
 const stage = ref<Stage>('idle')
-const intent = ref<'setup' | 'off' | 'codes'>('setup')
+const intent = ref<'setup' | 'codes'>('setup')
 const password = ref('')
 const code = ref('')
 const secret = ref('')
@@ -45,13 +48,6 @@ async function withPassword() {
     qr.value = data.flatMap((row, y) => row.map((dark, x) => (dark ? `M${x} ${y}h1v1h-1z` : ''))).join('')
     stage.value = 'scan'
   }
-  else if (intent.value === 'off') {
-    const r = await run(() => $fetch('/api/auth/two-step/off', { method: 'POST', body }))
-    if (r === undefined) return
-    if (me.value) me.value = { ...me.value, mfa_enabled: false }
-    await refresh()
-    cancel()
-  }
   else {
     const r = await run(() => $fetch('/api/auth/two-step/recovery-codes', { method: 'POST', body }))
     if (!r) return
@@ -77,6 +73,7 @@ async function doneWithCodes() {
   qr.value = ''
   await refresh()
   stage.value = 'idle'
+  emit('done')
 }
 </script>
 
@@ -94,18 +91,17 @@ async function doneWithCodes() {
         <template v-else>
           <button class="btn btn-tinted" @click="begin('setup')">Use a different app</button>
           <button class="btn btn-tinted" @click="begin('codes')">New recovery codes</button>
-          <button class="btn btn-danger" @click="begin('off')">Turn off</button>
         </template>
       </div>
 
       <form v-else-if="stage === 'password'" class="field stack" @submit.prevent="withPassword">
         <label>
           <span class="field-label">Enter your password to continue</span>
-          <input v-model="password" class="input" type="password" autocomplete="current-password" required v-focus>
+          <input v-model="password" v-focus class="input" type="password" autocomplete="current-password" required>
         </label>
         <div class="btn-row">
-          <button class="btn" :class="intent === 'off' ? 'btn-danger' : 'btn-primary'" :disabled="busy">
-            <span v-if="busy" class="spinner" aria-hidden="true" /> {{ intent === 'off' ? 'Turn off' : 'Continue' }}
+          <button class="btn btn-primary" :disabled="busy">
+            <span v-if="busy" class="spinner" aria-hidden="true" /> Continue
           </button>
           <button type="button" class="btn btn-plain" @click="cancel">Cancel</button>
         </div>
@@ -145,7 +141,7 @@ async function doneWithCodes() {
     <p v-if="error" class="notice notice-error" role="alert">{{ error }}</p>
     <p class="group-footer">
       <template v-if="on">{{ status.recovery_codes_left }} recovery codes left.</template>
-      <template v-else>With two-step sign-in, someone who learns your password still can't get in without your phone.</template>
+      <template v-else>Someone who learns your password still can't get in without your phone.</template>
     </p>
   </section>
 </template>

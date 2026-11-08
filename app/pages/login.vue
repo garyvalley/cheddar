@@ -45,7 +45,7 @@ async function sendCode() {
       <div class="card">
         <label class="field">
           <span class="field-label">Email</span>
-          <input v-model="email" class="input" type="email" autocomplete="username" required v-focus>
+          <input v-model="email" v-focus class="input" type="email" autocomplete="username" required>
         </label>
         <label class="field">
           <span class="field-label">Password</span>
@@ -67,7 +67,7 @@ async function sendCode() {
       <p class="subhead center">Open your authenticator app and enter the 6-digit code for Cheddar. Lost your phone? Enter a recovery code instead.</p>
       <div class="card card-pad">
         <label class="visually-hidden" for="code">Code</label>
-        <input id="code" v-model="code" class="input code-input" inputmode="text" autocomplete="one-time-code" maxlength="11" required v-focus>
+        <input id="code" v-model="code" v-focus class="input code-input" inputmode="text" autocomplete="one-time-code" maxlength="11" required>
       </div>
       <p v-if="error" class="notice notice-error" role="alert">{{ error }}</p>
       <p v-if="notice" class="notice notice-info">{{ notice }}</p>

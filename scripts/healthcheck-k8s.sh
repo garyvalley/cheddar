@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # After scripts/deploy-k8s.sh: proves the public path end to end -- DNS,
-# Cloudflare, the tunnel, Nuxt and PocketBase behind it.
+# Cloudflare, the tunnel, nginx, Nuxt and PocketBase behind it.
 #
 # Usage: APP_HOST=<host> ./scripts/healthcheck-k8s.sh
 
@@ -26,7 +26,7 @@ done
 echo "DEPLOY UNHEALTHY"
 kubectl -n cheddar get pods -o wide 2>&1 | sed 's/^/  /'
 kubectl -n cheddar get events --sort-by=.lastTimestamp 2>&1 | tail -20 | sed 's/^/  /'
-for d in pocketbase nuxt cloudflared; do
+for d in pocketbase nuxt nginx cloudflared; do
   echo "  ---- $d ----"
   kubectl -n cheddar logs "deployment/$d" --all-containers --tail=40 2>&1 | sed 's/^/    /'
 done
