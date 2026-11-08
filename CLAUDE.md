@@ -37,4 +37,6 @@ Multi-user from day one: every user's data is theirs alone; state and filing sta
 - pnpm's `trustPolicy: no-downgrade` refuses some old releases; add a reasoned entry under `trustPolicyExclude` in pnpm-workspace.yaml.
 - Stop a local server with `lsof -ti tcp:<port> -sTCP:LISTEN | xargs kill`: without `-sTCP:LISTEN` it also kills the browser connected to it, which loses its cookies and looks like a sign-out bug.
 - The preview server's launch config lives at ~/dev/.claude/launch.json (`cheddar`), not in this repo.
-- Not verified until the first deploy: that Cloudflare sends `CF-IPCountry` and `X-Forwarded-Proto: https` down the tunnel (Homefile relies on both).
+- Cloudflare sends `CF-IPCountry` and `X-Forwarded-Proto: https` down the tunnel (verified live 2026-11-08); nginx logs `country=` per request.
+- A route that answers 204 hands `$fetch` nothing: check it with `useAction().succeed()`, never by `run()`'s return value.
+- On the cluster, use `ssh ubuntu@primary sudo k3s kubectl -n cheddar …`: the Mac's kubeconfig can't reach the API off the home network.
