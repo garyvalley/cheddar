@@ -84,4 +84,10 @@ export default defineNuxtConfig({
     requestSizeLimiter: { maxRequestSizeInBytes: 1_000_000, maxUploadFileRequestInBytes: 10_000_000 },
     removeLoggers: false,
   },
+
+  routeRules: {
+    // A statement file of up to 4 MB, sent as JSON text (shared/statements.ts);
+    // nginx allows the same for this route alone.
+    '/api/imports': { security: { requestSizeLimiter: { maxRequestSizeInBytes: 8_000_000 } } },
+  },
 })
