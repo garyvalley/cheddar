@@ -69,8 +69,17 @@ function when(pb: string) {
   <section id="linked-banks" class="group" aria-labelledby="links-title">
     <h2 id="links-title" class="group-title">Linked banks and cards</h2>
 
-    <div v-if="!data.enabled" class="card card-pad">
-      <p class="subhead">Linking banks isn't switched on for this Cheddar yet. You can still add accounts below and import the files your bank exports.</p>
+    <!-- Off until the server has its bank-link key: say so plainly, and how it's switched on. -->
+    <div v-if="!data.enabled" class="card card-pad stack off">
+      <p class="headline">Bank linking is off on this server</p>
+      <p class="subhead">
+        Linking connects your banks and cards through SimpleFIN, so balances and transactions arrive on their own.
+        It needs the server's bank-link key, which hasn't been set yet.
+      </p>
+      <p class="footnote">
+        Whoever runs this Cheddar sets <code>BANK_LINK_KEY</code> and deploys again (k8s/README.md, “First deploy”, step 6).
+        The Link a bank or card button appears here once it's on. Until then, add accounts below and import the files your bank lets you download.
+      </p>
     </div>
 
     <template v-else>
@@ -140,5 +149,6 @@ function when(pb: string) {
 .steps li { margin-bottom: 0.25rem; }
 .token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8125rem; word-break: break-all; resize: vertical; }
 .warn { color: var(--warning); }
+.off code { font-size: 0.75rem; }
 .badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }
 </style>
