@@ -1,0 +1,10 @@
+# Advisories Trivy reports that can't reach Cheddar, each with its reason.
+# Remove an entry as soon as a fixed release ships.
+
+# golang.org/x/net/html (CVE-2026-78661 / GHSA-75pg-wvh3-34jr, HIGH, fixed in
+# x/net 0.62.0): quadratic time parsing HTML with many short text runs. In
+# the PocketBase 0.40.6 binary, which parses HTML only to turn its own mail
+# templates (migrations/0001_accounts.mjs) into plain text; no visitor's HTML
+# reaches a parser. Drop with the first PocketBase release built with x/net
+# 0.62.0 or later (PocketBase's main branch is still on 0.61.0, 2026-11-08).
+CVE-2026-78661
