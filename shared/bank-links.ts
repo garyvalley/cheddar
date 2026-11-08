@@ -4,19 +4,20 @@ export interface LinkedAccount {
   name: string
   institution: string
   kind: string
-  /** Signed: what a card or loan owes is negative. Null until SimpleFIN gives one. */
+  last4: string
+  /** Signed: what a card or loan owes is negative. Null until the bank gives one. */
   balance_cents: number | null
   balance_date: string
 }
 
-/** One SimpleFIN link: the institutions behind one setup token. */
+/** One linked bank: the accounts one sign-in to that bank reaches, through Plaid. */
 export interface BankLink {
   id: string
-  provider: 'simplefin'
+  provider: 'plaid'
   institutions: string[]
-  /** ok; error (the last sync failed, the next may work); reconnect (link again with a new token). */
+  /** ok; error (the last sync failed, the next may work); reconnect (sign in to the bank again). */
   status: 'ok' | 'error' | 'reconnect'
-  /** What went wrong, or what SimpleFIN said about an institution; '' when all is well. */
+  /** What went wrong, as the person should read it; '' when all is well. */
   message: string
   /** PocketBase's date format, or '' before the first sync worked. */
   last_synced: string
@@ -24,12 +25,12 @@ export interface BankLink {
 }
 
 export interface BankLinks {
-  /** Whether this Cheddar can link banks (BANK_LINK_KEY is set). */
+  /** Whether this Cheddar can link banks (BANK_LINK_KEY and the Plaid keys are set). */
   enabled: boolean
   links: BankLink[]
 }
 
-/** What a sync did. `recent`: it had just synced, so this one didn't ask SimpleFIN again. */
+/** What a sync did. `recent`: it had just synced, so this one didn't ask Plaid again. */
 export interface SyncResult {
   ok: boolean
   added: number

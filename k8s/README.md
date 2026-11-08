@@ -73,10 +73,19 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```sh
    cd ~/dev/cheddar && for k in MAILJET_API_KEY MAILJET_SECRET_KEY MAILJET_SENDER_EMAIL; do grep "^$k=" ../homefile/.env | cut -d= -f2- | tr -d '\n' | gh secret set "$k" --env production -R garyvalley/cheddar; done && gh variable set DEPLOY_ENABLED --body true -R garyvalley/cheddar && gh workflow run ci.yml --ref main -R garyvalley/cheddar
    ```
-6. 👤 **Bank links** (optional; without it, linking stays off). One key,
-   made once: changing it later means every link must be made again.
+6. 👤 **Bank links** (optional; without these, linking stays off). People
+   sign in to their bank through Plaid Link; Cheddar keeps only Plaid's
+   access token, encrypted with `BANK_LINK_KEY`. That key is made once:
+   changing it later means every link must be made again. Plaid's keys are
+   at [dashboard.plaid.com](https://dashboard.plaid.com) → Developers → Keys:
+   the client ID, and the secret for the environment in `PLAID_ENV`
+   (`sandbox` to try it with Plaid's test bank, `user_good` / `pass_good`;
+   `production` for real banks, once Plaid approves it).
    ```sh
    openssl rand -hex 16 | tr -d '\n' | gh secret set BANK_LINK_KEY --env production -R garyvalley/cheddar
+   gh secret set PLAID_CLIENT_ID --env production -R garyvalley/cheddar
+   gh secret set PLAID_SECRET --env production -R garyvalley/cheddar
+   gh variable set PLAID_ENV --body sandbox -R garyvalley/cheddar
    ```
    Then run the deploy again (`gh workflow run ci.yml --ref main -R garyvalley/cheddar`).
 7. 👤 **Route,** once the tunnel shows **Healthy**: delete any DNS record for

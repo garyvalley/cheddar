@@ -7,8 +7,8 @@ nothing to install from an app store.
 **Status:** the foundation is in place: accounts with required two-step
 sign-in, your profile (state and filing status), the app shell and the deploy
 pipeline. You can add your bank and card accounts and import their
-statement files (CSV, OFX or QFX) as transactions, or link them through
-SimpleFIN so transactions arrive on their own.
+statement files (CSV, OFX or QFX) as transactions, or link them by
+signing in to your bank, so transactions arrive on their own.
 The finance features arrive in this order:
 
 1. **Accounts and net worth.** Checking, savings, credit, brokerage,
@@ -26,9 +26,10 @@ The finance features arrive in this order:
 | ![Settings](docs/screenshots/settings.png) | ![Sign in](docs/screenshots/sign-in.png) |
 | ![Two-step setup, required for every account](docs/screenshots/setup.png) | |
 
-Cheddar costs nothing to run. Your data comes from files you export from
-your bank, or, if you choose, from SimpleFIN Bridge, which links your banks
-and cards for $15 a year that you pay SimpleFIN yourself. It runs on a home
+Cheddar costs next to nothing to run. Your data comes from files you export
+from your bank, or from banks you link through Plaid, which is free in its
+sandbox and for the first few real links, then billed per linked bank to
+whoever runs Cheddar (not to the people who use it). It runs on a home
 Raspberry Pi cluster, and the only other third-party services it uses are
 Cloudflare and Mailjet, both on their free plans.
 
@@ -88,16 +89,18 @@ tunnel, repository secrets) and day-to-day operations.
   own, and are worked out from what these accounts hold.
 - **Link a bank or card** (Accounts → Linked banks and cards), so balances
   and transactions arrive on their own:
-  - Sign up at [SimpleFIN Bridge](https://beta-bridge.simplefin.org) ($15 a
-    year) and connect your banks and cards there.
-  - In SimpleFIN, make a setup token for a new app, and paste it into
-    Cheddar. The first sync brings 90 days of transactions.
-  - Each link then syncs once a day on its own, or when you tap **Sync now**.
-    Pending charges are replaced once they post.
-  - Removing a link keeps its accounts and transactions. To cut SimpleFIN's
-    own access, remove the bank in SimpleFIN too.
-  - To try it without a bank, paste SimpleFIN's demo token,
-    `aHR0cHM6Ly9icmlkZ2Uuc2ltcGxlZmluLm9yZy9zaW1wbGVmaW4vY2xhaW0vZGVtbw==`.
+  - Tap **Link a bank or card**, pick your bank, and sign in to it in the
+    window that opens (Plaid Link). Your password goes to your bank, never
+    to Cheddar; Cheddar keeps only a read-only access token, encrypted.
+    The first sync brings 90 days of transactions.
+  - Each link then syncs once a day on its own, or when you tap **Update
+    now**. Pending charges are replaced once they post.
+  - When a bank asks you to sign in again, the link says so: tap **Sign in
+    again**.
+  - Unlinking deletes the access token at Plaid and in Cheddar, and keeps
+    the accounts and transactions.
+  - With `PLAID_ENV=sandbox`, try it with Plaid's test bank: any bank, user
+    `user_good`, password `pass_good`.
 - **Or add an account yourself** (Accounts), for one you'd rather not link:
   a name, the kind (checking, savings, credit card, loan…), and optionally
   the bank and the last four digits. Then import its statements.
@@ -157,17 +160,20 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - Mutating requests must come from this site (an Origin check).
   - The CSP is strict and nonce-based (`nuxt.config.ts`).
   - Frames are refused, and HSTS is set.
-- **Bank links** (`pb_hooks/bank_links.pb.js`, `pb_hooks/lib/simplefin.js`):
-  - SimpleFIN is read-only: it can't move money.
-  - A setup token is a base64 address. Cheddar calls it only if it's on
-    SimpleFIN Bridge (`SIMPLEFIN_ALLOWED_ORIGINS`), so a pasted token can't
-    aim PocketBase at another address.
-  - The access it unlocks is stored encrypted with `BANK_LINK_KEY` (AES-256),
+- **Bank links** (`pb_hooks/bank_links.pb.js`, `pb_hooks/lib/plaid.js`):
+  - The person signs in to their bank in Plaid Link, which hands the page a
+    short-lived public token. PocketBase swaps it for an access token with
+    Plaid's secret (`PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`), so the
+    bank password never reaches Cheddar, and the token is useless without
+    that secret. It reads balances and transactions; it can't move money.
+  - The access token is stored encrypted with `BANK_LINK_KEY` (AES-256),
     in a collection no record API rule opens. Only the hooks read it, and it
-    never reaches Nuxt or the browser. Without the key, linking is off.
-  - Syncs write through the hooks, as the link's owner, into the same
-    `accounts` and `transactions` file imports use; `external_id` (`sfin:…`)
-    makes a re-sync update rather than duplicate.
+    never reaches Nuxt or the browser. Without the keys, linking is off.
+  - Syncs use `/transactions/sync` from a saved cursor, and write through
+    the hooks, as the link's owner, into the same `accounts` and
+    `transactions` file imports use; `external_id` (`plaid:…`) makes a
+    re-sync update rather than duplicate.
+  - The CSP allows Plaid Link's script and frame (`cdn.plaid.com`).
 - **Schema:** `migrations/` holds the schema, which `scripts/migrate.mjs`
   applies as an init container before each new version serves
   ([migrations/README.md](migrations/README.md)).
