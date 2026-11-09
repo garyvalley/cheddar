@@ -115,7 +115,22 @@ var WORDS = [
   ["fees", "fee|fees|overdraft|interest charge*|finance charge*|late charge*|atm"],
   ["shopping", "amazon*|amzn*|target|walmart|wal mart|costco|ebay|etsy|best buy|apple com|ikea|wayfair|macys|nordstrom*|kohls|tj maxx|marshalls|old navy|nike|zara|uniqlo|shein|temu|dollar tree|dollar general|five below"],
 ]
-var PATTERNS = WORDS.map(function (w) { return [w[0], new RegExp("(^| )(" + w[1].replace(/\*/g, "[a-z0-9]*") + ")( |$)")] })
+// Each phrase as its words: [["whole", "foods"], ["grocer*"], ...].
+var PHRASES = WORDS.map(function (w) { return [w[0], w[1].split("|").map(function (p) { return p.split(" ") })] })
+
+/** Whether `phrase` (words, a trailing * on one matching any ending) appears in `words` in order. */
+function hasPhrase(words, phrase) {
+  for (var i = 0; i + phrase.length <= words.length; i++) {
+    var all = true
+    for (var j = 0; j < phrase.length && all; j++) {
+      var want = phrase[j]
+      var got = words[i + j]
+      all = want.charAt(want.length - 1) === "*" ? got.indexOf(want.slice(0, -1)) === 0 : got === want
+    }
+    if (all) return true
+  }
+  return false
+}
 
 /** Lower case, letters and digits only, single spaces: "SQ *Blue-Bottle #12" -> "sq blue bottle 12". */
 function plain(text) {
@@ -126,7 +141,10 @@ function plain(text) {
 function fromWords(text) {
   var t = plain(text)
   if (!t) return ""
-  for (var i = 0; i < PATTERNS.length; i++) if (PATTERNS[i][1].test(t)) return PATTERNS[i][0]
+  var words = t.split(" ")
+  for (var i = 0; i < PHRASES.length; i++) {
+    for (var k = 0; k < PHRASES[i][1].length; k++) if (hasPhrase(words, PHRASES[i][1][k])) return PHRASES[i][0]
+  }
   return ""
 }
 
