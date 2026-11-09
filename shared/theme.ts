@@ -7,6 +7,9 @@
 export const THEMES = [
   { value: 'violet', label: 'Violet' },
   { value: 'cheddar', label: 'Cheddar' },
+  { value: 'blue', label: 'Blue' },
+  { value: 'rose', label: 'Rose' },
+  { value: 'mint', label: 'Mint' },
 ] as const
 
 export const APPEARANCES = [
