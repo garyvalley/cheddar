@@ -114,6 +114,9 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
 
     const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
     assert.equal(account.balance_cents, 240707)
+    // Overview's history keeps the day's last balance, once (pb_hooks/balances.pb.js).
+    const days = (await pb('GET', `/api/collections/balance_history/records?filter=${encodeURIComponent(`account='${account.id}'`)}`, c.token)).json.items
+    assert.deepEqual(days.map(d => [d.date, d.balance_cents]), [[account.balance_date, 240707]])
     assert.deepEqual((await transactions(c, account.id)).map(t => [t.description, t.amount_cents, t.pending]),
       [['PAYROLL ACME', 320000, false], ['RENT NOVEMBER', -180000, false], ['GROCER', -4310, false]])
   })
