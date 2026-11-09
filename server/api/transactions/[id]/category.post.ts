@@ -1,4 +1,4 @@
-import { isCategory } from '~~/shared/categories'
+import { isCategoryRef } from '~~/shared/categories'
 import { recategorize } from '~~/server/data/money'
 import { attempt, sessionFor } from '~~/server/data/session'
 
@@ -13,6 +13,6 @@ export default defineEventHandler(async (event) => {
   const s = sessionFor(event)
   const id = recordId(getRouterParam(event, 'id'), 'That transaction isn\'t there.')
   const { category } = await readFields<{ category: string }>(event, ['category'])
-  if (!isCategory(category)) throw createError({ statusCode: 400, statusMessage: 'Choose one of the categories.' })
+  if (!isCategoryRef(category)) throw createError({ statusCode: 400, statusMessage: 'Choose one of the categories.' })
   return await attempt(() => recategorize(s, id, category), 'That transaction isn\'t there.')
 })

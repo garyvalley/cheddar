@@ -39,6 +39,18 @@ var CATEGORIES = [
   { id: "transfer", label: "Transfers", spending: false },
 ]
 
+/** A category the person made: "c-" and its record id in custom_categories. Its name is theirs. */
+function isCustomId(id) {
+  return /^c-[a-z0-9]{15}$/.test(String(id || ""))
+}
+
+/** A custom category's name, trimmed to one line, or "" if it can't be one. */
+function cleanName(name) {
+  // eslint-disable-next-line no-control-regex
+  var n = String(name === undefined || name === null ? "" : name).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim()
+  return n.length <= 40 ? n : ""
+}
+
 function isCategory(id) {
   for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].id === id) return true
   return false
@@ -175,10 +187,11 @@ function merchantKey(payee, description) {
  * A transaction's category: { category, by }, where `by` says how it was
  * found ("rule", "bank", "match" or "default"). `t` is { amount_cents,
  * description, payee, bank_category, liability }, `rule` the person's own
- * category for its merchant (or "").
+ * category for its merchant (or ""), built in or one they made (the caller
+ * checks a custom one still exists).
  */
 function categorize(t, rule) {
-  if (rule && isCategory(rule)) return { category: rule, by: "rule" }
+  if (rule && (isCategory(rule) || isCustomId(rule))) return { category: rule, by: "rule" }
   var bank = fromBank(t.bank_category)
   if (bank) return { category: bank, by: "bank" }
   var words = fromWords((t.payee || "") + " " + (t.description || ""))
@@ -192,6 +205,8 @@ function categorize(t, rule) {
 module.exports = {
   CATEGORIES: CATEGORIES,
   isCategory: isCategory,
+  isCustomId: isCustomId,
+  cleanName: cleanName,
   fromBank: fromBank,
   fromWords: fromWords,
   merchantKey: merchantKey,

@@ -1,20 +1,23 @@
 <script setup lang="ts">
 import { formatCents, type Account, type Transaction } from '~~/shared/accounts'
-import { CATEGORIES, categoryLabel, categoryOf, isCategory, localToday, periodOf, type CategoryId, type SpendingSummary } from '~~/shared/categories'
+import { BUILT_IN, categoryOf, isCategoryRef, localToday, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
 
 // Spending only reads the accounts set up on Accounts. Every transaction is
-// sorted into a category on its own; the one thing to do here is move one
-// that landed in the wrong place, and the rest of that merchant's follow.
+// sorted into a category on its own; what a person does here is move one
+// that landed in the wrong place (the rest of that merchant's follow), and
+// make categories of their own to move them into.
 
 const route = useRoute()
 const router = useRouter()
 const text = (v: unknown) => (typeof v === 'string' ? v : '')
+const NEW = '__new'
 
 // The view lives in the address, so a category can be linked to and Back leaves it.
 const kind = computed(() => (route.query.period === 'year' ? 'year' : 'month'))
 const period = computed(() => periodOf(kind.value, text(route.query.at) || undefined, localToday()))
 const account = computed(() => text(route.query.account))
-const category = computed<CategoryId | ''>(() => (isCategory(route.query.category) ? route.query.category : ''))
+// A category's id, "all" for every transaction, or "" for the categories.
+const category = computed(() => (route.query.category === 'all' || isCategoryRef(route.query.category) ? route.query.category as string : ''))
 const page = computed(() => Math.max(1, Number.parseInt(text(route.query.page), 10) || 1))
 
 function go(change: Record<string, string | undefined>) {
@@ -27,6 +30,14 @@ function go(change: Record<string, string | undefined>) {
 const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 const names = computed(() => new Map(list.value.accounts.map(a => [a.id, a.name])))
 
+const { data: cats, refresh: refreshCats } = await useFetch<{ categories: Category[] }>('/api/categories', { key: 'categories', default: () => ({ categories: BUILT_IN }) })
+const all = computed(() => cats.value.categories)
+const label = (id: string) => categoryOf(id, all.value).label
+const builtInSpending = computed(() => all.value.filter(c => !c.custom && c.spending))
+const yours = computed(() => all.value.filter(c => c.custom))
+const notSpent = computed(() => all.value.filter(c => !c.spending))
+const viewing = computed(() => all.value.find(c => c.id === category.value))
+
 const { data: summary, error: summaryError, refresh: refreshSummary } = await useFetch<SpendingSummary>('/api/spending', {
   query: { period: kind, at: computed(() => period.value.at), account },
   default: () => ({ from: '', to: '', spent_cents: 0, income_cents: 0, previous_spent_cents: 0, categories: [] }),
@@ -36,9 +47,10 @@ const notSpending = computed(() => summary.value.categories.filter(c => !c.spend
 const largest = computed(() => Math.max(1, ...spending.value.map(c => c.total_cents)))
 const share = (cents: number) => `${Math.max(0, Math.min(100, (cents / largest.value) * 100)).toFixed(1)}%`
 const current = computed(() => summary.value.categories.find(c => c.id === category.value))
+const count = computed(() => summary.value.categories.reduce((n, c) => n + c.count, 0))
 
 const { data: txs, pending, error: txError, refresh: refreshTxs } = await useFetch<{ items: Transaction[], page: number, pages: number, total: number }>('/api/transactions', {
-  query: { account, category, from: computed(() => period.value.from), to: computed(() => period.value.to), page },
+  query: { account, category: computed(() => (category.value === 'all' ? '' : category.value)), from: computed(() => period.value.from), to: computed(() => period.value.to), page },
   default: () => ({ items: [], page: 1, pages: 0, total: 0 }),
   immediate: !!category.value,
   watch: false,
@@ -54,20 +66,57 @@ const comparison = computed(() => {
   return `${formatCents(Math.abs(now - was))} ${now > was ? 'more' : 'less'} than ${before}.`
 })
 
-// Moving a transaction to another category.
+// Moving a transaction to another category, maybe a new one of the person's own.
 const move = useAction()
 const moved = ref('')
+const naming = ref('') // the transaction a new category is being named for
+const newName = ref('')
 async function recategorize(t: Transaction, to: string) {
   moved.value = ''
-  if (!isCategory(to) || to === categoryOf(t.category)) return
+  if (to === categoryOf(t.category, all.value).id) return
   const r = await move.run(() => $fetch<{ moved: number }>(`/api/transactions/${t.id}/category`, { method: 'POST', body: { category: to } }))
   if (!r) return
   const what = t.payee || t.description || 'It'
   const others = r.moved === 1 ? ' 1 more from the same place moved too.' : r.moved > 1 ? ` ${r.moved} more from the same place moved too.` : ''
-  moved.value = `${what} is now in ${categoryLabel(to)}.${others} New ones from there will go to ${categoryLabel(to)} as well.`
+  moved.value = `${what} is now in ${label(to)}.${others} New ones from there will go to ${label(to)} as well.`
   await Promise.all([refreshSummary(), refreshTxs()])
 }
-watch(category, () => { moved.value = ''; move.error.value = '' })
+function picked(t: Transaction, event: Event) {
+  const select = event.target as HTMLSelectElement
+  if (select.value !== NEW) return recategorize(t, select.value)
+  select.value = categoryOf(t.category, all.value).id
+  naming.value = t.id
+  newName.value = ''
+}
+async function createFor(t: Transaction) {
+  const r = await move.run(() => $fetch<{ category: Category }>('/api/categories', { method: 'POST', body: { name: newName.value } }))
+  if (!r) return
+  await refreshCats()
+  naming.value = ''
+  await recategorize(t, r.category.id)
+}
+watch(category, () => { moved.value = ''; move.error.value = ''; naming.value = ''; renaming.value = false; deleting.value = false })
+
+// Renaming or deleting one of the person's own categories, from its page.
+const manage = useAction()
+const renaming = ref(false)
+const deleting = ref(false)
+const rename = ref('')
+function startRename() {
+  rename.value = viewing.value?.label ?? ''
+  renaming.value = true
+}
+async function saveRename() {
+  if (!await manage.run(() => $fetch(`/api/categories/${category.value}/rename`, { method: 'POST', body: { name: rename.value } }))) return
+  renaming.value = false
+  await Promise.all([refreshCats(), refreshSummary()])
+}
+async function confirmDelete() {
+  if (!await manage.run(() => $fetch(`/api/categories/${category.value}/remove`, { method: 'POST' }))) return
+  deleting.value = false
+  await Promise.all([refreshCats(), refreshSummary()])
+  await go({ category: undefined })
+}
 
 const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 </script>
@@ -114,10 +163,32 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
       <template v-else-if="category">
         <section class="group" aria-labelledby="cat-title">
           <p><NuxtLink :to="{ query: { ...route.query, category: undefined, page: undefined } }" class="back-link"><AppIcon name="chevron" class="back" /> All categories</NuxtLink></p>
-          <div class="card card-pad tight">
-            <h2 id="cat-title" class="title-2">{{ categoryLabel(category) }}</h2>
+          <div v-if="category === 'all'" class="card card-pad tight">
+            <h2 id="cat-title" class="title-2">All transactions</h2>
+            <p class="footnote">{{ period.label }} · {{ txs.total.toLocaleString() }} {{ txs.total === 1 ? 'transaction' : 'transactions' }}</p>
+          </div>
+          <div v-else class="card card-pad tight">
+            <h2 id="cat-title" class="title-2">{{ label(category) }}</h2>
             <p class="num title-3 total">{{ formatCents(current?.total_cents ?? 0) }}</p>
-            <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}</p>
+            <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}<template v-if="viewing?.custom"> · Your own category</template></p>
+            <template v-if="viewing?.custom">
+              <form v-if="renaming" class="inline-form" @submit.prevent="saveRename">
+                <label class="visually-hidden" for="rename">New name</label>
+                <input id="rename" v-model="rename" class="input" maxlength="40" required>
+                <button class="btn btn-primary" :disabled="manage.busy.value"><span v-if="manage.busy.value" class="spinner" aria-hidden="true" /> Save</button>
+                <button type="button" class="btn btn-plain" @click="renaming = false">Cancel</button>
+              </form>
+              <div v-else-if="deleting" class="inline-form">
+                <span class="footnote grow">Delete {{ viewing.label }}? Its transactions go back to being sorted on their own.</span>
+                <button class="btn btn-plain" @click="deleting = false">Cancel</button>
+                <button class="btn btn-danger" :disabled="manage.busy.value" @click="confirmDelete"><span v-if="manage.busy.value" class="spinner" aria-hidden="true" /> Delete</button>
+              </div>
+              <p v-else class="btn-row">
+                <button class="btn btn-tinted" @click="startRename">Rename</button>
+                <button class="btn btn-plain danger" @click="deleting = true">Delete…</button>
+              </p>
+              <p v-if="manage.error.value" class="notice notice-error" role="alert">{{ manage.error.value }}</p>
+            </template>
           </div>
         </section>
 
@@ -127,24 +198,41 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
           <p v-if="move.error.value" class="notice notice-error moved" role="alert">{{ move.error.value }}</p>
           <p v-if="txError" class="notice notice-error" role="alert">{{ errorMessage(txError) }}</p>
           <div v-else-if="!txs.items.length" class="card card-pad">
-            <p class="muted">Nothing in {{ categoryLabel(category) }} for {{ period.label }}.</p>
+            <p class="muted">{{ category === 'all' ? 'No transactions' : `Nothing in ${label(category)}` }} for {{ period.label }}.</p>
           </div>
           <ul v-else class="card list" :aria-busy="pending || move.busy.value">
-            <li v-for="t in txs.items" :key="t.id" class="row tx">
-              <span class="row-label">
-                <span class="block desc">{{ t.description || 'No description' }}</span>
-                <span class="footnote">{{ day(t.posted) }}<template v-if="!account"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template></span>
-              </span>
-              <span class="tx-side">
-                <span class="num amount" :class="{ income: t.amount_cents > 0 }">{{ formatCents(t.amount_cents) }}</span>
-                <select
-                  class="chip" :value="categoryOf(t.category)" :disabled="move.busy.value"
-                  :aria-label="`Category for ${t.description || 'this transaction'}`"
-                  @change="recategorize(t, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-for="c in CATEGORIES" :key="c.id" :value="c.id">{{ c.label }}</option>
-                </select>
-              </span>
+            <li v-for="t in txs.items" :key="t.id" class="tx-item">
+              <div class="row tx">
+                <span class="row-label">
+                  <span class="block desc">{{ t.description || 'No description' }}</span>
+                  <span class="footnote">{{ day(t.posted) }}<template v-if="!account"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template></span>
+                </span>
+                <span class="tx-side">
+                  <span class="num amount" :class="{ income: t.amount_cents > 0 }">{{ formatCents(t.amount_cents) }}</span>
+                  <select
+                    class="chip" :value="categoryOf(t.category, all).id" :disabled="move.busy.value"
+                    :aria-label="`Category for ${t.description || 'this transaction'}`"
+                    @change="picked(t, $event)"
+                  >
+                    <optgroup label="Spending">
+                      <option v-for="c in builtInSpending" :key="c.id" :value="c.id">{{ c.label }}</option>
+                    </optgroup>
+                    <optgroup v-if="yours.length" label="Your categories">
+                      <option v-for="c in yours" :key="c.id" :value="c.id">{{ c.label }}</option>
+                    </optgroup>
+                    <optgroup label="Not spending">
+                      <option v-for="c in notSpent" :key="c.id" :value="c.id">{{ c.label }}</option>
+                    </optgroup>
+                    <option :value="NEW">New category…</option>
+                  </select>
+                </span>
+              </div>
+              <form v-if="naming === t.id" class="inline-form new-cat" @submit.prevent="createFor(t)">
+                <label class="visually-hidden" :for="`new-${t.id}`">Name for the new category</label>
+                <input :id="`new-${t.id}`" v-model="newName" class="input" maxlength="40" placeholder="New category's name" required>
+                <button class="btn btn-primary" :disabled="move.busy.value"><span v-if="move.busy.value" class="spinner" aria-hidden="true" /> Add</button>
+                <button type="button" class="btn btn-plain" @click="naming = ''">Cancel</button>
+              </form>
             </li>
           </ul>
           <div v-if="txs.pages > 1" class="btn-row pager">
@@ -152,7 +240,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
             <span class="footnote">Page {{ txs.page }} of {{ txs.pages }}</span>
             <button class="btn btn-plain" :disabled="page >= txs.pages" @click="go({ page: String(page + 1) })">Older</button>
           </div>
-          <p class="group-footer">In the wrong place? Pick its category. The rest from the same place move with it, and new ones follow.</p>
+          <p class="group-footer">In the wrong place? Pick its category, or make a new one. The rest from the same place move with it, and new ones follow.</p>
         </section>
       </template>
 
@@ -184,6 +272,19 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
               </NuxtLink>
             </li>
           </ul>
+        </section>
+
+        <section v-if="count" class="group" aria-label="Every transaction">
+          <div class="card">
+            <NuxtLink :to="{ query: { ...route.query, category: 'all', page: undefined } }" class="row cat">
+              <span class="row-label">
+                <span class="block">All transactions</span>
+                <span class="footnote">{{ count.toLocaleString() }} in {{ period.label }}</span>
+              </span>
+              <AppIcon name="chevron" class="chev" />
+            </NuxtLink>
+          </div>
+          <p class="group-footer">Something in the wrong place? Open it and pick another category, or make one of your own. Cheddar remembers, and that merchant's other transactions follow.</p>
         </section>
 
         <section v-if="notSpending.length" class="group" aria-labelledby="other-title">
@@ -246,4 +347,9 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
 }
 .chip:focus-visible { border-color: var(--focus); }
 .moved { margin-bottom: 0.75rem; }
+.inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+.inline-form .input { flex: 1 1 12rem; width: auto; }
+.new-cat { margin: 0; padding: 0 1rem 0.75rem; }
+.grow { flex: 1 1 12rem; }
+.danger { color: var(--critical); }
 </style>

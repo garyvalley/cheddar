@@ -142,4 +142,58 @@ describe('categories', () => {
     const rules = await fetch(`${PB}/api/collections/category_rules/records`, { headers: { authorization: pbToken(c) } })
     assert.equal(rules.status, 403)
   })
+
+  test('a person makes their own, tags with it, and it\'s remembered like a built-in one', async () => {
+    const { c } = await ready()
+    const acct = await account(c)
+    const tx = byDescription(await imported(c, acct.id))
+    const made = await c.call('POST', '/api/categories', { name: '  Coffee  habit ' })
+    assert.equal(made.status, 201, JSON.stringify(made.json))
+    const mine = made.json.category
+    assert.match(mine.id, /^c-[a-z0-9]{15}$/)
+    assert.deepEqual([mine.label, mine.spending, mine.custom], ['Coffee habit', true, true])
+    assert.equal((await c.call('POST', '/api/categories', { name: 'coffee HABIT' })).status, 400, 'names are unique, any case')
+    assert.equal((await c.call('POST', '/api/categories', { name: 'Groceries' })).status, 400, 'nor a built-in one\'s')
+    assert.equal((await c.call('POST', '/api/categories', { name: 'x'.repeat(41) })).status, 400)
+    const listed = (await c.call('GET', '/api/categories')).json.categories
+    assert.equal(listed.at(-1).id, mine.id)
+    assert.equal(listed.filter(x => !x.custom).length, 19)
+
+    const r = await c.call('POST', `/api/transactions/${tx['STARBUCKS STORE #12 SEATTLE'].id}/category`, { category: mine.id })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    assert.equal(r.json.moved, 1)
+    const later = byDescription(await imported(c, acct.id, `Date,Description,Amount\n${us(today)},STARBUCKS STORE #3 BOISE,-6.00\n`, 'later.csv'))
+    assert.deepEqual([later['STARBUCKS STORE #3 BOISE'].category, later['STARBUCKS STORE #3 BOISE'].category_by], [mine.id, 'rule'])
+    const summary = (await c.call('GET', `/api/spending?at=${month}`)).json
+    assert.deepEqual(summary.categories.find(x => x.id === mine.id), { id: mine.id, label: 'Coffee habit', spending: true, custom: true, total_cents: 1575, count: 3 })
+    assert.equal((await c.call('GET', `/api/transactions?category=${mine.id}`)).json.total, 3)
+
+    const renamed = await c.call('POST', `/api/categories/${mine.id}/rename`, { name: 'Cafés' })
+    assert.equal(renamed.json.category.label, 'Cafés')
+    assert.equal((await c.call('POST', `/api/categories/${mine.id}/rename`, { name: 'Dining and drinks' })).status, 400)
+
+    // Deleting it: its transactions are sorted again on their own, and its rule goes.
+    const gone = await c.call('POST', `/api/categories/${mine.id}/remove`)
+    assert.equal(gone.status, 200, JSON.stringify(gone.json))
+    assert.equal(gone.json.resorted, 3)
+    const after = (await c.call('GET', `/api/transactions?account=${acct.id}`)).json.items.filter(t => t.description.startsWith('STARBUCKS'))
+    assert.deepEqual(after.map(t => [t.category, t.category_by]), [['dining', 'match'], ['dining', 'match'], ['dining', 'match']])
+    assert.equal((await c.call('GET', '/api/categories')).json.categories.some(x => x.id === mine.id), false)
+  })
+
+  test('one person\'s own categories are theirs alone', async () => {
+    const owner = await ready()
+    const mine = (await owner.c.call('POST', '/api/categories', { name: 'Hobbies' })).json.category
+    const other = await ready()
+    const theirs = await imported(other.c, (await account(other.c)).id)
+    assert.equal((await other.c.call('GET', '/api/categories')).json.categories.some(x => x.id === mine.id), false)
+    assert.equal((await other.c.call('POST', `/api/transactions/${theirs[0].id}/category`, { category: mine.id })).status, 400)
+    assert.equal((await other.c.call('POST', `/api/categories/${mine.id}/rename`, { name: 'Mine now' })).status, 404)
+    assert.equal((await other.c.call('POST', `/api/categories/${mine.id}/remove`)).status, 404)
+    const direct = await fetch(`${PB}/api/collections/custom_categories/records`, { headers: { authorization: pbToken(other.c) } })
+    assert.equal(direct.status, 403)
+    const passwordOnly = await signedIn()
+    assert.equal((await passwordOnly.c.call('POST', '/api/categories', { name: 'Nope' })).status, 403)
+    assert.equal((await owner.c.call('GET', '/api/categories')).json.categories.at(-1).label, 'Hobbies')
+  })
 })
