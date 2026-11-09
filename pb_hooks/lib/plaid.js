@@ -189,7 +189,15 @@ function transactionRow(t) {
     description: clean(t.name || t.merchant_name).slice(0, 500),
     payee: clean(t.merchant_name).slice(0, 200),
     pending: !!t.pending,
+    bank_category: bankCategory(t.personal_finance_category),
   }
+}
+
+/** Plaid's personal_finance_category as one code to keep: the detailed one ("FOOD_AND_DRINK_COFFEE"), else the primary, else "". */
+function bankCategory(pfc) {
+  if (!pfc || typeof pfc !== "object") return ""
+  var code = String(pfc.detailed || pfc.primary || "").toUpperCase()
+  return /^[A-Z_]{1,100}$/.test(code) ? code : ""
 }
 
 /** One /transactions/sync page as { added, modified, removed (external ids), cursor, more }. */
@@ -225,6 +233,7 @@ module.exports = {
   toCents: toCents,
   kindOf: kindOf,
   accountRows: accountRows,
+  bankCategory: bankCategory,
   transactionRow: transactionRow,
   syncPage: syncPage,
 }

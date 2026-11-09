@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { RecordModel } from 'pocketbase'
 import type { Account, Import, NewAccount, Transaction } from '~~/shared/accounts'
+import { summarize, type CategoryId, type SpendingSummary } from '~~/shared/categories'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
 
@@ -26,7 +27,9 @@ const toTransaction = (r: RecordModel): Transaction => ({
   posted: r.posted,
   amount_cents: r.amount_cents ?? 0,
   description: r.description ?? '',
+  payee: r.payee ?? '',
   category: r.category ?? '',
+  category_by: r.category_by ?? '',
   pending: !!r.pending,
   source: r.source,
 })
@@ -63,12 +66,52 @@ export async function deleteAccount(s: Session, id: string): Promise<void> {
 
 export const PAGE_SIZE = 50
 
-export async function listTransactions(s: Session, q: { account?: string, page: number }) {
+export interface TransactionQuery {
+  account?: string
+  /** A category id; "other" also finds what isn't sorted yet. */
+  category?: CategoryId
+  /** YYYY-MM-DD, both ends included. */
+  from?: string
+  to?: string
+}
+
+function transactionFilter(s: Session, q: TransactionQuery): string {
+  const parts: string[] = []
+  const params: Record<string, string> = {}
+  if (q.account) { parts.push('account = {:account}'); params.account = q.account }
+  if (q.category === 'other') parts.push('(category = \'other\' || category = \'\')')
+  else if (q.category) { parts.push('category = {:category}'); params.category = q.category }
+  if (q.from) { parts.push('posted >= {:from}'); params.from = q.from }
+  if (q.to) { parts.push('posted <= {:to}'); params.to = q.to }
+  return s.filter(parts.join(' && '), params)
+}
+
+export async function listTransactions(s: Session, q: TransactionQuery & { page: number }) {
+  const filter = transactionFilter(s, q)
   const list = await s.collection('transactions').getList(q.page, PAGE_SIZE, {
     sort: '-posted,-created',
-    ...(q.account ? { filter: s.filter('account = {:account}', { account: q.account }) } : {}),
+    ...(filter ? { filter } : {}),
   })
   return { items: list.items.map(toTransaction), page: list.page, pages: list.totalPages, total: list.totalItems }
+}
+
+/** What each category came to between two dates, and the spending of the same span before. */
+export async function spendingSummary(s: Session, q: { account?: string, from: string, to: string, previous: { from: string, to: string } }): Promise<SpendingSummary> {
+  const rows = (range: { from: string, to: string }) => s.collection('transactions').getFullList({
+    fields: 'amount_cents,category',
+    filter: transactionFilter(s, { account: q.account, ...range }),
+  }) as Promise<unknown> as Promise<{ amount_cents: number, category: string }[]>
+  const [now, before] = await Promise.all([rows(q), rows(q.previous)])
+  return { from: q.from, to: q.to, ...summarize(now), previous_spent_cents: summarize(before).spent_cents }
+}
+
+/**
+ * Moves a transaction to another category (pb_hooks/categories.pb.js): the
+ * merchant's other transactions, and its next ones, follow. Answers how many
+ * others moved.
+ */
+export function recategorize(s: Session, id: string, category: CategoryId): Promise<{ transaction: { id: string, category: CategoryId }, moved: number }> {
+  return s.send(`/api/transactions/${encodeURIComponent(id)}/category`, { method: 'POST', body: { category } })
 }
 
 export async function listImports(s: Session, account?: string): Promise<Import[]> {

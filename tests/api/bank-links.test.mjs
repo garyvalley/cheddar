@@ -118,6 +118,36 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
       [['PAYROLL ACME', 320000, false], ['RENT NOVEMBER', -180000, false], ['GROCER', -4310, false]])
   })
 
+  test('synced transactions are sorted by Plaid\'s category, and a person\'s choice outlasts the next sync', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    const all = async () => Object.fromEntries((await pb('GET', '/api/collections/transactions/records?perPage=200&sort=posted', c.token)).json.items
+      .map(t => [t.description, [t.category, t.category_by]]))
+    assert.deepEqual(await all(), {
+      'PAYROLL ACME': ['income', 'match'],
+      'RENT': ['housing', 'match'],
+      'GROCER': ['shopping', 'bank'], // Plaid's category wins over what the name says
+      'CAFE': ['dining', 'bank'],
+    })
+
+    const cafe = (await pb('GET', `/api/collections/transactions/records?filter=${encodeURIComponent('description=\'CAFE\'')}`, c.token)).json.items[0]
+    const rent = (await pb('GET', `/api/collections/transactions/records?filter=${encodeURIComponent('description=\'RENT\'')}`, c.token)).json.items[0]
+    assert.equal((await c.call('POST', `/api/transactions/${cafe.id}/category`, { category: 'entertainment' })).status, 200)
+    assert.equal((await c.call('POST', `/api/transactions/${rent.id}/category`, { category: 'utilities' })).status, 200)
+
+    // Plaid changes the rent's amount, and the cafe charges again: Plaid's category for both loses to the person's.
+    const card = bank.accounts[1].account_id
+    bank.events.push(
+      { kind: 'modified', t: { ...bank.events[1].t, amount: 1850 } },
+      { kind: 'added', t: { ...bank.events[3].t, transaction_id: 't-cafe-again', account_id: card, name: 'CAFE AGAIN' } },
+    )
+    await allowSync(l.id)
+    assert.equal((await c.call('POST', `/api/bank-links/${l.id}/sync`, {})).json.sync.ok, true)
+    const now = await all()
+    assert.deepEqual(now.RENT, ['utilities', 'person'])
+    assert.deepEqual(now['CAFE AGAIN'], ['entertainment', 'rule'])
+  })
+
   test('a bank that needs signing in again says so, and signing in again brings it back', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)

@@ -28,8 +28,8 @@ export function sampleBank() {
     events: [
       { kind: 'added', t: { transaction_id: `t-pay-${id()}`, account_id: chk, amount: -3200, date: daysAgo(20), name: 'PAYROLL ACME', merchant_name: null, pending: false } },
       { kind: 'added', t: { transaction_id: `t-rent-${id()}`, account_id: chk, amount: 1800, date: daysAgo(15), name: 'RENT', merchant_name: null, pending: false } },
-      { kind: 'added', t: { transaction_id: `t-pend-${id()}`, account_id: chk, amount: 42.1, date: daysAgo(1), name: 'GROCER', merchant_name: 'Grocer', pending: true } },
-      { kind: 'added', t: { transaction_id: `t-cafe-${id()}`, account_id: card, amount: 4.75, date: daysAgo(3), name: 'CAFE', merchant_name: 'Cafe', pending: false } },
+      { kind: 'added', t: { transaction_id: `t-pend-${id()}`, account_id: chk, amount: 42.1, date: daysAgo(1), name: 'GROCER', merchant_name: 'Grocer', pending: true, personal_finance_category: { primary: 'GENERAL_MERCHANDISE', detailed: 'GENERAL_MERCHANDISE_SUPERSTORES' } } },
+      { kind: 'added', t: { transaction_id: `t-cafe-${id()}`, account_id: card, amount: 4.75, date: daysAgo(3), name: 'CAFE', merchant_name: 'Cafe', pending: false, personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_COFFEE' } } },
     ],
     status: null, // or a Plaid error_code every call answers with
     calls: [],

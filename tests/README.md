@@ -2,9 +2,9 @@
 
 | Suite | What it covers | Needs |
 | --- | --- | --- |
-| `pnpm test:unit` (`tests/*.test.mjs`) | Pure logic: authenticator codes (RFC 6238 vectors), recovery codes, lockout, passwords, profile rules, the state list, sign-in redirects, reading bank CSV, OFX and QFX files, account rules, reading Plaid accounts and transactions | Nothing |
-| `pnpm test:api` (`tests/api/*.test.mjs`) | Sign-up, sign-in, required two-step sign-in, sessions, deletion, profile, accounts, statement imports (dedup, undo, a few-megabyte file through nginx), linking and syncing banks against a stand-in Plaid, one person's data hidden from another, even straight from PocketBase, CSRF, nginx's rate limits and country block, security headers | PocketBase, Nuxt and nginx running |
-| `pnpm test:ui` (`tests/ui.mjs`) | A browser signs up, is held at two-step setup until it's on, sets the profile, adds an account, previews and imports a CSV, sees it on Spending and undoes it, signs back in with a code, on desktop and phone sizes, with no console errors | PocketBase, the **production build** behind nginx, Chrome |
+| `pnpm test:unit` (`tests/*.test.mjs`) | Pure logic: authenticator codes (RFC 6238 vectors), recovery codes, lockout, passwords, profile rules, the state list, sign-in redirects, reading bank CSV, OFX and QFX files, account rules, reading Plaid accounts and transactions, sorting transactions into categories and merchants, Spending's totals and periods | Nothing |
+| `pnpm test:api` (`tests/api/*.test.mjs`) | Sign-up, sign-in, required two-step sign-in, sessions, deletion, profile, accounts, statement imports (dedup, undo, a few-megabyte file through nginx), linking and syncing banks against a stand-in Plaid, categories (sorted on import and sync, moving one teaches its merchant's rule, nobody sets one any other way), one person's data hidden from another, even straight from PocketBase, CSRF, nginx's rate limits and country block, security headers | PocketBase, Nuxt and nginx running |
+| `pnpm test:ui` (`tests/ui.mjs`) | A browser signs up, is held at two-step setup until it's on, sets the profile, adds an account, previews and imports a CSV, sees it by category on Spending, moves one to another category, undoes the import, signs back in with a code, on desktop and phone sizes, with no console errors | PocketBase, the **production build** behind nginx, Chrome |
 
 `tests/api/helpers.mjs` holds what the API suites share (the client, new
 accounts with and without two-step sign-in, the cleanup).

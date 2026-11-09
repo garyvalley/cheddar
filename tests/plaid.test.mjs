@@ -126,6 +126,16 @@ describe('syncPage', () => {
     assert.deepEqual([p.cursor, p.more], ['c2', true])
   })
 
+  test('keeps Plaid\'s category: the detailed one, else the primary', () => {
+    const p = plaid.syncPage({ added: [
+      { transaction_id: 't1', account_id: 'A', amount: 4.75, date: '2026-11-01', name: 'Cafe', personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_COFFEE' } },
+      { transaction_id: 't2', account_id: 'A', amount: 1, date: '2026-11-01', name: 'X', personal_finance_category: { primary: 'TRAVEL' } },
+      { transaction_id: 't3', account_id: 'A', amount: 1, date: '2026-11-01', name: 'Y', personal_finance_category: { detailed: 'not a code!' } },
+      { transaction_id: 't4', account_id: 'A', amount: 1, date: '2026-11-01', name: 'Z' },
+    ] })
+    assert.deepEqual(p.added.map(t => t.bank_category), ['FOOD_AND_DRINK_COFFEE', 'TRAVEL', '', ''])
+  })
+
   test('takes nothing from a malformed answer', () => {
     assert.deepEqual(plaid.syncPage(null), { added: [], modified: [], removed: [], cursor: '', more: false })
   })

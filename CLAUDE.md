@@ -41,4 +41,5 @@ Multi-user from day one: every user's data is theirs alone; state and filing sta
 - A route that answers 204 hands `$fetch` nothing: check it with `useAction().succeed()`, never by `run()`'s return value.
 - Bank linking is Plaid, on only with `BANK_LINK_KEY`, `PLAID_CLIENT_ID` and `PLAID_SECRET`. `BANK_LINK_KEY` encrypts every link's access token: changing it means each person links again. Links live in `bank_links`, which only the hooks read (all rules null).
 - Plaid Link loads from `cdn.plaid.com` and opens in its frame: keep both in the CSP (`nuxt.config.ts`). The container can't reach plaid.com; tests use `tests/api/plaid-mock.mjs` via `PLAID_API_URL`.
+- Only `pb_hooks/categories.pb.js` writes a transaction's `category`, `category_by`, `merchant_key` and `bank_category` (the record API's writes to them are dropped); it sorts every transaction as it saves. The category list is in both `pb_hooks/lib/categories.js` and `shared/categories.ts`; a unit test keeps them equal.
 - On the cluster, use `ssh ubuntu@primary sudo k3s kubectl -n cheddar …`: the Mac's kubeconfig can't reach the API off the home network.

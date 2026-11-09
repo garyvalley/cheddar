@@ -19,6 +19,10 @@ const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
 const totp = loadHookModule('pb_hooks/lib/totp.js')
 const email = `ui-${randomBytes(6).toString('hex')}@cheddar.test`
 const password = 'correct horse battery'
+// The statement is this month's, so Spending shows it without paging back.
+const now = new Date()
+const yyyy = String(now.getFullYear())
+const mm = String(now.getMonth() + 1).padStart(2, '0')
 
 const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' })
 const errors = []
@@ -104,17 +108,27 @@ try {
   await page.getByRole('heading', { name: 'Import', exact: true }).waitFor()
   await page.getByLabel('CSV, OFX or QFX file').setInputFiles({
     name: 'november.csv', mimeType: 'text/csv',
-    buffer: Buffer.from('Posting Date,Description,Amount\n11/01/2026,COFFEE,-4.50\n11/02/2026,"GROCERY, INC",-82.10\n11/03/2026,PAYCHECK,2500.00\nTotal,,\n'),
+    buffer: Buffer.from(`Posting Date,Description,Amount\n${mm}/01/${yyyy},COFFEE,-4.50\n${mm}/02/${yyyy},"GROCERY, INC",-82.10\n${mm}/03/${yyyy},PAYCHECK,2500.00\nTotal,,\n`),
   })
   await page.getByText('1 line won\'t be imported').waitFor()
   assert.equal(await page.locator('table.preview tbody tr').count(), 3)
-  assert.equal(await page.locator('table.preview tbody td').first().textContent(), '2026-11-01')
+  assert.equal(await page.locator('table.preview tbody td').first().textContent(), `${yyyy}-${mm}-01`)
   await page.getByRole('button', { name: 'Import 3 transactions' }).click()
   await page.getByText('Imported 3 transactions into Everyday checking.').waitFor()
   await page.getByRole('link', { name: 'See transactions' }).click()
   await page.getByRole('heading', { name: 'Spending' }).waitFor()
+  // Sorted into categories on their own; one moved by hand takes its merchant's rule with it.
+  await page.getByText('$86.60').first().waitFor()
+  await page.getByRole('link', { name: /Groceries/ }).click()
+  await page.getByRole('heading', { name: 'Groceries' }).waitFor()
   await page.getByText('GROCERY, INC').waitFor()
   assert.equal(await page.getByText('\u2212$82.10').count(), 1)
+  await page.getByLabel('Category for GROCERY, INC').selectOption('shopping')
+  await page.getByRole('status').filter({ hasText: 'GROCERY, INC is now in Shopping.' }).waitFor()
+  await page.getByText('Nothing in Groceries').waitFor()
+  await page.getByRole('link', { name: 'All categories' }).click()
+  await page.getByRole('link', { name: /Shopping/ }).waitFor()
+  await page.getByRole('link', { name: /Income/ }).waitFor()
   assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
   await page.goto(`${APP}/accounts`)
   await page.getByRole('link', { name: 'Import', exact: true }).click()

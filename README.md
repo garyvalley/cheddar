@@ -116,8 +116,18 @@ tunnel, repository secrets) and day-to-day operations.
     file twice, or overlapping date ranges, is safe. Two identical rows on the
     same day in one file are both kept.
   - **Undo** next to an import removes the transactions it added.
-- **See your transactions** (Spending), newest first, for one account or all.
-  Spending only shows what your accounts hold: to add more, go to Accounts.
+- **See where your money goes** (Spending): what each category came to in a
+  month or a year, for one account or all, against the period before. Tap a
+  category for its transactions. Spending only shows what your accounts
+  hold: to add more, go to Accounts.
+  - Every transaction is sorted into a category on its own: by your rule for
+    its merchant if you have one, else by the bank's category (linked
+    accounts), else by what its description says ("WHOLE FOODS" is
+    Groceries). Income and transfers, such as a card payment, aren't counted
+    as spending.
+  - **In the wrong place?** Pick another category on the transaction. The
+    merchant's other transactions move with it, unless you moved one by hand,
+    and its new ones follow. There is nothing to set up.
 - **Sign out everywhere** (Settings) ends every session on every device.
 - **Delete account** (Settings) removes your account and everything in it.
   It asks for your password.
