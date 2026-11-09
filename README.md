@@ -125,9 +125,13 @@ tunnel, repository secrets) and day-to-day operations.
     accounts), else by what its description says ("WHOLE FOODS" is
     Groceries). Income and transfers, such as a card payment, aren't counted
     as spending.
-  - **In the wrong place?** Pick another category on the transaction. The
-    merchant's other transactions move with it, unless you moved one by hand,
-    and its new ones follow. There is nothing to set up.
+  - **In the wrong place?** Open the category, or All transactions, and pick
+    another category on the transaction. The merchant's other transactions
+    move with it, unless you moved one by hand, and its new ones follow.
+  - **Your own categories.** Pick "New category…" on any transaction to make
+    one and move it there; Cheddar remembers it for that merchant like any
+    other. Rename or delete it on its own page; deleting one sorts its
+    transactions again on their own.
 - **Sign out everywhere** (Settings) ends every session on every device.
 - **Delete account** (Settings) removes your account and everything in it.
   It asks for your password.

@@ -1,7 +1,9 @@
 /**
  * Spending categories as the browser shows them. The list is
  * pb_hooks/lib/categories.js's, which sorts each transaction into one;
- * tests/categories.test.mjs keeps the two the same.
+ * tests/categories.test.mjs keeps the two the same. A person can add
+ * categories of their own (GET /api/categories lists both), which count as
+ * spending.
  */
 
 export const CATEGORIES = [
@@ -28,19 +30,34 @@ export const CATEGORIES = [
 
 export type CategoryId = typeof CATEGORIES[number]['id']
 
-export const isCategory = (id: unknown): id is CategoryId => CATEGORIES.some(c => c.id === id)
-
-/** A transaction saved before it was sorted counts as Other until it is. */
-export const categoryOf = (id: string): CategoryId => (isCategory(id) ? id : 'other')
-
-export const categoryLabel = (id: string) => CATEGORIES.find(c => c.id === categoryOf(id))!.label
-
-export const isSpending = (id: string) => CATEGORIES.find(c => c.id === categoryOf(id))!.spending
-
-export interface CategoryTotal {
-  id: CategoryId
+/** A category as the page lists it: built in, or one the person made ("c-" and its id). */
+export interface Category {
+  id: string
   label: string
   spending: boolean
+  custom: boolean
+}
+
+export const BUILT_IN: Category[] = CATEGORIES.map(c => ({ ...c, custom: false }))
+
+export const isCategory = (id: unknown): id is CategoryId => CATEGORIES.some(c => c.id === id)
+
+/** A custom category's id: "c-" and a PocketBase record id. */
+export const isCustomId = (id: unknown): id is string => typeof id === 'string' && /^c-[a-z0-9]{15}$/.test(id)
+
+/** Built in, or shaped like one of the person's own (the store checks it's theirs). */
+export const isCategoryRef = (id: unknown): id is string => isCategory(id) || isCustomId(id)
+
+/** The category a transaction counts in: one saved before it was sorted, or in a category since deleted, counts as Other. */
+export const categoryOf = (id: string, list: Category[] = BUILT_IN): Category => list.find(c => c.id === id) ?? list.find(c => c.id === 'other')!
+
+export const categoryLabel = (id: string, list: Category[] = BUILT_IN) => categoryOf(id, list).label
+
+export interface CategoryTotal {
+  id: string
+  label: string
+  spending: boolean
+  custom: boolean
   /** Spending: what went out, less refunds (positive is spent). Income and transfers: the net in. */
   total_cents: number
   count: number
@@ -58,21 +75,21 @@ export interface SpendingSummary {
   categories: CategoryTotal[]
 }
 
-/** Adds up transactions by category. */
-export function summarize(rows: { amount_cents: number, category: string }[]) {
-  const by = new Map<CategoryId, { total: number, count: number }>()
+/** Adds up transactions by category, in the person's list of categories. */
+export function summarize(rows: { amount_cents: number, category: string }[], list: Category[] = BUILT_IN) {
+  const by = new Map<string, { total: number, count: number }>()
   for (const r of rows) {
-    const id = categoryOf(r.category)
+    const id = categoryOf(r.category, list).id
     const t = by.get(id) ?? { total: 0, count: 0 }
     t.total += r.amount_cents
     t.count++
     by.set(id, t)
   }
   const categories: CategoryTotal[] = []
-  for (const c of CATEGORIES) {
+  for (const c of list) {
     const t = by.get(c.id)
     if (!t) continue
-    categories.push({ id: c.id, label: c.label, spending: c.spending, total_cents: c.spending ? -t.total : t.total, count: t.count })
+    categories.push({ id: c.id, label: c.label, spending: c.spending, custom: c.custom, total_cents: c.spending ? -t.total : t.total, count: t.count })
   }
   categories.sort((a, b) => Number(b.spending) - Number(a.spending) || (a.spending ? b.total_cents - a.total_cents : 0))
   const spent = categories.filter(c => c.spending).reduce((n, c) => n + c.total_cents, 0)

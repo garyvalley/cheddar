@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { RecordModel } from 'pocketbase'
 import type { Account, Import, NewAccount, Transaction } from '~~/shared/accounts'
-import { summarize, type CategoryId, type SpendingSummary } from '~~/shared/categories'
+import { summarize, type Category, type SpendingSummary } from '~~/shared/categories'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
 
@@ -69,7 +69,7 @@ export const PAGE_SIZE = 50
 export interface TransactionQuery {
   account?: string
   /** A category id; "other" also finds what isn't sorted yet. */
-  category?: CategoryId
+  category?: string
   /** YYYY-MM-DD, both ends included. */
   from?: string
   to?: string
@@ -101,8 +101,8 @@ export async function spendingSummary(s: Session, q: { account?: string, from: s
     fields: 'amount_cents,category',
     filter: transactionFilter(s, { account: q.account, ...range }),
   }) as Promise<unknown> as Promise<{ amount_cents: number, category: string }[]>
-  const [now, before] = await Promise.all([rows(q), rows(q.previous)])
-  return { from: q.from, to: q.to, ...summarize(now), previous_spent_cents: summarize(before).spent_cents }
+  const [now, before, list] = await Promise.all([rows(q), rows(q.previous), listCategories(s)])
+  return { from: q.from, to: q.to, ...summarize(now, list), previous_spent_cents: summarize(before, list).spent_cents }
 }
 
 /**
@@ -110,7 +110,7 @@ export async function spendingSummary(s: Session, q: { account?: string, from: s
  * merchant's other transactions, and its next ones, follow. Answers how many
  * others moved.
  */
-export function recategorize(s: Session, id: string, category: CategoryId): Promise<{ transaction: { id: string, category: CategoryId }, moved: number }> {
+export function recategorize(s: Session, id: string, category: string): Promise<{ transaction: { id: string, category: string }, moved: number }> {
   return s.send(`/api/transactions/${encodeURIComponent(id)}/category`, { method: 'POST', body: { category } })
 }
 
@@ -193,4 +193,25 @@ export async function importRows(s: Session, account: string, file: { filename: 
     throw error
   }
   return toImport(record)
+}
+
+/**
+ * The person's categories, built in and their own: the routes in
+ * pb_hooks/categories.pb.js, which alone read and write their own ones.
+ */
+export async function listCategories(s: Session): Promise<Category[]> {
+  return (await s.send('/api/categories', { method: 'GET' })).categories
+}
+
+export async function createCategory(s: Session, name: string): Promise<Category> {
+  return (await s.send('/api/categories', { method: 'POST', body: { name } })).category
+}
+
+export async function renameCategory(s: Session, id: string, name: string): Promise<Category> {
+  return (await s.send(`/api/categories/${encodeURIComponent(id)}/rename`, { method: 'POST', body: { name } })).category
+}
+
+/** Deletes one of the person's own categories; its transactions are sorted again on their own. */
+export async function removeCategory(s: Session, id: string): Promise<{ resorted: number }> {
+  return await s.send(`/api/categories/${encodeURIComponent(id)}/remove`, { method: 'POST' })
 }

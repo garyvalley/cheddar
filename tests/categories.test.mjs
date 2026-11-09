@@ -5,7 +5,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadHookModule } from './load-hook-module.mjs'
-import { CATEGORIES, categoryLabel, periodOf, summarize } from '../shared/categories.ts'
+import { BUILT_IN, CATEGORIES, categoryLabel, isCategoryRef, periodOf, summarize } from '../shared/categories.ts'
 
 const cats = loadHookModule('pb_hooks/lib/categories.js')
 const sort = (description, amount_cents, more = {}) => cats.categorize({ description, payee: '', bank_category: '', amount_cents, liability: false, ...more }, more.rule ?? '')
@@ -17,6 +17,10 @@ test('the browser\'s list is the hooks\' list', () => {
 describe('categorize', () => {
   test('follows the person\'s rule before anything else', () => {
     assert.deepEqual(sort('WHOLE FOODS', -5000, { rule: 'shopping', bank_category: 'FOOD_AND_DRINK_GROCERIES' }), { category: 'shopping', by: 'rule' })
+  })
+
+  test('follows a rule naming one of the person\'s own categories', () => {
+    assert.deepEqual(sort('WHOLE FOODS', -5000, { rule: 'c-abcdefghij12345' }), { category: 'c-abcdefghij12345', by: 'rule' })
   })
 
   test('ignores a rule naming no category', () => {
@@ -107,6 +111,32 @@ describe('summarize', () => {
     assert.equal(s.spent_cents, 15700)
     assert.equal(s.income_cents, 250000)
     assert.equal(categoryLabel(''), 'Other')
+  })
+})
+
+describe('custom categories', () => {
+  test('are named "c-" and a record id', () => {
+    assert.equal(cats.isCustomId('c-abcdefghij12345'), true)
+    assert.equal(cats.isCustomId('c-ABC'), false)
+    assert.equal(isCategoryRef('c-abcdefghij12345'), true)
+    assert.equal(isCategoryRef('groceries'), true)
+    assert.equal(isCategoryRef('c-short'), false)
+  })
+
+  test('have one-line names of up to 40 characters', () => {
+    assert.equal(cats.cleanName('  Kids\n  activities '), 'Kids activities')
+    assert.equal(cats.cleanName('x'.repeat(41)), '')
+    assert.equal(cats.cleanName(undefined), '')
+  })
+
+  test('are added up as spending, and a deleted one\'s rows count as Other', () => {
+    const list = [...BUILT_IN, { id: 'c-abcdefghij12345', label: 'Kids', spending: true, custom: true }]
+    const s = summarize([
+      { amount_cents: -3000, category: 'c-abcdefghij12345' },
+      { amount_cents: -500, category: 'c-zzzzzzzzzzzzzzz' },
+    ], list)
+    assert.deepEqual(s.categories.map(c => [c.id, c.label, c.total_cents, c.custom]), [['c-abcdefghij12345', 'Kids', 3000, true], ['other', 'Other', 500, false]])
+    assert.equal(s.spent_cents, 3500)
   })
 })
 
