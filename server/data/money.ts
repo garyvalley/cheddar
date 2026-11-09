@@ -3,6 +3,7 @@ import type { RecordModel } from 'pocketbase'
 import type { Account, Import, NewAccount, Transaction } from '~~/shared/accounts'
 import { localToday, summarize, type Category, type SpendingSummary } from '~~/shared/categories'
 import { GROWTH_PERIODS, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
+import { PACE_MONTHS, debts, invested, savings, type Projections } from '~~/shared/projections'
 import { taxYear, type TaxYear } from '~~/shared/taxes'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
@@ -263,6 +264,33 @@ export async function overview(s: Session, today = localToday()): Promise<Overvi
     months: monthly(rows, months, list),
     has_investments: invested.length > 0,
     growth: GROWTH_PERIODS.map(p => growth(accounts, history, transfers, p.id, today)),
+  }
+}
+
+/**
+ * Projections' numbers (shared/projections.ts): the last whole months'
+ * income and spending for the savings rate, what's invested now, and each
+ * debt with the pace it's being paid down. The page projects from them on
+ * the assumptions the person picks.
+ */
+export async function projections(s: Session, today = localToday()): Promise<Projections> {
+  const months = lastMonths(today, PACE_MONTHS + 1).slice(0, PACE_MONTHS)
+  const [accounts, rows, history, list] = await Promise.all([
+    listAccounts(s),
+    s.collection('transactions').getFullList({
+      fields: 'account,posted,amount_cents,category',
+      filter: s.filter('posted >= {:from} && posted <= {:to}', { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
+    }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
+    s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
+    listCategories(s),
+  ])
+  const monthsIn = monthly(rows, months, list)
+  return {
+    months: monthsIn,
+    savings: savings(monthsIn),
+    invested_cents: invested(accounts),
+    has_investments: accounts.some(a => isInvestment(a.kind) && a.balance_cents !== null),
+    debts: debts(accounts, rows, history, months),
   }
 }
 
