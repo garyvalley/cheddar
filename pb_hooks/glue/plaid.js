@@ -133,7 +133,8 @@ function upsert(txApp, collection, account, t) {
   var outcome = "updated"
   if (rec) {
     if (rec.getString("posted") === t.posted && rec.getInt("amount_cents") === t.amount_cents
-      && rec.getBool("pending") === t.pending && rec.getString("description") === t.description) return ""
+      && rec.getBool("pending") === t.pending && rec.getString("description") === t.description
+      && rec.getString("bank_category") === t.bank_category) return ""
   }
   else {
     rec = new Record(collection)
@@ -149,6 +150,8 @@ function upsert(txApp, collection, account, t) {
   rec.set("amount_cents", t.amount_cents)
   rec.set("description", t.description)
   rec.set("pending", t.pending)
+  // Plaid's category; pb_hooks/categories.pb.js sorts the row by it as it saves.
+  rec.set("bank_category", t.bank_category)
   txApp.save(rec)
   return outcome
 }

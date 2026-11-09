@@ -38,7 +38,11 @@ export interface Transaction {
   posted: string
   amount_cents: number
   description: string
+  payee: string
+  /** A category id (shared/categories.ts); empty until the store has sorted it. */
   category: string
+  /** How the category was chosen: by hand ("person"), by the person's rule, or automatically. */
+  category_by: 'bank' | 'match' | 'default' | 'rule' | 'person' | ''
   pending: boolean
   source: 'manual' | 'import' | 'sync'
 }
