@@ -3,6 +3,7 @@ import type { RecordModel } from 'pocketbase'
 import type { Account, Import, NewAccount, Transaction } from '~~/shared/accounts'
 import { localToday, summarize, type Category, type SpendingSummary } from '~~/shared/categories'
 import { GROWTH_PERIODS, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
+import { taxYear, type TaxYear } from '~~/shared/taxes'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
 
@@ -263,4 +264,21 @@ export async function overview(s: Session, today = localToday()): Promise<Overvi
     has_investments: invested.length > 0,
     growth: GROWTH_PERIODS.map(p => growth(accounts, history, transfers, p.id, today)),
   }
+}
+
+/**
+ * The tax year so far, from this year's transactions (shared/taxes.ts): the
+ * earliest transaction the person has at all says where their data starts.
+ */
+export async function taxes(s: Session, today = localToday()): Promise<TaxYear> {
+  const jan1 = `${today.slice(0, 4)}-01-01`
+  const [accounts, rows, first] = await Promise.all([
+    listAccounts(s),
+    s.collection('transactions').getFullList({
+      fields: 'account,posted,amount_cents,category',
+      filter: s.filter('posted >= {:from} && posted <= {:to}', { from: jan1, to: today }),
+    }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
+    s.collection('transactions').getList(1, 1, { fields: 'posted', sort: 'posted', skipTotal: true }),
+  ])
+  return taxYear(rows, accounts, today, (first.items[0]?.posted as string | undefined) ?? '')
 }
