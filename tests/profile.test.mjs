@@ -45,4 +45,12 @@ describe('checkProfile', () => {
     assert.ok('problem' in checkProfile({ name: 'x'.repeat(101) }))
     assert.ok('problem' in checkProfile({ name: 7 }))
   })
+
+  test('takes a known color theme and light, dark or automatic, and nothing else', () => {
+    assert.deepEqual(checkProfile({ theme: 'cheddar', appearance: 'dark' }), { ok: { theme: 'cheddar', appearance: 'dark' } })
+    assert.deepEqual(checkProfile({ theme: 'violet', appearance: 'system' }), { ok: { theme: 'violet', appearance: 'system' } })
+    for (const bad of [{ theme: '' }, { theme: 'orange' }, { theme: null }, { appearance: '' }, { appearance: 'auto' }, { appearance: 1 }]) {
+      assert.ok('problem' in checkProfile(bad), JSON.stringify(bad))
+    }
+  })
 })

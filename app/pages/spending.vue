@@ -316,12 +316,6 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
 .pager { justify-content: space-between; align-items: center; margin-top: 0.5rem; }
 
 .period { justify-content: space-between; flex-wrap: wrap; }
-.segmented { display: inline-flex; background: var(--surface-2); border-radius: var(--radius-sm); padding: 2px; }
-.seg {
-  min-height: 2.25rem; padding: 0.25rem 0.875rem; border: 0; border-radius: 6px;
-  font: inherit; font-size: 0.9375rem; background: none; color: var(--text); cursor: pointer;
-}
-.seg[aria-pressed="true"] { background: var(--surface); font-weight: 600; box-shadow: var(--shadow); }
 .stepper { display: inline-flex; align-items: center; gap: 0.25rem; }
 .when { min-width: 9.5rem; text-align: center; }
 .back { transform: rotate(180deg); }

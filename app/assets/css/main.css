@@ -5,55 +5,62 @@
  * use the tokens, never a literal.
  */
 
+/*
+ * Each token is light-dark(light, dark): the person's appearance setting
+ * (shared/theme.ts) sets color-scheme on <html>, and "system" leaves it to
+ * the device. Their colour theme is data-theme on <html>: violet is the
+ * default, cheddar the original orange on warm greys. Red and green (losses,
+ * gains) are the same in both. Every text pairing keeps 4.5:1 or more.
+ */
 :root {
   color-scheme: light dark;
 
-  --bg: #f6f5f9;            /* page ground (grouped background) */
-  --surface: #ffffff;       /* cards and grouped rows */
-  --surface-2: #ecebf1;     /* fills: inputs, pressed rows */
-  --separator: #d9d7e1;
-  --text: #1b1a20;
-  --text-2: #58546a;        /* secondary labels */
-  --text-3: #6b6779;        /* tertiary: hints, placeholders */
-  --accent: #6b3fc4;        /* violet: links, tint, primary buttons */
-  --on-accent: #ffffff;
-  --accent-soft: #efe8fb;
-  --success: #1e7a3c;
-  --warning: #8a5a00;
-  --critical: #b3261e;
-  --on-critical: #ffffff;
-  --critical-soft: #fbe3e1;
-  --focus: #0a64d6;
+  --bg: light-dark(#f6f5f9, #141318);          /* page ground (grouped background) */
+  --surface: light-dark(#ffffff, #211f28);     /* cards and grouped rows */
+  --surface-2: light-dark(#ecebf1, #2d2a35);   /* fills: inputs, pressed rows */
+  --separator: light-dark(#d9d7e1, #3b3844);
+  --text: light-dark(#1b1a20, #f1eff6);
+  --text-2: light-dark(#58546a, #c1bdcc);      /* secondary labels */
+  --text-3: light-dark(#6b6779, #a39fb0);      /* tertiary: hints, placeholders */
+  --accent: light-dark(#6b3fc4, #b69cff);      /* links, tint, primary buttons */
+  --on-accent: light-dark(#ffffff, #1b1a20);
+  --accent-soft: light-dark(#efe8fb, #2e2547);
+  --mark-tile: #6b3fc4;                        /* the logo's tile (shared/mark.ts) */
+  --swatch-violet: light-dark(#6b3fc4, #b69cff); /* Settings' theme choice */
+  --swatch-cheddar: light-dark(#9a5300, #f2a93b);
+  --success: light-dark(#1e7a3c, #5ccf7f);
+  --warning: light-dark(#8a5a00, #e8b54a);
+  --critical: light-dark(#b3261e, #ff8a80);
+  --on-critical: light-dark(#ffffff, #1b1a20);
+  --critical-soft: light-dark(#fbe3e1, #3e1f22);
+  --focus: light-dark(#0a64d6, #6aa8ff);
 
   --radius: 12px;
   --radius-sm: 8px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 4%);
+  --shadow: 0 1px 2px light-dark(rgb(0 0 0 / 6%), transparent), 0 2px 8px light-dark(rgb(0 0 0 / 4%), transparent);
   --sidebar-w: 15rem;
   --tabbar-h: 3.25rem;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-num: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", var(--font);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141318;
-    --surface: #211f28;
-    --surface-2: #2d2a35;
-    --separator: #3b3844;
-    --text: #f1eff6;
-    --text-2: #c1bdcc;
-    --text-3: #a39fb0;
-    --accent: #b69cff;
-    --on-accent: #1b1a20;
-    --accent-soft: #2e2547;
-    --success: #5ccf7f;
-    --warning: #e8b54a;
-    --critical: #ff8a80;
-    --on-critical: #1b1a20;
-    --critical-soft: #3e1f22;
-    --focus: #6aa8ff;
-    --shadow: none;
-  }
+:root[data-appearance="light"] { color-scheme: light; }
+:root[data-appearance="dark"] { color-scheme: dark; }
+
+:root[data-theme="cheddar"] {
+  --bg: light-dark(#f7f5f0, #17150f);
+  --surface: light-dark(#ffffff, #24211a);
+  --surface-2: light-dark(#efece4, #322e25);
+  --separator: light-dark(#dcd7cb, #3e392e);
+  --text: light-dark(#1d1b16, #f3efe6);
+  --text-2: light-dark(#5c574b, #c2bcae);
+  --text-3: light-dark(#6f695c, #a59f91);
+  --accent: light-dark(#9a5300, #f2a93b);
+  --on-accent: light-dark(#ffffff, #1d1b16);
+  --accent-soft: light-dark(#fbecd6, #3b2c14);
+  --mark-tile: #9a5300;
+  --on-critical: light-dark(#ffffff, #1d1b16);
+  --critical-soft: light-dark(#fbe3e1, #3e1f1c);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -99,6 +106,14 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   font-size: 0.8125rem; font-weight: 400; text-transform: uppercase;
   letter-spacing: 0.02em; color: var(--text-2);
 }
+/* A segmented control: buttons in a group, the chosen one aria-pressed. */
+.segmented { display: inline-flex; background: var(--surface-2); border-radius: var(--radius-sm); padding: 2px; }
+.seg {
+  min-height: 2.25rem; padding: 0.25rem 0.875rem; border: 0; border-radius: 6px;
+  font: inherit; font-size: 0.9375rem; background: none; color: var(--text); cursor: pointer;
+}
+.seg[aria-pressed="true"] { background: var(--surface); font-weight: 600; box-shadow: var(--shadow); }
+
 .group-footer { margin: 0.5rem 1rem 0; font-size: 0.8125rem; color: var(--text-2); }
 .card {
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
