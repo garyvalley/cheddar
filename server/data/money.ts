@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import type { RecordModel } from 'pocketbase'
 import type { Account, Import, NewAccount, Transaction } from '~~/shared/accounts'
-import { summarize, type Category, type SpendingSummary } from '~~/shared/categories'
+import { localToday, summarize, type Category, type SpendingSummary } from '~~/shared/categories'
+import { GROWTH_PERIODS, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
 
@@ -19,6 +20,9 @@ const toAccount = (r: RecordModel): Account => ({
   last4: r.last4 ?? '',
   currency: r.currency || 'USD',
   source: r.source ?? '',
+  balance_cents: r.balance_date ? (r.balance_cents ?? 0) : null,
+  balance_date: r.balance_date ?? '',
+  linked: !!r.link,
 })
 
 const toTransaction = (r: RecordModel): Transaction => ({
@@ -57,6 +61,14 @@ export async function getAccount(s: Session, id: string): Promise<Account> {
 
 export async function createAccount(s: Session, a: NewAccount): Promise<Account> {
   return toAccount(await s.collection('accounts').create({ ...a, owner: callerId(s), currency: 'USD', source: 'manual' }))
+}
+
+/**
+ * Sets the balance of an account no bank link keeps up to date, as of today;
+ * pb_hooks/balances.pb.js adds it to the account's history.
+ */
+export async function setBalance(s: Session, id: string, cents: number, today: string): Promise<Account> {
+  return toAccount(await s.collection('accounts').update(id, { balance_cents: cents, balance_date: today }))
 }
 
 /** Deletes the account with every transaction and import in it. */
@@ -214,4 +226,41 @@ export async function renameCategory(s: Session, id: string, name: string): Prom
 /** Deletes one of the person's own categories; its transactions are sorted again on their own. */
 export async function removeCategory(s: Session, id: string): Promise<{ resorted: number }> {
   return await s.send(`/api/categories/${encodeURIComponent(id)}/remove`, { method: 'POST' })
+}
+
+/**
+ * Overview's numbers (shared/overview.ts): net worth and its change since a
+ * month ago, the last 12 months' income and spending, and the investment
+ * accounts' growth over each period.
+ */
+export async function overview(s: Session, today = localToday()): Promise<Overview> {
+  const months = lastMonths(today, 12)
+  const [accounts, rows, history, list] = await Promise.all([
+    listAccounts(s),
+    s.collection('transactions').getFullList({
+      fields: 'account,posted,amount_cents,category',
+      filter: s.filter('posted >= {:from} && posted <= {:to}', { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
+    }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
+    s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
+    listCategories(s),
+  ])
+  const invested = accounts.filter(a => isInvestment(a.kind) && a.balance_cents !== null)
+  const ids = new Set(invested.map(a => a.id))
+  // Transfers into the investment accounts aren't growth. Older ones than the
+  // year above only matter to "All", so they're read only when there's history that old.
+  const oldest = history.reduce((d, p) => (ids.has(p.account) && p.date < d ? p.date : d), `${months[0]}-01`)
+  const older = oldest < `${months[0]}-01` && ids.size
+    ? await s.collection('transactions').getFullList({
+      fields: 'account,posted,amount_cents,category',
+      filter: s.filter('posted >= {:from} && posted < {:to} && category = \'transfer\'', { from: oldest, to: `${months[0]}-01` }),
+    }) as unknown as typeof rows
+    : []
+  const transfers = [...older, ...rows].filter(r => ids.has(r.account) && r.category === 'transfer')
+  return {
+    net_worth: netWorth(accounts),
+    change: netWorthChange(accounts, history, growthStart('1m', today)),
+    months: monthly(rows, months, list),
+    has_investments: invested.length > 0,
+    growth: GROWTH_PERIODS.map(p => growth(accounts, history, transfers, p.id, today)),
+  }
 }

@@ -147,6 +147,18 @@ try {
   await page.getByRole('heading', { name: 'Categories' }).waitFor()
   await page.getByRole('link', { name: /Dining and drinks/ }).waitFor()
   assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
+
+  // Net worth: a balance entered on Accounts, added up on Overview beside the month's income and spending.
+  await page.goto(`${APP}/accounts`)
+  await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).click()
+  await page.getByLabel('Balance of Everyday checking').fill('2,413.40')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).filter({ hasText: '$2,413.40' }).waitFor()
+  await page.goto(`${APP}/`)
+  assert.equal(await page.locator('[data-test="net-worth"]').textContent(), '$2,413.40')
+  await page.locator('.figures').filter({ hasText: '$2,500.00' }).filter({ hasText: '$86.60' }).waitFor()
+  await page.getByText('Add a brokerage or retirement account').waitFor()
+
   await page.goto(`${APP}/accounts`)
   await page.getByRole('link', { name: 'Import', exact: true }).click()
   await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()

@@ -23,6 +23,12 @@ export interface Account {
   last4: string
   currency: string
   source: 'manual' | 'import' | 'sync' | ''
+  /** Signed: what a card or loan owes is negative. Null until it has a balance. */
+  balance_cents: number | null
+  /** The day the balance is from. */
+  balance_date: string
+  /** A bank link keeps it up to date, balance and all. */
+  linked: boolean
 }
 
 export interface NewAccount {
@@ -80,4 +86,19 @@ export const isLiability = (kind: string) => kind === 'credit_card' || kind === 
 export function formatCents(cents: number, currency = 'USD'): string {
   const text = new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Math.abs(cents) / 100)
   return cents < 0 ? `\u2212${text}` : text
+}
+
+/**
+ * A balance a person types ("1,234.56", "-$80", "$12"), as signed cents. For
+ * a card or a loan, what's owed is stored negative whichever way it's typed.
+ */
+export function parseBalance(input: unknown, kind: string): { ok: number } | { problem: string } {
+  const text = typeof input === 'number' ? String(input) : typeof input === 'string' ? input.trim() : ''
+  const m = /^([-\u2212]?)\s*\$?\s*([-\u2212]?)(\d{1,3}(?:,\d{3})+|\d+)?(?:\.(\d{1,2}))?$/.exec(text)
+  if (!text || !m || (m[3] === undefined && m[4] === undefined) || (m[1] && m[2])) return { problem: 'Enter the balance as an amount, like 1,234.56.' }
+  const cents = Number((m[3] ?? '0').replace(/,/g, '')) * 100 + Number((m[4] ?? '').padEnd(2, '0'))
+  if (!Number.isSafeInteger(cents) || cents > 100_000_000_000_00) return { problem: 'That balance is larger than Cheddar can hold.' }
+  const negative = !!(m[1] || m[2])
+  if (isLiability(kind)) return { ok: cents === 0 ? 0 : -cents }
+  return { ok: negative && cents ? -cents : cents }
 }
