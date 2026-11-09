@@ -49,6 +49,7 @@ describe('checkProfile', () => {
   test('takes a known color theme and light, dark or automatic, and nothing else', () => {
     assert.deepEqual(checkProfile({ theme: 'cheddar', appearance: 'dark' }), { ok: { theme: 'cheddar', appearance: 'dark' } })
     assert.deepEqual(checkProfile({ theme: 'violet', appearance: 'system' }), { ok: { theme: 'violet', appearance: 'system' } })
+    for (const theme of ['blue', 'rose', 'mint']) assert.deepEqual(checkProfile({ theme }), { ok: { theme } })
     for (const bad of [{ theme: '' }, { theme: 'orange' }, { theme: null }, { appearance: '' }, { appearance: 'auto' }, { appearance: 1 }]) {
       assert.ok('problem' in checkProfile(bad), JSON.stringify(bad))
     }

@@ -22,7 +22,7 @@ async function choose(change: Partial<Pick<Profile, 'theme' | 'appearance'>>) {
     <div class="card">
       <div class="row">
         <span id="theme-label" class="row-label">Color</span>
-        <div class="segmented" role="group" aria-labelledby="theme-label">
+        <div class="segmented themes" role="group" aria-labelledby="theme-label">
           <button
             v-for="t in THEMES" :key="t.value" type="button" class="seg"
             :aria-pressed="me?.theme === t.value" @click="choose({ theme: t.value })"
@@ -50,7 +50,12 @@ async function choose(change: Partial<Pick<Profile, 'theme' | 'appearance'>>) {
 
 <style scoped>
 .row { flex-wrap: wrap; gap: 0.5rem; }
+.themes { flex-wrap: wrap; max-width: 100%; }
+.themes .seg { white-space: nowrap; padding-inline: 0.625rem; }
 .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; margin-right: 0.375rem; border-radius: 50%; vertical-align: -0.0625rem; }
 .swatch-violet { background: var(--swatch-violet); }
 .swatch-cheddar { background: var(--swatch-cheddar); }
+.swatch-blue { background: var(--swatch-blue); }
+.swatch-rose { background: var(--swatch-rose); }
+.swatch-mint { background: var(--swatch-mint); }
 </style>
