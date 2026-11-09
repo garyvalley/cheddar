@@ -8,16 +8,16 @@
 :root {
   color-scheme: light dark;
 
-  --bg: #f7f5f0;            /* page ground (grouped background) */
+  --bg: #f6f5f9;            /* page ground (grouped background) */
   --surface: #ffffff;       /* cards and grouped rows */
-  --surface-2: #efece4;     /* fills: inputs, pressed rows */
-  --separator: #dcd7cb;
-  --text: #1d1b16;
-  --text-2: #5c574b;        /* secondary labels */
-  --text-3: #6f695c;        /* tertiary: hints, placeholders */
-  --accent: #9a5300;        /* cheddar rind: links, tint, primary buttons */
+  --surface-2: #ecebf1;     /* fills: inputs, pressed rows */
+  --separator: #d9d7e1;
+  --text: #1b1a20;
+  --text-2: #58546a;        /* secondary labels */
+  --text-3: #6b6779;        /* tertiary: hints, placeholders */
+  --accent: #6b3fc4;        /* violet: links, tint, primary buttons */
   --on-accent: #ffffff;
-  --accent-soft: #fbecd6;
+  --accent-soft: #efe8fb;
   --success: #1e7a3c;
   --warning: #8a5a00;
   --critical: #b3261e;
@@ -36,21 +36,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17150f;
-    --surface: #24211a;
-    --surface-2: #322e25;
-    --separator: #3e392e;
-    --text: #f3efe6;
-    --text-2: #c2bcae;
-    --text-3: #a59f91;
-    --accent: #f2a93b;
-    --on-accent: #1d1b16;
-    --accent-soft: #3b2c14;
+    --bg: #141318;
+    --surface: #211f28;
+    --surface-2: #2d2a35;
+    --separator: #3b3844;
+    --text: #f1eff6;
+    --text-2: #c1bdcc;
+    --text-3: #a39fb0;
+    --accent: #b69cff;
+    --on-accent: #1b1a20;
+    --accent-soft: #2e2547;
     --success: #5ccf7f;
     --warning: #e8b54a;
     --critical: #ff8a80;
-    --on-critical: #1d1b16;
-    --critical-soft: #3e1f1c;
+    --on-critical: #1b1a20;
+    --critical-soft: #3e1f22;
     --focus: #6aa8ff;
     --shadow: none;
   }
