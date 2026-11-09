@@ -72,6 +72,19 @@ describe('the profile', () => {
     assert.equal((await c.call('PATCH', '/api/profile', { state: '' })).json.me.state, '')
   })
 
+  test('saves the color theme and light or dark, and starts on the defaults', async () => {
+    const { c } = await ready()
+    const me = (await c.call('GET', '/api/auth/me')).json.me
+    assert.deepEqual([me.theme, me.appearance], ['violet', 'system'])
+    const r = await c.call('PATCH', '/api/profile', { theme: 'cheddar', appearance: 'dark' })
+    assert.equal(r.status, 200)
+    assert.deepEqual([r.json.me.theme, r.json.me.appearance], ['cheddar', 'dark'])
+    const again = (await c.call('GET', '/api/auth/me')).json.me
+    assert.deepEqual([again.theme, again.appearance], ['cheddar', 'dark'])
+    assert.equal((await c.call('PATCH', '/api/profile', { theme: 'neon' })).status, 400)
+    assert.equal((await c.call('PATCH', '/api/profile', { appearance: '' })).status, 400)
+  })
+
   test('refuses a place that is not a state, and a made-up filing status', async () => {
     const { c } = await ready()
     assert.equal((await c.call('PATCH', '/api/profile', { state: 'ZZ' })).status, 400)

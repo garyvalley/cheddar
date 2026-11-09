@@ -23,8 +23,8 @@ export default defineNuxtConfig({
         { rel: 'apple-touch-icon', href: '/icons/apple-touch-icon.png' },
       ],
       meta: [
-        { name: 'theme-color', content: '#F7F5F0', media: '(prefers-color-scheme: light)' },
-        { name: 'theme-color', content: '#17150F', media: '(prefers-color-scheme: dark)' },
+        { name: 'theme-color', content: '#F6F5F9', media: '(prefers-color-scheme: light)' },
+        { name: 'theme-color', content: '#141318', media: '(prefers-color-scheme: dark)' },
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-title', content: 'Cheddar' },

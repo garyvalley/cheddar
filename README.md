@@ -81,6 +81,9 @@ tunnel, repository secrets) and day-to-day operations.
   - **Choose your state and filing status** in Settings. Every state and DC
     is available, and tax features use your choice.
   - **Connect your accounts** on Accounts (below).
+- **Pick how it looks** (Settings → Appearance): violet or the original
+  Cheddar orange, and light, dark or automatic. It's saved to your account,
+  so every device you sign in on matches.
 - **Install it on a phone:**
   - In Safari, tap Share, then Add to Home Screen.
   - In Chrome on Android, tap ⋮, then Install app.
@@ -210,7 +213,8 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - grouped inset lists
   - a sidebar on desktop and a tab bar on phones
   - 44pt tap targets
-  - light and dark mode from one set of colour tokens (`app/assets/css/main.css`)
+  - light and dark mode from one set of colour tokens (`app/assets/css/main.css`),
+    each a `light-dark()` pair, with a second set for the Cheddar theme
   - a spinner on every button while its request runs
 
 ## CI
