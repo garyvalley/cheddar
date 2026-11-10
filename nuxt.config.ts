@@ -23,8 +23,8 @@ export default defineNuxtConfig({
         { rel: 'apple-touch-icon', href: '/icons/apple-touch-icon.png' },
       ],
       meta: [
-        { name: 'theme-color', content: '#F7F5F0', media: '(prefers-color-scheme: light)' },
-        { name: 'theme-color', content: '#17150F', media: '(prefers-color-scheme: dark)' },
+        { name: 'theme-color', content: '#F6F5F9', media: '(prefers-color-scheme: light)' },
+        { name: 'theme-color', content: '#141318', media: '(prefers-color-scheme: dark)' },
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-title', content: 'Cheddar' },
@@ -53,13 +53,16 @@ export default defineNuxtConfig({
       contentSecurityPolicy: {
         'default-src': ['\'self\''],
         'manifest-src': ['\'self\''],
+        // Plaid Link's script must come from Plaid itself (BankLinks.vue loads it
+        // when someone links a bank), and it opens the bank sign-in in a frame.
         'script-src': dev
-          ? ['\'self\'', '\'nonce-{{nonce}}\'', '\'unsafe-inline\'', '\'unsafe-eval\'']
-          : ['\'self\'', '\'nonce-{{nonce}}\''],
+          ? ['\'self\'', '\'nonce-{{nonce}}\'', '\'unsafe-inline\'', '\'unsafe-eval\'', 'https://cdn.plaid.com']
+          : ['\'self\'', '\'nonce-{{nonce}}\'', 'https://cdn.plaid.com'],
+        'frame-src': ['https://cdn.plaid.com'],
         // Vue writes component styles inline; a style can't run code.
         'style-src': ['\'self\'', '\'unsafe-inline\''],
         'img-src': ['\'self\'', 'data:', 'blob:'],
-        'connect-src': ['\'self\''],
+        'connect-src': ['\'self\'', 'https://production.plaid.com', 'https://sandbox.plaid.com'],
         'font-src': ['\'self\''],
         'object-src': ['\'none\''],
         'frame-ancestors': ['\'none\''],
@@ -83,5 +86,11 @@ export default defineNuxtConfig({
     corsHandler: false,
     requestSizeLimiter: { maxRequestSizeInBytes: 1_000_000, maxUploadFileRequestInBytes: 10_000_000 },
     removeLoggers: false,
+  },
+
+  routeRules: {
+    // A statement file of up to 4 MB, sent as JSON text (shared/statements.ts);
+    // nginx allows the same for this route alone.
+    '/api/imports': { security: { requestSizeLimiter: { maxRequestSizeInBytes: 8_000_000 } } },
   },
 })

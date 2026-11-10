@@ -2,7 +2,7 @@
  * Cheddar's mark, a wedge of cheese, on a 32-unit grid: drawn by AppMark in
  * the app and by scripts/make-icons.mjs for the favicon and Home Screen icons.
  */
-export const MARK_COLOURS = { tile: '#9a5300', cheese: '#f6c04f', rind: '#e39a2a' }
+export const MARK_COLOURS = { tile: '#6b3fc4', cheese: '#f6c04f', rind: '#e39a2a' }
 
 /** The wedge: its faces as paths and its holes as circles, each with its colour's name. */
 export const WEDGE = {

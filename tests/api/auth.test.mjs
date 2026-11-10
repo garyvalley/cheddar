@@ -6,91 +6,9 @@
 // (APP_URL) trusting any X-Forwarded-For, so each client signs in from a
 // made-up address of its own and only the rate-limit tests reach a limit.
 
-import { after, describe, test } from 'node:test'
+import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
-import { loadHookModule } from '../load-hook-module.mjs'
-
-const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
-const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
-const totp = loadHookModule('pb_hooks/lib/totp.js')
-const PASSWORD = 'correct horse battery'
-const made = []
-
-const ip = () => `10.${[1, 2, 3].map(() => randomBytes(1)[0]).join('.')}`
-const email = () => `t-${randomBytes(6).toString('hex')}@cheddar.test`
-
-/** A browser: keeps the session cookie and sends this site's Origin, from one address. */
-function client(from = ip()) {
-  let cookie = ''
-  return {
-    get cookie() { return cookie },
-    set cookie(v) { cookie = v },
-    async call(method, path, body, headers = {}) {
-      const r = await fetch(`${APP}${path}`, {
-        method,
-        headers: {
-          'origin': APP, 'x-forwarded-for': from,
-          ...(body ? { 'content-type': 'application/json' } : {}),
-          ...(cookie ? { cookie } : {}),
-          ...headers,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        redirect: 'manual',
-      })
-      const set = r.headers.getSetCookie().find(c => c.startsWith('pb_token='))
-      if (set) cookie = /pb_token=;|Max-Age=0/i.test(set) ? '' : set.split(';')[0]
-      const text = await r.text()
-      let json
-      try { json = text ? JSON.parse(text) : null } catch { json = text }
-      return { status: r.status, json, headers: r.headers }
-    },
-  }
-}
-
-async function superuser() {
-  const r = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ identity: process.env.PB_SU_EMAIL, password: process.env.PB_SU_PASS }),
-  })
-  assert.equal(r.status, 200, 'superuser sign-in (PB_SU_EMAIL / PB_SU_PASS)')
-  return (await r.json()).token
-}
-
-/** A new account, signed in with its password only: two-step sign-in is not on yet. */
-async function signedIn() {
-  const c = client()
-  const address = email()
-  assert.equal((await c.call('POST', '/api/auth/register', { email: address, password: PASSWORD, name: 'Test' })).status, 201)
-  made.push(address)
-  const r = await c.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
-  assert.equal(r.status, 200)
-  return { c, address, id: r.json.me.id }
-}
-
-/** Two-step sign-in on for `c`; returns the secret and the recovery codes. */
-async function withTwoStep(c) {
-  const { json: { secret } } = await c.call('POST', '/api/auth/two-step/app', { password: PASSWORD })
-  const r = await c.call('POST', '/api/auth/two-step/app/confirm', { code: totp.codeAt(secret, totp.stepAt(Date.now())) })
-  assert.equal(r.status, 200)
-  return { secret, codes: r.json.recovery_codes }
-}
-
-/** A new account with two-step sign-in on, as every account that uses the app has. */
-async function ready() {
-  const account = await signedIn()
-  return { ...account, ...(await withTwoStep(account.c)) }
-}
-
-after(async () => {
-  const token = await superuser()
-  for (const address of made) {
-    const r = await fetch(`${PB}/api/collections/users/records?filter=${encodeURIComponent(`email='${address}'`)}`, { headers: { authorization: token } })
-    for (const u of (await r.json()).items) {
-      await fetch(`${PB}/api/collections/users/records/${u.id}`, { method: 'DELETE', headers: { authorization: token } })
-    }
-  }
-})
+import { APP, PB, PASSWORD, client, email, made, ready, signedIn, totp, withTwoStep } from './helpers.mjs'
 
 describe('signing up', () => {
   test('refuses a short or common password, and a taken address', async () => {
@@ -152,6 +70,19 @@ describe('the profile', () => {
     // Every state and DC is accepted.
     assert.equal((await c.call('PATCH', '/api/profile', { state: 'DC' })).json.me.state, 'DC')
     assert.equal((await c.call('PATCH', '/api/profile', { state: '' })).json.me.state, '')
+  })
+
+  test('saves the color theme and light or dark, and starts on the defaults', async () => {
+    const { c } = await ready()
+    const me = (await c.call('GET', '/api/auth/me')).json.me
+    assert.deepEqual([me.theme, me.appearance], ['violet', 'system'])
+    const r = await c.call('PATCH', '/api/profile', { theme: 'cheddar', appearance: 'dark' })
+    assert.equal(r.status, 200)
+    assert.deepEqual([r.json.me.theme, r.json.me.appearance], ['cheddar', 'dark'])
+    const again = (await c.call('GET', '/api/auth/me')).json.me
+    assert.deepEqual([again.theme, again.appearance], ['cheddar', 'dark'])
+    assert.equal((await c.call('PATCH', '/api/profile', { theme: 'neon' })).status, 400)
+    assert.equal((await c.call('PATCH', '/api/profile', { appearance: '' })).status, 400)
   })
 
   test('refuses a place that is not a state, and a made-up filing status', async () => {

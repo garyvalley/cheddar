@@ -36,6 +36,11 @@ map $http_cf_ipcountry $blocked_country {
     BY 1;
 }
 
+# The access log, with the country Cloudflare reported ("-" when none came):
+# what shows the country block is fed, and what it refuses.
+log_format cheddar '$remote_addr [$time_local] "$request" $status $body_bytes_sent '
+                   'country=$http_cf_ipcountry "$http_user_agent"';
+
 # Only POSTs count: reading two-step sign-in's status as a page loads
 # (GET /api/auth/two-step) guesses nothing. An empty key is never limited.
 map $request_method $limit_key {
@@ -74,6 +79,10 @@ server {
 
     set $nuxt_upstream ${NUXT_UPSTREAM};
 
+    # In the server block, so it replaces the image's own log rather than
+    # adding a second line per request.
+    access_log /dev/stdout cheddar;
+
     if ($blocked_country) {
         return 403 "Cheddar isn't available in your country.\n";
     }
@@ -83,7 +92,7 @@ server {
     # reads this.
     add_header Cloudflare-CDN-Cache-Control "no-store" always;
 
-    # Nothing takes uploads yet; statement imports will raise this.
+    # Only statement imports (below) take more.
     client_max_body_size 1M;
 
     # While Nuxt or PocketBase restarts, a deploy, an upstream 502/503/504
@@ -130,6 +139,13 @@ server {
 
     location = /api/auth/register {
         limit_req zone=signup burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    # A statement file of up to 4 MB, sent as JSON text: escaping quotes and
+    # line breaks makes it larger (shared/statements.ts MAX_FILE_BYTES).
+    location = /api/imports {
+        client_max_body_size 8M;
         include snippets/proxy-to-nuxt.conf;
     }
 
