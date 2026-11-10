@@ -54,6 +54,13 @@ if (!env.PB_SU_EMAIL || !env.PB_SU_PASS) {
   env = readEnv()
   console.log('  added a superuser login to .env (PB_SU_EMAIL, PB_SU_PASS)')
 }
+// The key bank links' access is encrypted with. Changing it later means
+// linking each bank again, so it's made once and kept.
+if (!env.BANK_LINK_KEY) {
+  setEnv('BANK_LINK_KEY', randomBytes(16).toString('hex'))
+  env = readEnv()
+  console.log('  added a bank-link key to .env (BANK_LINK_KEY)')
+}
 const PB = `http://127.0.0.1:${env.PB_HOST_PORT || 8095}`
 const APP = `http://localhost:${env.NUXT_DEV_PORT || 3005}`
 

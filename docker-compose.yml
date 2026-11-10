@@ -18,6 +18,13 @@ services:
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
       MAILJET_SENDER_EMAIL: ${MAILJET_SENDER_EMAIL:-}
       MAILJET_SENDER_NAME: ${MAILJET_SENDER_NAME:-Cheddar}
+      # Bank linking through Plaid (pb_hooks/bank_links.pb.js): off without
+      # the key and Plaid's keys. `pnpm run setup` makes the key.
+      BANK_LINK_KEY: ${BANK_LINK_KEY:-}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      PLAID_API_URL: ${PLAID_API_URL:-}
       # The superuser scripts/migrate.mjs signs in with; PocketBase makes it
       # on start (scripts/pocketbase-start.sh).
       PB_SU_EMAIL: ${PB_SU_EMAIL:-}

@@ -6,7 +6,9 @@ nothing to install from an app store.
 
 **Status:** the foundation is in place: accounts with required two-step
 sign-in, your profile (state and filing status), the app shell and the deploy
-pipeline.
+pipeline. You can add your bank and card accounts and import their
+statement files (CSV, OFX or QFX) as transactions, or link them by
+signing in to your bank, so transactions arrive on their own.
 The finance features arrive in this order:
 
 1. **Accounts and net worth.** Checking, savings, credit, brokerage,
@@ -24,10 +26,12 @@ The finance features arrive in this order:
 | ![Settings](docs/screenshots/settings.png) | ![Sign in](docs/screenshots/sign-in.png) |
 | ![Two-step setup, required for every account](docs/screenshots/setup.png) | |
 
-Cheddar costs nothing to run. Your data comes from files you export from
-your bank, not from a paid aggregator. It runs on a home Raspberry Pi
-cluster, and the only third-party services it uses are Cloudflare and Mailjet,
-both on their free plans.
+Cheddar costs next to nothing to run. Your data comes from files you export
+from your bank, or from banks you link through Plaid, which is free in its
+sandbox and for the first few real links, then billed per linked bank to
+whoever runs Cheddar (not to the people who use it). It runs on a home
+Raspberry Pi cluster, and the only other third-party services it uses are
+Cloudflare and Mailjet, both on their free plans.
 
 ## Installation and deployment
 
@@ -76,9 +80,61 @@ tunnel, repository secrets) and day-to-day operations.
   - **Confirm your email.** The link comes by email.
   - **Choose your state and filing status** in Settings. Every state and DC
     is available, and tax features use your choice.
+  - **Connect your accounts** on Accounts (below).
+- **Pick how it looks** (Settings → Appearance): violet, blue, rose, mint or the original
+  Cheddar orange, and light, dark or automatic. It's saved to your account,
+  so every device you sign in on matches.
 - **Install it on a phone:**
   - In Safari, tap Share, then Add to Home Screen.
   - In Chrome on Android, tap ⋮, then Install app.
+- **Set up your accounts** (Accounts). It's the only place accounts are
+  added; Overview, Spending, Projections and Taxes have no setup of their
+  own, and are worked out from what these accounts hold.
+- **Link a bank or card** (Accounts → Linked banks and cards), so balances
+  and transactions arrive on their own:
+  - Tap **Link a bank or card**, pick your bank, and sign in to it in the
+    window that opens (Plaid Link). Your password goes to your bank, never
+    to Cheddar; Cheddar keeps only a read-only access token, encrypted.
+    The first sync brings 90 days of transactions.
+  - Each link then syncs once a day on its own, or when you tap **Update
+    now**. Pending charges are replaced once they post.
+  - When a bank asks you to sign in again, the link says so: tap **Sign in
+    again**.
+  - Unlinking deletes the access token at Plaid and in Cheddar, and keeps
+    the accounts and transactions.
+  - With `PLAID_ENV=sandbox`, try it with Plaid's test bank: any bank, user
+    `user_good`, password `pass_good`.
+- **Or add an account yourself** (Accounts), for one you'd rather not link:
+  a name, the kind (checking, savings, credit card, loan…), and optionally
+  the bank and the last four digits. Then import its statements.
+- **Import a statement** (Import, on Accounts):
+  - On your bank's website, download your transactions as CSV, or as
+    Quicken (QFX) or Money (OFX).
+  - Choose the account and the file. Cheddar shows what it read before
+    saving anything. For a CSV you can change which column is the date,
+    description and amount (or separate money out and money in columns),
+    whether dates are day first, and whether the file shows money out as
+    positive (many card exports do; Cheddar guesses this for cards).
+  - Transactions already in the account are skipped, so importing the same
+    file twice, or overlapping date ranges, is safe. Two identical rows on the
+    same day in one file are both kept.
+  - **Undo** next to an import removes the transactions it added.
+- **See where your money goes** (Spending): what each category came to in a
+  month or a year, for one account or all, against the period before. Tap a
+  category for its transactions. Spending only shows what your accounts
+  hold: to add more, go to Accounts.
+  - Every transaction is sorted into a category on its own: by your rule for
+    its merchant if you have one, else by the bank's category (linked
+    accounts), else by what its description says ("WHOLE FOODS" is
+    Groceries). Income and transfers, such as a card payment, aren't counted
+    as spending.
+  - **In the wrong place?** Open the category, or All transactions, and pick
+    another category on the transaction. The merchant's other transactions
+    move with it, unless you moved one by hand, and its new ones follow.
+  - **Your own categories.** Pick "New category…" on any transaction to make
+    one and move it there; Cheddar remembers it for that merchant like any
+    other. Rename or delete it on its own page; deleting one sorts its
+    transactions again on their own.
 - **Sign out everywhere** (Settings) ends every session on every device.
 - **Delete account** (Settings) removes your account and everything in it.
   It asks for your password.
@@ -121,6 +177,20 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - Mutating requests must come from this site (an Origin check).
   - The CSP is strict and nonce-based (`nuxt.config.ts`).
   - Frames are refused, and HSTS is set.
+- **Bank links** (`pb_hooks/bank_links.pb.js`, `pb_hooks/lib/plaid.js`):
+  - The person signs in to their bank in Plaid Link, which hands the page a
+    short-lived public token. PocketBase swaps it for an access token with
+    Plaid's secret (`PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`), so the
+    bank password never reaches Cheddar, and the token is useless without
+    that secret. It reads balances and transactions; it can't move money.
+  - The access token is stored encrypted with `BANK_LINK_KEY` (AES-256),
+    in a collection no record API rule opens. Only the hooks read it, and it
+    never reaches Nuxt or the browser. Without the keys, linking is off.
+  - Syncs use `/transactions/sync` from a saved cursor, and write through
+    the hooks, as the link's owner, into the same `accounts` and
+    `transactions` file imports use; `external_id` (`plaid:…`) makes a
+    re-sync update rather than duplicate.
+  - The CSP allows Plaid Link's script and frame (`cdn.plaid.com`).
 - **Schema:** `migrations/` holds the schema, which `scripts/migrate.mjs`
   applies as an init container before each new version serves
   ([migrations/README.md](migrations/README.md)).
@@ -143,7 +213,8 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - grouped inset lists
   - a sidebar on desktop and a tab bar on phones
   - 44pt tap targets
-  - light and dark mode from one set of colour tokens (`app/assets/css/main.css`)
+  - light and dark mode from one set of colour tokens (`app/assets/css/main.css`),
+    each a `light-dark()` pair, with an override set per colour theme
   - a spinner on every button while its request runs
 
 ## CI

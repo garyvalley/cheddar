@@ -1,8 +1,9 @@
 // Browser smoke test: sign up, be held at two-step setup until it's on, set
-// the profile, sign out and back in with a code, on a desktop and a
-// phone-sized screen, with no console errors. Run it through nginx in front of
-// the production build, where the strict CSP applies: an inline script the
-// nonce doesn't cover would break hydration here first (tests/README.md).
+// the profile, import a statement and undo it, sign out and back in with a
+// code, on a desktop and a phone-sized screen, with no console errors. Run it
+// through nginx in front of the production build, where the strict CSP
+// applies: an inline script the nonce doesn't cover would break hydration
+// here first (tests/README.md).
 //
 //   APP_URL=http://localhost:8085 node tests/ui.mjs
 //
@@ -18,6 +19,10 @@ const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
 const totp = loadHookModule('pb_hooks/lib/totp.js')
 const email = `ui-${randomBytes(6).toString('hex')}@cheddar.test`
 const password = 'correct horse battery'
+// The statement is this month's, so Spending shows it without paging back.
+const now = new Date()
+const yyyy = String(now.getFullYear())
+const mm = String(now.getMonth() + 1).padStart(2, '0')
 
 const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' })
 const errors = []
@@ -26,8 +31,11 @@ const watch = (page) => {
   page.on('pageerror', e => errors.push(e.message))
 }
 
+// The page in use, for a screenshot if a step fails (ui-failure.png, ignored by git).
+let current
 try {
   const page = await browser.newPage()
+  current = page
   watch(page)
 
   // A signed-out visitor is sent to sign in.
@@ -59,11 +67,12 @@ try {
   assert.equal(await page.locator('.codes li').count(), 10)
   await page.getByRole('button', { name: 'I\'ve saved them' }).click()
   await page.getByRole('heading', { name: 'Hi, Ui' }).waitFor()
-  assert.equal(await page.getByText('Set up · 2 left').count(), 1)
+  assert.equal(await page.getByText('Set up · 3 left').count(), 1)
 
   // Profile: every state is offered.
   await page.goto(`${APP}/settings`)
   await page.getByText('10 recovery codes left.').waitFor()
+  assert.equal(await page.getByRole('heading', { name: 'Linked banks and cards' }).count(), 0)
   assert.equal(await page.getByRole('button', { name: 'Turn off' }).count(), 0)
   assert.equal(await page.getByLabel('State you file taxes in').locator('option').count(), 52)
   await page.getByLabel('State you file taxes in').selectOption('CA')
@@ -71,9 +80,109 @@ try {
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await page.getByText('Saved').waitFor()
 
+  // Requests that succeed with 204 No Content show their success. (A 204
+  // once read as a failure, so the confirm button seemed to do nothing.)
+  await page.getByRole('button', { name: 'Send confirmation email' }).click()
+  await page.getByText('Sent. Check your inbox.').waitFor()
+  // The emailed links carry tokens only mail delivers, so the server's
+  // answer is stood in for: exactly the 204 the pages must read as success.
+  await page.route('**/api/auth/confirm-verification', route => route.fulfill({ status: 204 }))
+  await page.goto(`${APP}/verify-email?token=from-the-email`)
+  await page.getByRole('button', { name: 'Confirm email' }).click()
+  await page.getByText('Your email is confirmed.').waitFor()
+  await page.unroute('**/api/auth/confirm-verification')
+
+  // Accounts are set up in one place, Accounts, which the Overview's checklist leads to.
+  await page.goto(`${APP}/`)
+  await page.getByRole('link', { name: /Connect your accounts/ }).click()
+  await page.getByRole('heading', { name: 'Accounts', exact: true }).waitFor()
+  await page.getByRole('heading', { name: 'Linked banks and cards' }).waitFor()
+  await page.getByRole('button', { name: 'Link a bank or card' }).waitFor()
+
+  // Money: an account, a statement file previewed and imported, its
+  // transactions on Spending, and the import undone.
+  await page.getByRole('button', { name: 'Add an account…' }).click()
+  await page.getByLabel('Name').fill('Everyday checking')
+  await page.getByRole('button', { name: 'Add account' }).click()
+  await page.getByRole('link', { name: 'Import a statement into Everyday checking' }).click()
+  await page.getByRole('heading', { name: 'Import', exact: true }).waitFor()
+  await page.getByLabel('CSV, OFX or QFX file').setInputFiles({
+    name: 'november.csv', mimeType: 'text/csv',
+    buffer: Buffer.from(`Posting Date,Description,Amount\n${mm}/01/${yyyy},COFFEE,-4.50\n${mm}/02/${yyyy},"GROCERY, INC",-82.10\n${mm}/03/${yyyy},PAYCHECK,2500.00\nTotal,,\n`),
+  })
+  await page.getByText('1 line won\'t be imported').waitFor()
+  assert.equal(await page.locator('table.preview tbody tr').count(), 3)
+  assert.equal(await page.locator('table.preview tbody td').first().textContent(), `${yyyy}-${mm}-01`)
+  await page.getByRole('button', { name: 'Import 3 transactions' }).click()
+  await page.getByText('Imported 3 transactions into Everyday checking.').waitFor()
+  await page.getByRole('link', { name: 'See transactions' }).click()
+  await page.getByRole('heading', { name: 'Spending' }).waitFor()
+  // Sorted into categories on their own; one moved by hand takes its merchant's rule with it.
+  await page.getByText('$86.60').first().waitFor()
+  await page.getByRole('link', { name: /Groceries/ }).click()
+  await page.getByRole('heading', { name: 'Groceries' }).waitFor()
+  await page.getByText('GROCERY, INC').waitFor()
+  assert.equal(await page.getByText('\u2212$82.10').count(), 1)
+  await page.getByLabel('Category for GROCERY, INC').selectOption('shopping')
+  await page.getByRole('status').filter({ hasText: 'GROCERY, INC is now in Shopping.' }).waitFor()
+  await page.getByText('Nothing in Groceries').waitFor()
+  await page.getByRole('link', { name: 'All categories' }).click()
+  await page.getByRole('link', { name: /Shopping/ }).waitFor()
+  await page.getByRole('link', { name: /Income/ }).waitFor()
+  // A category of one's own, made from the picker on any transaction.
+  await page.getByRole('link', { name: /All transactions/ }).click()
+  await page.getByRole('heading', { name: 'All transactions' }).waitFor()
+  await page.getByLabel('Category for COFFEE').selectOption('__new')
+  await page.getByLabel('Name for the new category').fill('Coffee runs')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'COFFEE is now in Coffee runs.' }).waitFor()
+  await page.getByRole('link', { name: 'All categories' }).click()
+  await page.getByRole('link', { name: /Coffee runs/ }).click()
+  await page.getByRole('button', { name: 'Rename' }).click()
+  await page.getByLabel('New name').fill('Coffee')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('heading', { name: 'Coffee', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Delete…' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await page.getByRole('heading', { name: 'Categories' }).waitFor()
+  await page.getByRole('link', { name: /Dining and drinks/ }).waitFor()
+  assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
+
+  // Net worth: a balance entered on Accounts, added up on Overview beside the month's income and spending.
+  await page.goto(`${APP}/accounts`)
+  await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).click()
+  await page.getByLabel('Balance of Everyday checking').fill('2,413.40')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).filter({ hasText: '$2,413.40' }).waitFor()
+  await page.goto(`${APP}/`)
+  assert.equal(await page.locator('[data-test="net-worth"]').textContent(), '$2,413.40')
+  await page.locator('.figures').filter({ hasText: '$2,500.00' }).filter({ hasText: '$86.60' }).waitFor()
+  await page.getByText('Add a brokerage or retirement account').waitFor()
+
+  await page.goto(`${APP}/accounts`)
+  await page.getByRole('link', { name: 'Import', exact: true }).click()
+  await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()
+  await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
+
   // Out, and back in with a code.
+  await page.goto(`${APP}/`)
   await page.getByRole('button', { name: 'Sign out', exact: true }).first().click()
   await page.waitForURL(/\/login/)
+
+  await page.getByRole('link', { name: 'Forgot password?' }).click()
+  await page.getByRole('heading', { name: 'Reset your password' }).waitFor()
+  await page.getByLabel('Email').fill(email)
+  await page.getByRole('button', { name: 'Send link' }).click()
+  await page.getByText('an email with a reset link is on its way').waitFor()
+  await page.route('**/api/auth/confirm-password-reset', route => route.fulfill({ status: 204 }))
+  await page.goto(`${APP}/reset-password?token=from-the-email`)
+  await page.getByLabel('New password').fill('another long password')
+  await page.getByRole('button', { name: 'Save password' }).click()
+  await page.getByText('Your password is changed').waitFor()
+  await page.unroute('**/api/auth/confirm-password-reset')
+
+  await page.goto(`${APP}/login`)
+  await page.getByRole('heading', { name: 'Sign in' }).waitFor()
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
@@ -85,6 +194,7 @@ try {
   // On a phone: the tab bar, and Settings in the header.
   const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, storageState: await page.context().storageState() })
   const p = await phone.newPage()
+  current = p
   watch(p)
   await p.goto(`${APP}/`)
   await p.getByRole('link', { name: 'Spending' }).last().click()
@@ -92,8 +202,18 @@ try {
   await p.getByRole('link', { name: 'Settings' }).click()
   await p.getByRole('heading', { name: 'Settings' }).waitFor()
 
+  // Deleting the account ends on the sign-in page.
+  await p.getByRole('button', { name: 'Delete…' }).click()
+  await p.getByLabel('Enter your password to delete your account for good').fill(password)
+  await p.getByRole('button', { name: 'Delete my account' }).click()
+  await p.waitForURL(/\/login/)
+
   assert.deepEqual(errors, [], 'console errors')
   console.log('✔ ui smoke test passed')
+}
+catch (e) {
+  await current?.screenshot({ path: 'ui-failure.png' }).catch(() => {})
+  throw e
 }
 finally {
   await browser.close()

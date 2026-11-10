@@ -2,13 +2,12 @@
 definePageMeta({ layout: 'auth', guestOnly: true })
 useHead({ title: 'Reset password' })
 
-const { busy, error, run } = useAction()
+const { busy, error, succeed } = useAction()
 const email = ref('')
 const sent = ref(false)
 
 async function send() {
-  const ok = await run(() => $fetch('/api/auth/request-password-reset', { method: 'POST', body: { email: email.value } }))
-  if (ok !== undefined) sent.value = true
+  sent.value = await succeed(() => $fetch('/api/auth/request-password-reset', { method: 'POST', body: { email: email.value } }))
 }
 </script>
 

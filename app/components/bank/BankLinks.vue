@@ -1,0 +1,228 @@
+<script setup lang="ts">
+import { formatCents, type BankLink, type BankLinks, type LinkAnswer, type SyncResult } from '~~/shared/bank-links'
+
+// The Accounts page reads the same key, to tell linked accounts from the ones added by hand.
+const { data, refresh } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
+/** A link was added, synced or removed, so the accounts it brings in may have changed. */
+const emit = defineEmits<{ changed: [] }>()
+
+const add = useAction()
+const work = useAction()
+const busyId = ref('')
+const removingId = ref('')
+const notice = ref('')
+
+function said(r: SyncResult): string {
+  if (r.recent) return 'Already up to date: it synced a moment ago.'
+  if (!r.ok) return r.problem || 'The sync didn\'t work.'
+  if (!r.added && !r.updated && !r.removed) return 'Synced. Nothing new yet: a new link\'s transactions can take a few minutes to arrive, so sync again shortly.'
+  const parts = [`${r.added} new transaction${r.added === 1 ? '' : 's'}`]
+  if (r.updated) parts.push(`${r.updated} updated`)
+  if (r.removed) parts.push(`${r.removed} removed`)
+  return `Synced: ${parts.join(', ')}.`
+}
+
+/** Plaid Link's own script, from Plaid as it requires: loaded the first time someone links. */
+interface PlaidHandler { open: () => void, destroy: () => void }
+interface PlaidLink {
+  create: (o: {
+    token: string
+    onSuccess: (publicToken: string, meta: { institution?: { name?: string } | null }) => void
+    onExit: (err: { display_message?: string | null, error_message?: string } | null) => void
+  }) => PlaidHandler
+}
+let plaidScript: Promise<PlaidLink> | null = null
+
+/** An error whose message is for the person: errorMessage() shows `data.message`. */
+const shown = (message: string) => Object.assign(new Error(message), { data: { message } })
+
+function loadPlaid(): Promise<PlaidLink> {
+  const w = window as unknown as { Plaid?: PlaidLink }
+  if (w.Plaid) return Promise.resolve(w.Plaid)
+  plaidScript ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js'
+    s.async = true
+    s.onload = () => (w.Plaid ? resolve(w.Plaid) : reject(new Error('no Plaid')))
+    s.onerror = () => {
+      plaidScript = null
+      reject(new Error('Plaid didn\'t load'))
+    }
+    document.head.appendChild(s)
+  })
+  return plaidScript
+}
+
+/**
+ * Opens Plaid Link, where the person picks their bank and signs in to it.
+ * Answers Link's public_token and the bank's name, or null if they closed it.
+ */
+async function signInToBank(token: string): Promise<{ publicToken: string, institution: string } | null> {
+  let Plaid: PlaidLink
+  try {
+    Plaid = await loadPlaid()
+  }
+  catch {
+    throw shown('Plaid didn\'t load. Check your connection, or turn off anything that blocks it, and try again.')
+  }
+  return new Promise((resolve, reject) => {
+    const handler = Plaid.create({
+      token,
+      onSuccess: (publicToken, meta) => {
+        handler.destroy()
+        resolve({ publicToken, institution: meta.institution?.name ?? '' })
+      },
+      onExit: (err) => {
+        handler.destroy()
+        if (err) reject(shown(err.display_message || 'Your bank didn\'t finish linking. Try again.'))
+        else resolve(null)
+      },
+    })
+    handler.open()
+  })
+}
+
+async function link() {
+  notice.value = ''
+  const r = await add.run(async () => {
+    const { link_token } = await $fetch('/api/bank-links/link-token', { method: 'POST', body: {} })
+    const done = await signInToBank(link_token)
+    if (!done) return null
+    return await $fetch<LinkAnswer>('/api/bank-links', { method: 'POST', body: { public_token: done.publicToken, institution: done.institution } })
+  })
+  if (!r) return
+  notice.value = said(r.sync)
+  await refresh()
+  emit('changed')
+}
+
+/** Signs in to the bank again for a link that stopped working, then syncs it. */
+async function reconnect(l: BankLink) {
+  notice.value = ''
+  busyId.value = l.id
+  const r = await work.run(async () => {
+    const { link_token } = await $fetch('/api/bank-links/link-token', { method: 'POST', body: { link: l.id } })
+    if (!await signInToBank(link_token)) return null
+    return await $fetch<LinkAnswer>(`/api/bank-links/${l.id}/sync`, { method: 'POST', body: { reconnected: true } })
+  })
+  busyId.value = ''
+  if (!r) return
+  notice.value = said(r.sync)
+  await refresh()
+  emit('changed')
+}
+
+async function sync(l: BankLink) {
+  notice.value = ''
+  busyId.value = l.id
+  const r = await work.run(() => $fetch<LinkAnswer>(`/api/bank-links/${l.id}/sync`, { method: 'POST', body: {} }))
+  busyId.value = ''
+  if (!r) return
+  notice.value = said(r.sync)
+  await refresh()
+  emit('changed')
+}
+
+async function remove(l: BankLink) {
+  busyId.value = l.id
+  const ok = await work.succeed(() => $fetch(`/api/bank-links/${l.id}/remove`, { method: 'POST' }))
+  busyId.value = ''
+  removingId.value = ''
+  if (!ok) return
+  notice.value = 'Unlinked. Its accounts and transactions stay in Cheddar, and no longer update.'
+  await refresh()
+  emit('changed')
+}
+
+const title = (l: BankLink) => (l.institutions.length ? l.institutions.join(', ') : 'Linked bank')
+
+function when(pb: string) {
+  if (!pb) return 'Not synced yet'
+  const d = new Date(pb.replace(' ', 'T'))
+  return `Updated ${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+}
+</script>
+
+<template>
+  <section id="linked-banks" class="group" aria-labelledby="links-title">
+    <h2 id="links-title" class="group-title">Linked banks and cards</h2>
+
+    <!-- Off until the server has its keys: say so plainly, and how it's switched on. -->
+    <div v-if="!data.enabled" class="card card-pad stack off">
+      <p class="headline">Bank linking is off on this server</p>
+      <p class="subhead">
+        Linking lets you sign in to your bank so balances and transactions arrive on their own.
+        It needs this server's Plaid keys and bank-link key, which haven't been set yet.
+      </p>
+      <p class="footnote">
+        Whoever runs this Cheddar sets <code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code> and <code>BANK_LINK_KEY</code>
+        and deploys again (k8s/README.md, “First deploy”, step 6).
+        Until then, add accounts below and import the files your bank lets you download.
+      </p>
+    </div>
+
+    <template v-else>
+      <div v-for="l in data.links" :key="l.id" class="card link">
+        <div class="row">
+          <span class="row-label">
+            <span class="headline block">{{ title(l) }}</span>
+            <span class="footnote block">{{ when(l.last_synced) }}</span>
+          </span>
+          <span v-if="l.status !== 'ok'" class="badge badge-warn">{{ l.status === 'reconnect' ? 'Sign in needed' : 'Update failed' }}</span>
+        </div>
+        <div v-for="a in l.accounts" :key="a.id" class="row">
+          <span class="row-label">
+            {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
+          </span>
+          <span class="row-value num">{{ formatCents(a.balance_cents) }}</span>
+        </div>
+        <p v-if="l.message" class="field footnote" :class="{ warn: l.status !== 'ok' }">{{ l.message }}</p>
+        <div v-if="removingId === l.id" class="field stack">
+          <p class="footnote">Unlink {{ title(l) }}? Cheddar stops reading it and deletes its access. Its accounts and transactions stay.</p>
+          <div class="btn-row">
+            <button class="btn btn-danger" :disabled="work.busy.value" @click="remove(l)">
+              <span v-if="work.busy.value && busyId === l.id" class="spinner" aria-hidden="true" /> Unlink
+            </button>
+            <button class="btn btn-plain" @click="removingId = ''">Cancel</button>
+          </div>
+        </div>
+        <div v-else class="field btn-row">
+          <button v-if="l.status === 'reconnect'" class="btn btn-primary" :disabled="work.busy.value" @click="reconnect(l)">
+            <span v-if="work.busy.value && busyId === l.id" class="spinner" aria-hidden="true" /> Sign in again
+          </button>
+          <button v-else class="btn btn-tinted" :disabled="work.busy.value" @click="sync(l)">
+            <span v-if="work.busy.value && busyId === l.id" class="spinner" aria-hidden="true" /> Update now
+          </button>
+          <button class="btn btn-plain" @click="removingId = l.id">Unlink…</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="field stack">
+          <p v-if="!data.links.length" class="subhead">
+            Sign in to your bank or card issuer, and Cheddar keeps your balances and transactions up to date.
+            Your bank password goes to your bank, never to Cheddar.
+          </p>
+          <div class="btn-row">
+            <button class="btn btn-primary" :disabled="add.busy.value" @click="link">
+              <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <p v-if="add.error.value || work.error.value" class="notice notice-error" role="alert">{{ add.error.value || work.error.value }}</p>
+    <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
+    <p v-if="data.enabled" class="group-footer">
+      Linked accounts update once a day on their own. Cheddar can only read them: it can't move money.
+    </p>
+  </section>
+</template>
+
+<style scoped>
+.link { margin-bottom: 0.75rem; }
+.warn { color: var(--warning); }
+.off code { font-size: 0.75rem; }
+.badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }
+</style>

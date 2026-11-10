@@ -79,8 +79,15 @@ jobs:
         run: |
           docker network create cheddar-ci
           docker build --build-arg IMAGE_TAG="$GITHUB_SHA" -f Dockerfile.pocketbase -t cheddar-pb:ci .
+          # Bank links on, against the API suite's stand-in Plaid
+          # (tests/api/plaid-mock.mjs), which runs on the runner and is
+          # reached by the network's gateway address.
+          gateway=$(docker network inspect cheddar-ci -f '{{(index .IPAM.Config 0).Gateway}}')
+          echo "PLAID_MOCK_PORT=8097" >> "$GITHUB_ENV"
           docker run -d --name cheddar-pb --network cheddar-ci -p 127.0.0.1:8095:8090 \
-            -e PB_SU_EMAIL -e PB_SU_PASS -e APP_URL="$APP_URL" cheddar-pb:ci
+            -e PB_SU_EMAIL -e PB_SU_PASS -e APP_URL="$APP_URL" \
+            -e BANK_LINK_KEY="$(openssl rand -hex 16)" -e PLAID_CLIENT_ID=test-client-id -e PLAID_SECRET=test-secret \
+            -e PLAID_API_URL="http://$gateway:8097" cheddar-pb:ci
           node scripts/migrate.mjs
       - name: Start the app behind nginx
         # nginx on a user-defined network, reaching the runner's Nuxt by the
@@ -234,6 +241,10 @@ jobs:
       MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
       MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
       MAILJET_SENDER_EMAIL: ${{ secrets.MAILJET_SENDER_EMAIL }}
+      BANK_LINK_KEY: ${{ secrets.BANK_LINK_KEY }}
+      PLAID_CLIENT_ID: ${{ secrets.PLAID_CLIENT_ID }}
+      PLAID_SECRET: ${{ secrets.PLAID_SECRET }}
+      PLAID_ENV: ${{ vars.PLAID_ENV }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Apply the manifests and wait for the rollout
