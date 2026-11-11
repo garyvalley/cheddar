@@ -217,8 +217,12 @@ export interface Idea {
 
 const dollars = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.round(cents / 100))
 
-/** Ideas for paying less, each only where the person's own figures make it worth saying. */
-export function ideas(est: Estimate, ty: TaxYear, stateName: string, stateTaxes: boolean): Idea[] {
+/**
+ * Ideas for paying less, each only where the person's own figures make it
+ * worth saying. `stateMarginal` is the state's rate on the next dollar
+ * (shared/state-taxes.ts), 0 where there's no state income tax.
+ */
+export function ideas(est: Estimate, ty: TaxYear, stateName: string, stateMarginal: number): Idea[] {
   const out: Idea[] = []
   const s = est.status
   if (!est.income_cents) return out
@@ -226,7 +230,7 @@ export function ideas(est: Estimate, ty: TaxYear, stateName: string, stateTaxes:
     out.push({
       id: 'pre-tax',
       title: 'Save before tax',
-      body: `Your next dollars are taxed at ${est.marginal}%, so each $1,000 put into a traditional 401(k) or IRA cuts this year's federal tax by about ${dollars(est.marginal * 1000)}${stateTaxes ? `, and usually ${stateName}'s too` : ''}. You can put up to ${dollars(LIMITS.k401 * 100)} into a 401(k) and ${dollars(LIMITS.ira * 100)} into an IRA this year.`,
+      body: `Your next dollars are taxed at ${est.marginal}%, so each $1,000 put into a traditional 401(k) or IRA cuts this year's federal tax by about ${dollars(est.marginal * 1000)}${stateMarginal > 0 ? `, and ${stateName}'s by about ${dollars(stateMarginal * 1000)}` : ''}. You can put up to ${dollars(LIMITS.k401 * 100)} into a 401(k) and ${dollars(LIMITS.ira * 100)} into an IRA this year.`,
     })
     const lower = RATES[RATES.indexOf(est.marginal) - 1]
     if (lower && est.in_top_cents > 0 && est.in_top_cents <= (LIMITS.k401 + LIMITS.ira) * 100) {

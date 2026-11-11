@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatCents, parseBalance, type Account } from '~~/shared/accounts'
 import { FILING_STATUSES, isFilingStatus } from '~~/shared/filing-status'
+import { stateEstimate } from '~~/shared/state-taxes'
 import { stateByCode } from '~~/shared/states'
 import { LIMITS, TAX_YEAR, estimate, ideas, type TaxYear } from '~~/shared/taxes'
 
@@ -32,7 +33,8 @@ const typedCents = computed(() => {
 })
 const income = computed(() => typedCents.value ?? pace.value)
 const est = computed(() => estimate(income.value, status.value))
-const shownIdeas = computed(() => (ty.value ? ideas(est.value, ty.value, state.value?.name ?? '', !!state.value?.incomeTax) : []))
+const stateEst = computed(() => stateEstimate(state.value?.code, income.value, status.value, est.value.tax_cents))
+const shownIdeas = computed(() => (ty.value ? ideas(est.value, ty.value, state.value?.name ?? '', stateEst.value?.marginal ?? 0) : []))
 
 // Each bracket's bar fills with the share of it the income uses; the top one, unbounded, is drawn as long as the one before.
 const bars = computed(() => est.value.brackets.map((b, i, all) => {
@@ -146,8 +148,48 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
       <p class="group-footer">
         Taxable income, filing {{ statusLabel }}. Each rate applies only to the part of your income inside its bracket.
       </p>
-      <p v-if="state" class="group-footer">
-        {{ state.incomeTax ? `Cheddar doesn't estimate ${state.name} income tax yet: these are federal figures only.` : `${state.name} has no state income tax on wages, so federal is the whole bill.` }}
+    </section>
+
+    <section v-if="state" class="group" aria-labelledby="state-title">
+      <h2 id="state-title" class="group-title">{{ state.name }} estimate</h2>
+      <div v-if="stateEst" class="card">
+        <div class="card-pad hero">
+          <p class="num large-title" data-test="state-tax">{{ whole(stateEst.tax_cents) }}</p>
+          <p class="footnote">
+            {{ pct(stateEst.effective) }} of your income overall, and {{ stateEst.marginal }}% on your next dollar.
+          </p>
+        </div>
+        <div class="row">
+          <span class="row-label">Income</span>
+          <span class="num">{{ whole(stateEst.income_cents) }}</span>
+        </div>
+        <div v-if="stateEst.deduction_cents" class="row">
+          <span class="row-label">Deductions and exemptions</span>
+          <span class="num up">−{{ whole(stateEst.deduction_cents) }}</span>
+        </div>
+        <div class="row">
+          <span class="row-label">Taxable income</span>
+          <span class="num">{{ whole(stateEst.taxable_cents) }}</span>
+        </div>
+        <div v-if="stateEst.credit_cents" class="row">
+          <span class="row-label">Personal credits</span>
+          <span class="num up">−{{ whole(stateEst.credit_cents) }}</span>
+        </div>
+        <div class="row">
+          <span class="row-label"><strong>{{ state.name }} income tax</strong></span>
+          <span class="num down"><strong>{{ whole(stateEst.tax_cents) }}</strong></span>
+        </div>
+        <div class="row">
+          <span class="row-label"><strong>Federal and state together</strong></span>
+          <span class="num down" data-test="total-tax"><strong>{{ whole(est.tax_cents + stateEst.tax_cents) }}</strong></span>
+        </div>
+      </div>
+      <div v-else class="card card-pad">
+        <p class="footnote">{{ state.name }} has no state income tax on wages, so federal is the whole bill.</p>
+      </div>
+      <p v-if="stateEst" class="group-footer">
+        From {{ state.name }}'s {{ TAX_YEAR }} brackets, standard deduction and personal exemption{{ status === 'head_of_household' || status === 'married_separate' ? ', on the single schedule' : '' }}.
+        Local income taxes, phase-outs at high incomes, dependents and credits aren't counted.
       </p>
     </section>
 
