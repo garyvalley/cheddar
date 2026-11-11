@@ -159,6 +159,14 @@ try {
   await page.locator('.figures').filter({ hasText: '$2,500.00' }).filter({ hasText: '$86.60' }).waitFor()
   await page.getByText('Add a brokerage or retirement account').waitFor()
 
+  // Taxes: the federal estimate and California's, from a typed income, for the profile's state and status.
+  await page.goto(`${APP}/taxes`)
+  await page.locator('[data-test="income"]').fill('100,000')
+  await page.getByRole('heading', { name: 'California estimate' }).waitFor()
+  await page.locator('[data-test="state-tax"]').filter({ hasText: '$5,070' }).waitFor()
+  assert.equal(await page.locator('[data-test="federal-tax"]').textContent(), '$13,170')
+  assert.equal(await page.locator('[data-test="total-tax"]').textContent(), '$18,240')
+
   await page.goto(`${APP}/accounts`)
   await page.getByRole('link', { name: 'Import', exact: true }).click()
   await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()

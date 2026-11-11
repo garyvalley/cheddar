@@ -16,7 +16,7 @@ The finance features arrive in this order:
 2. **Spending.** Import CSV, OFX or QFX files from your bank, sort them with
    category rules, and get weekly and monthly reports.
 3. **Projections.** Savings rate, investment growth and debt payoff.
-4. **Taxes.** Federal and per-state rules: contribution room, holding
+4. **Taxes.** Federal and state income tax estimates (every state, and DC), contribution room, holding
    periods, tax-loss harvesting with wash-sale warnings, and which account
    suits which asset. Cheddar's ideas are educational, not tax advice.
 

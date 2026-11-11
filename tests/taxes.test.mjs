@@ -80,23 +80,23 @@ describe('ideas', () => {
   const ids = list => list.map(i => i.id)
 
   test('suggest saving before tax at 22% and up, and coming down a bracket when it\'s close', () => {
-    assert.deepEqual(ids(ideas(estimate(70_000_00, 'single'), year, 'Ohio', true)), ['pre-tax', 'bracket'])
-    assert.deepEqual(ids(ideas(estimate(400_000_00, 'single'), year, 'Ohio', true)), ['pre-tax'])
+    assert.deepEqual(ids(ideas(estimate(70_000_00, 'single'), year, 'Ohio', 2.75)), ['pre-tax', 'bracket'])
+    assert.deepEqual(ids(ideas(estimate(400_000_00, 'single'), year, 'Ohio', 2.75)), ['pre-tax'])
   })
 
   test('suggest Roth in the low brackets, and 0% gains only with a brokerage account', () => {
-    assert.deepEqual(ids(ideas(estimate(40_000_00, 'single'), year, 'Texas', false)), ['roth'])
-    assert.deepEqual(ids(ideas(estimate(40_000_00, 'single'), { ...year, has_brokerage: true }, 'Texas', false)), ['roth', 'zero-gains'])
+    assert.deepEqual(ids(ideas(estimate(40_000_00, 'single'), year, 'Texas', 0)), ['roth'])
+    assert.deepEqual(ids(ideas(estimate(40_000_00, 'single'), { ...year, has_brokerage: true }, 'Texas', 0)), ['roth', 'zero-gains'])
   })
 
   test('mention an HSA and charity only for those who spend on them, and nothing without income', () => {
     const y = { ...year, health_cents: 500_00, gifts_cents: 100_00 }
-    assert.deepEqual(ids(ideas(estimate(40_000_00, 'married_joint'), y, 'Ohio', true)), ['roth', 'hsa', 'charity'])
-    assert.deepEqual(ideas(estimate(0, 'single'), y, 'Ohio', true), [])
+    assert.deepEqual(ids(ideas(estimate(40_000_00, 'married_joint'), y, 'Ohio', 2.75)), ['roth', 'hsa', 'charity'])
+    assert.deepEqual(ideas(estimate(0, 'single'), y, 'Ohio', 2.75), [])
   })
 
   test('leave state tax out where there is none', () => {
-    assert.doesNotMatch(ideas(estimate(90_000_00, 'single'), year, 'Florida', false)[0].body, /Florida/)
-    assert.match(ideas(estimate(90_000_00, 'single'), year, 'Ohio', true)[0].body, /Ohio's too/)
+    assert.doesNotMatch(ideas(estimate(90_000_00, 'single'), year, 'Florida', 0)[0].body, /Florida/)
+    assert.match(ideas(estimate(90_000_00, 'single'), year, 'Ohio', 2.75)[0].body, /Ohio's by about \$28\./)
   })
 })
