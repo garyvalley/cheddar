@@ -133,6 +133,27 @@ describe('importing a statement', () => {
     assert.deepEqual((await transactions(c, a.id)).items.map(t => t.amount_cents), [-500, -1999])
   })
 
+  test('reads a PDF statement\'s text as its account\'s kind says, and flips it when asked', async () => {
+    const { c } = await ready()
+    const card = await account(c, { name: 'Card', kind: 'credit_card' })
+    // What the browser sends for a PDF: its text, never the PDF (shared/pdf-statements.ts).
+    const text = '%cheddar-pdf-text 1\nOpening/Closing Date 10/05/26 - 11/04/26\n'
+      + '10/12  PAYMENT THANK YOU  -500.00\n10/20  BOOKSHOP  42.10\nTotal fees for this period  0.00\n'
+    const r = await upload(c, card.id, text, 'october.pdf')
+    assert.equal(r.status, 201, JSON.stringify(r.json))
+    assert.deepEqual([r.json.import.format, r.json.import.added, r.json.import.filename], ['pdf', 2, 'october.pdf'])
+    assert.deepEqual((await transactions(c, card.id)).items.map(t => [t.posted, t.amount_cents]), [['2026-10-20', -4210], ['2026-10-12', 50000]])
+
+    const checking = await account(c)
+    const flipped = await c.call('POST', '/api/imports', { account: checking.id, filename: 'october.pdf', text, flip: true })
+    assert.equal(flipped.status, 201, JSON.stringify(flipped.json))
+    assert.deepEqual((await transactions(c, checking.id)).items.map(t => t.amount_cents), [-4210, 50000])
+
+    const letter = await upload(c, checking.id, '%cheddar-pdf-text 1\nThank you for banking with us.\n', 'letter.pdf')
+    assert.equal(letter.status, 400)
+    assert.match(letter.json.message, /No transactions could be found/)
+  })
+
   test('uses the columns the person chose, such as flipped signs for a card', async () => {
     const { c } = await ready()
     const a = await account(c, { name: 'Card', kind: 'credit_card' })

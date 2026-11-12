@@ -1,6 +1,7 @@
 /**
  * Reading the files banks and card issuers export: CSV (each bank its own
- * columns), and OFX or QFX (Quicken and Money's format, one standard). Both
+ * columns), OFX or QFX (Quicken and Money's format, one standard), and the
+ * text of a PDF statement (shared/pdf-statements.ts). All
  * the browser (to show a preview before anything is saved) and the server
  * (which reads the file again itself, never trusting the preview) use this.
  *
@@ -8,7 +9,9 @@
  * date as YYYY-MM-DD.
  */
 
-export type StatementFormat = 'csv' | 'ofx'
+import { isPdfText, readPdfText, type PdfOptions } from './pdf-statements.ts'
+
+export type StatementFormat = 'csv' | 'ofx' | 'pdf'
 
 /** One transaction as a file states it. */
 export interface StatementRow {
@@ -61,19 +64,28 @@ export interface Statement {
 export const MAX_FILE_BYTES = 4 * 1024 * 1024
 export const MAX_ROWS = 5000
 
-/** 'ofx' for an OFX/QFX file (by name or by content), else 'csv'. */
+/** 'pdf' for a PDF's text, 'ofx' for an OFX/QFX file (by name or by content), else 'csv'. */
 export function detectFormat(filename: string, text: string): StatementFormat {
+  if (isPdfText(text)) return 'pdf'
   if (/\.(ofx|qfx|qbo)$/i.test(filename)) return 'ofx'
   return /^\s*(OFXHEADER|<\?xml[^>]*>\s*<\?OFX|<OFX>)/i.test(text.replace(/^\uFEFF/, '')) ? 'ofx' : 'csv'
 }
 
 /**
  * The whole file read as a statement, or why it can't be. A CSV is read with
- * `mapping` when given, else with the columns its headings suggest.
+ * `mapping` when given, else with the columns its headings suggest; a PDF's
+ * text with `pdf` (which way its unsigned amounts go).
  */
-export function readStatement(filename: string, text: string, mapping?: CsvMapping): Statement | { problem: string } {
+export function readStatement(filename: string, text: string, mapping?: CsvMapping, pdf?: PdfOptions): Statement | { problem: string } {
   if (!text.trim()) return { problem: 'The file is empty.' }
   const format = detectFormat(filename, text)
+  if (format === 'pdf') {
+    const read = readPdfText(text, pdf)
+    if (!read.rows.length) return { problem: 'No transactions could be found in this PDF. If it\'s a scan, download the statement from your bank\'s website instead, or export CSV.' }
+    if (read.rows.length > MAX_ROWS) return { problem: `The file has more than ${MAX_ROWS} transactions. Export a shorter date range.` }
+    return { format, ...read }
+  }
+  if (/\.pdf$/i.test(filename) || text.startsWith('%PDF-')) return { problem: 'Choose the PDF again: its text couldn\'t be read.' }
   if (format === 'ofx') {
     const read = readOfx(text)
     if (!read.rows.length && !read.problems.length) return { problem: 'No transactions were found in this file.' }

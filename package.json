@@ -3,7 +3,9 @@
   "type": "module",
   "private": true,
   "packageManager": "pnpm@10.34.5",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "nuxt build",
     "setup": "node scripts/setup.mjs",
@@ -20,6 +22,7 @@
   "dependencies": {
     "nuxt": "^4.6.0",
     "nuxt-security": "^2.7.0",
+    "pdfjs-dist": "6.4.299",
     "pocketbase": "^0.28.0",
     "uqr": "^0.1.3",
     "vue": "^3.5.43",
