@@ -1,5 +1,5 @@
 // Browser smoke test: sign up, be held at two-step setup until it's on, set
-// the profile, import a statement and undo it, sign out and back in with a
+// the profile, import a statement (a CSV, then a PDF) and undo it, sign out and back in with a
 // code, on a desktop and a phone-sized screen, with no console errors. Run it
 // through nginx in front of the production build, where the strict CSP
 // applies: an inline script the nonce doesn't cover would break hydration
@@ -13,6 +13,7 @@ import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { chromium } from 'playwright-core'
 import { loadHookModule } from './load-hook-module.mjs'
+import { makePdf, rows } from './make-pdf.mjs'
 
 const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
 const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
@@ -106,7 +107,7 @@ try {
   await page.getByRole('button', { name: 'Add account' }).click()
   await page.getByRole('link', { name: 'Import a statement into Everyday checking' }).click()
   await page.getByRole('heading', { name: 'Import', exact: true }).waitFor()
-  await page.getByLabel('CSV, OFX or QFX file').setInputFiles({
+  await page.getByLabel('PDF statement, or a CSV, OFX or QFX file').setInputFiles({
     name: 'november.csv', mimeType: 'text/csv',
     buffer: Buffer.from(`Posting Date,Description,Amount\n${mm}/01/${yyyy},COFFEE,-4.50\n${mm}/02/${yyyy},"GROCERY, INC",-82.10\n${mm}/03/${yyyy},PAYCHECK,2500.00\nTotal,,\n`),
   })
@@ -170,6 +171,25 @@ try {
   await page.goto(`${APP}/accounts`)
   await page.getByRole('link', { name: 'Import', exact: true }).click()
   await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()
+  await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
+
+  // A PDF statement, read in the browser by pdf.js under the production CSP.
+  await page.getByLabel('PDF statement, or a CSV, OFX or QFX file').setInputFiles({
+    name: 'statement.pdf', mimeType: 'application/pdf',
+    buffer: makePdf([rows(720, [
+      [[50, `Statement period ${mm}/01/${yyyy} to ${mm}/28/${yyyy}`]],
+      [[50, 'Date'], [110, 'Description'], [400, 'Amount'], [500, 'Balance']],
+      [[50, `${mm}/01`], [110, 'Beginning balance'], [500, '1,000.00']],
+      [[50, `${mm}/04`], [110, 'BAKERY'], [400, '12.40'], [500, '987.60']],
+      [[50, `${mm}/05`], [110, 'REFUND FROM SHOP'], [400, '20.00'], [500, '1,007.60']],
+    ])]),
+  })
+  await page.getByRole('heading', { name: 'From the PDF' }).waitFor()
+  assert.equal(await page.locator('table.preview tbody tr').count(), 2)
+  await page.locator('table.preview tbody tr').filter({ hasText: 'BAKERY' }).filter({ hasText: '\u2212$12.40' }).waitFor()
+  await page.getByRole('button', { name: 'Import 2 transactions' }).click()
+  await page.getByText('Imported 2 transactions into Everyday checking.').waitFor()
+  await page.getByRole('button', { name: 'Undo the import of statement.pdf' }).click()
   await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
 
   // Out, and back in with a code.

@@ -23,11 +23,16 @@ const file = ref<{ name: string, text: string } | null>(null)
 const fileProblem = ref('')
 const mapping = ref<CsvMapping | undefined>()
 const flipNote = ref(false)
+// A PDF's text is read in the browser first, which takes a moment for a long one.
+const reading = ref(false)
+const pdfFlip = ref(false)
 const result = ref<{ import: Import, unreadable: number } | null>(null)
 const input = ref<HTMLInputElement>()
 
 const statement = computed<Statement | { problem: string } | null>(() =>
-  file.value ? readStatement(file.value.name, file.value.text, mapping.value) : null)
+  file.value
+    ? readStatement(file.value.name, file.value.text, mapping.value, { liability: !!account.value && isLiability(account.value.kind), flip: pdfFlip.value })
+    : null)
 const read = computed(() => (statement.value && !('problem' in statement.value) ? statement.value : null))
 const range = computed(() => (read.value ? dateRange(read.value.rows) : null))
 const totals = computed(() => {
@@ -46,10 +51,27 @@ async function choose(event: Event) {
   file.value = null
   mapping.value = undefined
   flipNote.value = false
+  pdfFlip.value = false
   fileProblem.value = ''
   if (!chosen) return
-  if (chosen.size > MAX_FILE_BYTES) {
-    fileProblem.value = 'The file is too large (4 MB at most). Export a shorter date range.'
+  const pdf = /\.pdf$/i.test(chosen.name) || chosen.type === 'application/pdf'
+  if (chosen.size > (pdf ? MAX_PDF_BYTES : MAX_FILE_BYTES)) {
+    fileProblem.value = pdf ? 'The PDF is too large (20 MB at most).' : 'The file is too large (4 MB at most). Export a shorter date range.'
+    return
+  }
+  if (pdf) {
+    reading.value = true
+    try {
+      const text = await textOfPdf(chosen)
+      if (new Blob([text]).size > MAX_FILE_BYTES) fileProblem.value = 'This PDF holds too much text to be one statement. Choose a single month\'s statement.'
+      else file.value = { name: chosen.name, text }
+    }
+    catch (error) {
+      fileProblem.value = error instanceof Error && error.message ? error.message : 'This file couldn\'t be opened as a PDF.'
+    }
+    finally {
+      reading.value = false
+    }
     return
   }
   file.value = { name: chosen.name, text: await chosen.text() }
@@ -86,7 +108,11 @@ async function importFile() {
   if (!file.value || !account.value) return
   const r = await send.run(() => $fetch<{ import: Import, unreadable: number }>('/api/imports', {
     method: 'POST',
-    body: { account: account.value!.id, filename: file.value!.name, text: file.value!.text, mapping: read.value?.format === 'csv' ? read.value.mapping : undefined },
+    body: {
+      account: account.value!.id, filename: file.value!.name, text: file.value!.text,
+      mapping: read.value?.format === 'csv' ? read.value.mapping : undefined,
+      flip: read.value?.format === 'pdf' ? pdfFlip.value : undefined,
+    },
   }))
   if (!r) return
   result.value = r
@@ -133,18 +159,19 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
             </select>
           </label>
           <label class="field">
-            <span class="field-label">CSV, OFX or QFX file</span>
-            <input ref="input" type="file" class="input file" accept=".csv,.txt,.ofx,.qfx,.qbo,text/csv" @change="choose">
+            <span class="field-label">PDF statement, or a CSV, OFX or QFX file</span>
+            <input ref="input" type="file" class="input file" accept=".pdf,.csv,.txt,.ofx,.qfx,.qbo,application/pdf,text/csv" @change="choose">
           </label>
         </div>
         <p class="group-footer">
-          On your bank's website, look for Download or Export next to your transactions. Choose CSV, or Quicken (QFX) or Money (OFX). Transactions already in the account are skipped, so overlapping dates are fine.
+          The PDF statement your bank sends each month works, as long as it isn't a scan. A download works too: on your bank's website, look for Download or Export next to your transactions, and choose CSV, or Quicken (QFX) or Money (OFX). Transactions already in the account are skipped, so overlapping dates are fine.
           <template v-if="account?.linked">
             {{ account.name }} is linked to your bank, so a transaction the link already brought in, with the same amount within {{ MATCH_DAYS }} days, is skipped too.
           </template>
         </p>
       </section>
 
+      <p v-if="reading" class="notice notice-info" role="status"><span class="spinner" aria-hidden="true" /> Reading the PDF…</p>
       <p v-if="fileProblem" class="notice notice-error" role="alert">{{ fileProblem }}</p>
       <p v-else-if="statement && 'problem' in statement" class="notice notice-error" role="alert">{{ statement.problem }}</p>
 
@@ -214,6 +241,20 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
             </label>
           </div>
           <p v-if="flipNote" class="group-footer">Most amounts in this card's file are positive, so they're read as charges. Untick this if that's wrong.</p>
+        </section>
+
+        <section v-if="read.format === 'pdf'" class="group" aria-labelledby="pdf-title">
+          <h2 id="pdf-title" class="group-title">From the PDF</h2>
+          <div class="card">
+            <label class="field check">
+              <input v-model="pdfFlip" type="checkbox">
+              <span>Money in and money out are the wrong way round</span>
+            </label>
+          </div>
+          <p class="group-footer">
+            Each line of the statement that starts with a date and ends with an amount is read as a transaction.
+            Check the preview against your statement: if a payment or deposit shows as money out, tick this.
+          </p>
         </section>
 
         <section class="group" aria-labelledby="preview-title">
