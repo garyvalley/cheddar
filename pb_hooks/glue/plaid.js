@@ -288,21 +288,31 @@ function ownLink(app, auth, id) {
 }
 
 /**
- * Removes a link: Plaid forgets the access token (so no one is billed for
- * it), and its accounts and their transactions stay, as accounts that no
- * longer sync.
+ * Tells Plaid to forget a link's access token, so no one is billed for it and
+ * Plaid keeps no hold on the bank. Called by bank_links.pb.js once a link's
+ * row is gone, however it went: unlinking, deleting the whole Cheddar account
+ * (the row goes by cascade), or a superuser in the admin UI. Best effort, and
+ * never throws: the row is already deleted, and with it the only copy of the
+ * token, so a retry later is impossible either way.
+ */
+function forget(link) {
+  try {
+    if (!plaid.isEnabled(cfg())) return
+    var access = accessOf(link)
+    if (!access) return
+    call("/item/remove", { access_token: access })
+  }
+  catch (err) {
+    // Already gone at Plaid, or Plaid unreachable.
+    console.log("[plaid] /item/remove for " + link.id + " failed: " + (err && err.failure ? err.failure.code : err))
+  }
+}
+
+/**
+ * Removes a link: its accounts and their transactions stay, as accounts that
+ * no longer sync. Deleting the row is what tells Plaid (forget(), above).
  */
 function remove(app, link) {
-  var access = accessOf(link)
-  if (access) {
-    try {
-      call("/item/remove", { access_token: access })
-    }
-    catch (err) {
-      // Already gone at Plaid, or Plaid unreachable: the link goes from Cheddar regardless.
-      console.log("[plaid] /item/remove for " + link.id + " failed: " + (err.failure ? err.failure.code : err))
-    }
-  }
   app.runInTransaction(function (txApp) {
     txApp.findRecordsByFilter("accounts", "link = {:id}", "", 0, 0, { id: link.id }).forEach(function (a) {
       a.set("link", "")
@@ -322,4 +332,5 @@ module.exports = {
   sync: sync,
   ownLink: ownLink,
   remove: remove,
+  forget: forget,
 }

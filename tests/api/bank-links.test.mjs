@@ -9,7 +9,7 @@
 
 import { before, after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { client, PB, ready, signedIn, superuser } from './helpers.mjs'
+import { client, PASSWORD, PB, ready, signedIn, superuser } from './helpers.mjs'
 import { sampleBank, startMock } from './plaid-mock.mjs'
 
 let mock
@@ -276,10 +276,36 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     const { link: l, bank } = await link(c)
     assert.equal((await c.call('POST', `/api/bank-links/${l.id}/remove`)).status, 204)
     assert.equal(mock.removed(bank), true)
+    assert.equal(mock.removals(bank), 1, 'asked once')
     assert.deepEqual((await c.call('GET', '/api/bank-links')).json.links, [])
     const accounts = (await pb('GET', '/api/collections/accounts/records', c.token)).json.items
     assert.equal(accounts.length, 2)
     assert.ok(accounts.every(a => a.link === ''))
     assert.equal((await transactions(c, accounts.find(a => a.last4 === '0000').id)).length, 3)
+  })
+
+  test('deleting the Cheddar account tells Plaid to forget every link, once each', async () => {
+    const c = await person()
+    const one = await link(c)
+    const two = await link(c)
+    const other = await person()
+    const kept = await link(other)
+
+    assert.equal((await c.call('POST', '/api/auth/delete-account', { password: PASSWORD })).status, 204)
+    assert.equal(mock.removals(one.bank), 1)
+    assert.equal(mock.removals(two.bank), 1)
+    assert.equal(mock.removals(kept.bank), 0, 'someone else\'s link is untouched')
+    const su = await superuser()
+    for (const l of [one.link, two.link]) {
+      assert.equal((await pb('GET', `/api/collections/bank_links/records/${l.id}`, su)).status, 404)
+    }
+  })
+
+  test('a superuser deleting someone in the admin UI tells Plaid too', async () => {
+    const c = await person()
+    const { bank } = await link(c)
+    const me = (await c.call('GET', '/api/auth/me')).json.me
+    assert.equal((await pb('DELETE', `/api/collections/users/records/${me.id}`, await superuser())).status, 204)
+    assert.equal(mock.removals(bank), 1)
   })
 })
