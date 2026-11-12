@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatCents, isLiability, type Account, type Import } from '~~/shared/accounts'
+import { MATCH_DAYS } from '~~/shared/overlap'
 import { MAX_FILE_BYTES, dateRange, readStatement, type CsvMapping, type Statement } from '~~/shared/statements'
 
 useHead({ title: 'Import a statement' })
@@ -138,6 +139,9 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
         </div>
         <p class="group-footer">
           On your bank's website, look for Download or Export next to your transactions. Choose CSV, or Quicken (QFX) or Money (OFX). Transactions already in the account are skipped, so overlapping dates are fine.
+          <template v-if="account?.linked">
+            {{ account.name }} is linked to your bank, so a transaction the link already brought in, with the same amount within {{ MATCH_DAYS }} days, is skipped too.
+          </template>
         </p>
       </section>
 

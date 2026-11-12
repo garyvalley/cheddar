@@ -175,6 +175,8 @@ function when(pb: string) {
             {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
           </span>
           <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
+          <!-- A statement adds what the link doesn't reach, such as older history; what the link already has is skipped. -->
+          <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="btn btn-plain import" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
         </div>
         <p v-if="l.message" class="field footnote" :class="{ warn: l.status !== 'ok' }">{{ l.message }}</p>
         <div v-if="removingId === l.id" class="field stack">
@@ -216,12 +218,14 @@ function when(pb: string) {
     <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
     <p v-if="data.enabled" class="group-footer">
       Linked accounts update once a day on their own. Cheddar can only read them: it can't move money.
+      For history from before you linked, import a statement your bank lets you download: what the link already brought in is skipped.
     </p>
   </section>
 </template>
 
 <style scoped>
 .link { margin-bottom: 0.75rem; }
+.import { margin-right: -0.5rem; }
 .warn { color: var(--warning); }
 .off code { font-size: 0.75rem; }
 .badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }

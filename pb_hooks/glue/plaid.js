@@ -12,6 +12,7 @@
 
 var plaid = require(`${__hooks}/lib/plaid.js`)
 var dates = require(`${__hooks}/lib/dates.js`)
+var overlap = require(`${__hooks}/lib/overlap.js`)
 
 function cfg() {
   return plaid.config($os.getenv)
@@ -121,7 +122,24 @@ function accountFor(txApp, link, row) {
   return account
 }
 
-/** Adds or brings up to date one transaction; answers "added", "updated" or "". */
+/**
+ * The row a statement imported into `account` already holds for `t`, as
+ * lib/overlap.js matches them, or null. Rows a sync took over are the
+ * link's now, so each imported row stands for one transaction at most.
+ */
+function imported(txApp, account, t) {
+  var span = overlap.around(t.posted)
+  var rows = txApp.findRecordsByFilter("transactions",
+    "account = {:account} && source = 'import' && amount_cents = {:amount} && posted >= {:from} && posted <= {:to}", "posted", 0, 0,
+    { account: account.id, amount: t.amount_cents, from: span.from, to: span.to })
+  var i = overlap.nearest(t, rows.map(function (r) { return { posted: r.getString("posted"), amount_cents: r.getInt("amount_cents") } }))
+  return i === -1 ? null : rows[i]
+}
+
+/**
+ * Adds or brings up to date one transaction, or takes over the row a
+ * statement already brought in for it; answers "added", "updated" or "".
+ */
 function upsert(txApp, collection, account, t) {
   var rec
   try {
@@ -131,7 +149,17 @@ function upsert(txApp, collection, account, t) {
     rec = null
   }
   var outcome = "updated"
-  if (rec) {
+  var took = !rec && imported(txApp, account, t)
+  if (took) {
+    // The statement had it first: the row becomes the link's, so the bank's
+    // later changes and removals reach it, and undoing that import keeps it.
+    rec = took
+    rec.set("source", "sync")
+    rec.set("external_id", t.external_id)
+    rec.set("import", "")
+    if (!rec.getString("payee")) rec.set("payee", t.payee)
+  }
+  else if (rec) {
     if (rec.getString("posted") === t.posted && rec.getInt("amount_cents") === t.amount_cents
       && rec.getBool("pending") === t.pending && rec.getString("description") === t.description
       && rec.getString("bank_category") === t.bank_category) return ""
