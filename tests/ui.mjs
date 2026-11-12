@@ -107,7 +107,7 @@ try {
   await page.getByRole('button', { name: 'Add account' }).click()
   await page.getByRole('link', { name: 'Import a statement into Everyday checking' }).click()
   await page.getByRole('heading', { name: 'Import', exact: true }).waitFor()
-  await page.getByLabel('PDF statement, or a CSV, OFX or QFX file').setInputFiles({
+  await page.getByLabel('PDF statements, or CSV, OFX or QFX files').setInputFiles({
     name: 'november.csv', mimeType: 'text/csv',
     buffer: Buffer.from(`Posting Date,Description,Amount\n${mm}/01/${yyyy},COFFEE,-4.50\n${mm}/02/${yyyy},"GROCERY, INC",-82.10\n${mm}/03/${yyyy},PAYCHECK,2500.00\nTotal,,\n`),
   })
@@ -174,7 +174,7 @@ try {
   await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
 
   // A PDF statement, read in the browser by pdf.js under the production CSP.
-  await page.getByLabel('PDF statement, or a CSV, OFX or QFX file').setInputFiles({
+  await page.getByLabel('PDF statements, or CSV, OFX or QFX files').setInputFiles({
     name: 'statement.pdf', mimeType: 'application/pdf',
     buffer: makePdf([rows(720, [
       [[50, `Statement period ${mm}/01/${yyyy} to ${mm}/28/${yyyy}`]],
@@ -190,6 +190,19 @@ try {
   await page.getByRole('button', { name: 'Import 2 transactions' }).click()
   await page.getByText('Imported 2 transactions into Everyday checking.').waitFor()
   await page.getByRole('button', { name: 'Undo the import of statement.pdf' }).click()
+  await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
+
+  // Several files at once: one preview, then each its own import, each undone on its own.
+  await page.getByLabel('PDF statements, or CSV, OFX or QFX files').setInputFiles([
+    { name: 'one.csv', mimeType: 'text/csv', buffer: Buffer.from(`Date,Description,Amount\n${mm}/06/${yyyy},LIBRARY FINE,-2.00\n`) },
+    { name: 'two.csv', mimeType: 'text/csv', buffer: Buffer.from(`Date,Description,Amount\n${mm}/07/${yyyy},BOOKSHOP,-15.00\n${mm}/08/${yyyy},REFUND,5.00\n`) },
+  ])
+  assert.equal(await page.locator('table.preview tbody tr').count(), 3)
+  await page.getByRole('button', { name: 'Import 3 transactions from 2 files' }).click()
+  await page.getByText('Imported 3 transactions into Everyday checking from 2 files.').waitFor()
+  await page.getByRole('button', { name: 'Undo the import of one.csv' }).click()
+  await page.getByRole('button', { name: 'Undo the import of one.csv' }).waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'Undo the import of two.csv' }).click()
   await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
 
   // Out, and back in with a code.

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { formatCents, isLiability, type Account, type Import } from '~~/shared/accounts'
 import { MATCH_DAYS } from '~~/shared/overlap'
-import { MAX_FILE_BYTES, dateRange, readStatement, type CsvMapping, type Statement } from '~~/shared/statements'
+import { MAX_FILE_BYTES, dateRange, readStatement, type CsvMapping } from '~~/shared/statements'
 
-useHead({ title: 'Import a statement' })
+useHead({ title: 'Import statements' })
 const route = useRoute()
 
 const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
@@ -18,78 +18,105 @@ const { data: history, refresh: refreshHistory } = await useFetch<{ imports: Imp
   query: { account: accountId }, default: () => ({ imports: [] }),
 })
 
-// The chosen file, read in the browser for the preview. The server reads it again.
-const file = ref<{ name: string, text: string } | null>(null)
-const fileProblem = ref('')
-const mapping = ref<CsvMapping | undefined>()
-const flipNote = ref(false)
+// The chosen files, read in the browser for the preview. The server reads each again.
+interface Chosen {
+  name: string
+  text: string
+  /** A CSV's columns, when not the ones its headings suggest. */
+  mapping?: CsvMapping
+  /** A card's CSV was flipped because most of its amounts were positive. */
+  flipNote: boolean
+}
+const files = ref<Chosen[]>([])
+const fileProblems = ref<string[]>([])
 // A PDF's text is read in the browser first, which takes a moment for a long one.
 const reading = ref(false)
 const pdfFlip = ref(false)
-const result = ref<{ import: Import, unreadable: number } | null>(null)
+interface Result { name: string, import?: Import, unreadable?: number, error?: string }
+const results = ref<Result[]>([])
 const input = ref<HTMLInputElement>()
 
-const statement = computed<Statement | { problem: string } | null>(() =>
-  file.value
-    ? readStatement(file.value.name, file.value.text, mapping.value, { liability: !!account.value && isLiability(account.value.kind), flip: pdfFlip.value })
-    : null)
-const read = computed(() => (statement.value && !('problem' in statement.value) ? statement.value : null))
-const range = computed(() => (read.value ? dateRange(read.value.rows) : null))
+const liability = computed(() => !!account.value && isLiability(account.value.kind))
+const readFile = (f: Chosen) => readStatement(f.name, f.text, f.mapping, { liability: liability.value, flip: pdfFlip.value })
+const statements = computed(() => files.value.map(f => ({ file: f, statement: readFile(f) })))
+const readable = computed(() => statements.value.flatMap(x => ('problem' in x.statement ? [] : [{ file: x.file, read: x.statement }])))
+const unreadable = computed(() => statements.value.flatMap(x => ('problem' in x.statement ? [{ name: x.file.name, problem: x.statement.problem }] : [])))
+const several = computed(() => files.value.length > 1)
+/** The one file's statement, when only one was chosen: its columns can be changed. */
+const read = computed(() => (several.value ? null : readable.value[0]?.read ?? null))
+const rows = computed(() => readable.value.flatMap(x => x.read.rows))
+const problems = computed(() => readable.value.flatMap(x => x.read.problems.map(p => ({ ...p, name: x.file.name }))))
+const anyPdf = computed(() => readable.value.some(x => x.read.format === 'pdf'))
+const flipNote = computed(() => files.value.some(f => f.flipNote))
+const range = computed(() => dateRange(rows.value))
 const totals = computed(() => {
   let out = 0
   let into = 0
-  for (const r of read.value?.rows ?? []) {
+  for (const r of rows.value) {
     if (r.amount_cents < 0) out += r.amount_cents
     else into += r.amount_cents
   }
   return { out, into }
 })
 
-async function choose(event: Event) {
-  const chosen = (event.target as HTMLInputElement).files?.[0]
-  result.value = null
-  file.value = null
-  mapping.value = undefined
-  flipNote.value = false
-  pdfFlip.value = false
-  fileProblem.value = ''
-  if (!chosen) return
+/** One chosen file read for the preview, or why it can't be. */
+async function take(chosen: File): Promise<Chosen | string> {
   const pdf = /\.pdf$/i.test(chosen.name) || chosen.type === 'application/pdf'
   if (chosen.size > (pdf ? MAX_PDF_BYTES : MAX_FILE_BYTES)) {
-    fileProblem.value = pdf ? 'The PDF is too large (20 MB at most).' : 'The file is too large (4 MB at most). Export a shorter date range.'
-    return
+    return pdf ? 'The PDF is too large (20 MB at most).' : 'The file is too large (4 MB at most). Export a shorter date range.'
   }
   if (pdf) {
-    reading.value = true
     try {
       const text = await textOfPdf(chosen)
-      if (new Blob([text]).size > MAX_FILE_BYTES) fileProblem.value = 'This PDF holds too much text to be one statement. Choose a single month\'s statement.'
-      else file.value = { name: chosen.name, text }
+      if (new Blob([text]).size > MAX_FILE_BYTES) return 'This PDF holds too much text to be one statement. Choose a single month\'s statement.'
+      return { name: chosen.name, text, flipNote: false }
     }
     catch (error) {
-      fileProblem.value = error instanceof Error && error.message ? error.message : 'This file couldn\'t be opened as a PDF.'
+      return error instanceof Error && error.message ? error.message : 'This file couldn\'t be opened as a PDF.'
     }
-    finally {
-      reading.value = false
-    }
-    return
   }
-  file.value = { name: chosen.name, text: await chosen.text() }
+  const f: Chosen = { name: chosen.name, text: await chosen.text(), flipNote: false }
   // A card's export that shows charges as positive: most rows would be money in.
-  const first = statement.value
-  if (first && !('problem' in first) && first.mapping && account.value && isLiability(account.value.kind)) {
+  const first = readFile(f)
+  if (!('problem' in first) && first.mapping && liability.value) {
     const positive = first.rows.filter(r => r.amount_cents > 0).length
     if (positive > first.rows.length / 2) {
-      mapping.value = { ...first.mapping, flip: true }
-      flipNote.value = true
+      f.mapping = { ...first.mapping, flip: true }
+      f.flipNote = true
     }
   }
+  return f
 }
 
-// Editing a column starts from the columns in use.
+async function choose(event: Event) {
+  const chosen = [...((event.target as HTMLInputElement).files ?? [])]
+  results.value = []
+  files.value = []
+  fileProblems.value = []
+  pdfFlip.value = false
+  if (!chosen.length) return
+  reading.value = chosen.some(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
+  const taken: Chosen[] = []
+  const problems: string[] = []
+  try {
+    for (const f of chosen) {
+      const t = await take(f)
+      if (typeof t === 'string') problems.push(chosen.length > 1 ? `${f.name}: ${t}` : t)
+      else taken.push(t)
+    }
+  }
+  finally {
+    reading.value = false
+  }
+  files.value = taken
+  fileProblems.value = problems
+}
+
+// Editing a column starts from the columns in use; only with one file chosen.
 function setMapping(change: Partial<CsvMapping>) {
-  if (!read.value?.mapping) return
-  mapping.value = { ...read.value.mapping, ...change }
+  const f = files.value[0]
+  if (several.value || !f || !read.value?.mapping) return
+  f.mapping = { ...read.value.mapping, ...change }
 }
 const columnChoice = (key: 'date' | 'description' | 'amount' | 'debit' | 'credit') => ({
   get: () => read.value?.mapping?.[key] ?? -1,
@@ -103,30 +130,53 @@ const creditCol = computed(columnChoice('credit'))
 const dateOrder = computed({ get: () => read.value?.mapping?.dateOrder ?? 'mdy', set: v => setMapping({ dateOrder: v }) })
 const flip = computed({ get: () => read.value?.mapping?.flip ?? false, set: v => setMapping({ flip: v }) })
 
-const send = useAction()
-async function importFile() {
-  if (!file.value || !account.value) return
-  const r = await send.run(() => $fetch<{ import: Import, unreadable: number }>('/api/imports', {
-    method: 'POST',
-    body: {
-      account: account.value!.id, filename: file.value!.name, text: file.value!.text,
-      mapping: read.value?.format === 'csv' ? read.value.mapping : undefined,
-      flip: read.value?.format === 'pdf' ? pdfFlip.value : undefined,
-    },
-  }))
-  if (!r) return
-  result.value = r
-  file.value = null
-  if (input.value) input.value.value = ''
+// Each file is its own import, so each can be undone on its own. One that
+// fails doesn't stop the rest.
+const sending = ref(false)
+async function importFiles() {
+  if (!readable.value.length || !account.value) return
+  sending.value = true
+  const done: Result[] = []
+  try {
+    for (const { file: f, read: r } of readable.value) {
+      try {
+        const answer = await $fetch<{ import: Import, unreadable: number }>('/api/imports', {
+          method: 'POST',
+          body: {
+            account: account.value.id, filename: f.name, text: f.text,
+            mapping: r.format === 'csv' ? r.mapping : undefined,
+            flip: r.format === 'pdf' ? pdfFlip.value : undefined,
+          },
+        })
+        done.push({ name: f.name, ...answer })
+      }
+      catch (error) {
+        done.push({ name: f.name, error: errorMessage(error) })
+      }
+    }
+  }
+  finally {
+    sending.value = false
+  }
+  results.value = done
+  // What didn't import stays chosen, to try again.
+  const failed = new Set(done.filter(d => d.error).map(d => d.name))
+  files.value = files.value.filter(f => failed.has(f.name))
+  if (!files.value.length && input.value) input.value.value = ''
   await refreshHistory()
 }
+const imported = computed(() => results.value.filter(r => r.import))
+const added = computed(() => imported.value.reduce((n, r) => n + r.import!.added, 0))
+const skipped = computed(() => imported.value.reduce((n, r) => n + r.import!.skipped, 0))
+const unreadLines = computed(() => imported.value.reduce((n, r) => n + (r.unreadable ?? 0), 0))
+const failures = computed(() => results.value.filter(r => r.error))
 
 const undo = useAction()
 const undoing = ref('')
 async function undoImport(id: string) {
   undoing.value = id
   if (await undo.succeed(() => $fetch(`/api/imports/${id}`, { method: 'DELETE' }))) {
-    if (result.value?.import.id === id) result.value = null
+    results.value = results.value.filter(r => r.import?.id !== id)
     await refreshHistory()
   }
   undoing.value = ''
@@ -150,37 +200,38 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 
     <template v-else>
       <section class="group" aria-labelledby="file-title">
-        <h2 id="file-title" class="group-title">Statement file</h2>
+        <h2 id="file-title" class="group-title">Statement files</h2>
         <div class="card">
           <label class="field">
             <span class="field-label">Account</span>
-            <select v-model="accountId" class="select" @change="result = null">
+            <select v-model="accountId" class="select" @change="results = []">
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}{{ a.last4 ? ` ••${a.last4}` : '' }}</option>
             </select>
           </label>
           <label class="field">
-            <span class="field-label">PDF statement, or a CSV, OFX or QFX file</span>
-            <input ref="input" type="file" class="input file" accept=".pdf,.csv,.txt,.ofx,.qfx,.qbo,application/pdf,text/csv" @change="choose">
+            <span class="field-label">PDF statements, or CSV, OFX or QFX files</span>
+            <input ref="input" type="file" multiple class="input file" accept=".pdf,.csv,.txt,.ofx,.qfx,.qbo,application/pdf,text/csv" @change="choose">
           </label>
         </div>
         <p class="group-footer">
-          The PDF statement your bank sends each month works, as long as it isn't a scan. A download works too: on your bank's website, look for Download or Export next to your transactions, and choose CSV, or Quicken (QFX) or Money (OFX). Transactions already in the account are skipped, so overlapping dates are fine.
+          Choose one file or several, such as a year of monthly statements. The PDF statement your bank sends each month works, as long as it isn't a scan. A download works too: on your bank's website, look for Download or Export next to your transactions, and choose CSV, or Quicken (QFX) or Money (OFX). Transactions already in the account are skipped, so overlapping dates are fine.
           <template v-if="account?.linked">
             {{ account.name }} is linked to your bank, so a transaction the link already brought in, with the same amount within {{ MATCH_DAYS }} days, is skipped too.
           </template>
         </p>
       </section>
 
-      <p v-if="reading" class="notice notice-info" role="status"><span class="spinner" aria-hidden="true" /> Reading the PDF…</p>
-      <p v-if="fileProblem" class="notice notice-error" role="alert">{{ fileProblem }}</p>
-      <p v-else-if="statement && 'problem' in statement" class="notice notice-error" role="alert">{{ statement.problem }}</p>
+      <p v-if="reading" class="notice notice-info" role="status"><span class="spinner" aria-hidden="true" /> Reading…</p>
+      <p v-for="(p, i) in fileProblems" :key="`f${i}`" class="notice notice-error" role="alert">{{ p }}</p>
+      <p v-for="(u, i) in unreadable" :key="`u${i}`" class="notice notice-error" role="alert">{{ several ? `${u.name}: ` : '' }}{{ u.problem }}</p>
 
-      <section v-if="result" class="group" aria-live="polite">
-        <div class="notice notice-success stack" role="status">
+      <section v-if="results.length" class="group" aria-live="polite">
+        <p v-for="(f, i) in failures" :key="`e${i}`" class="notice notice-error" role="alert">{{ f.name }} wasn't imported: {{ f.error }}</p>
+        <div v-if="imported.length" class="notice notice-success stack" role="status">
           <p>
-            Imported {{ plural(result.import.added, 'transaction') }} into {{ account?.name }}.
-            <template v-if="result.import.skipped">{{ plural(result.import.skipped, 'was', 'were') }} already there.</template>
-            <template v-if="result.unreadable">{{ plural(result.unreadable, 'line') }} couldn't be read.</template>
+            Imported {{ plural(added, 'transaction') }} into {{ account?.name }}<template v-if="imported.length > 1"> from {{ imported.length }} files</template>.
+            <template v-if="skipped">{{ plural(skipped, 'was', 'were') }} already there.</template>
+            <template v-if="unreadLines">{{ plural(unreadLines, 'line') }} couldn't be read.</template>
           </p>
           <p class="btn-row">
             <NuxtLink :to="{ path: '/spending', query: { account: accountId } }" class="btn btn-tinted">See transactions</NuxtLink>
@@ -188,8 +239,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
         </div>
       </section>
 
-      <template v-if="read">
-        <section v-if="read.format === 'csv' && read.columns" class="group" aria-labelledby="columns-title">
+      <template v-if="readable.length">
+        <section v-if="read && read.format === 'csv' && read.columns" class="group" aria-labelledby="columns-title">
           <h2 id="columns-title" class="group-title">Columns</h2>
           <div class="card">
             <label class="field">
@@ -243,8 +294,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
           <p v-if="flipNote" class="group-footer">Most amounts in this card's file are positive, so they're read as charges. Untick this if that's wrong.</p>
         </section>
 
-        <section v-if="read.format === 'pdf'" class="group" aria-labelledby="pdf-title">
-          <h2 id="pdf-title" class="group-title">From the PDF</h2>
+        <section v-if="anyPdf" class="group" aria-labelledby="pdf-title">
+          <h2 id="pdf-title" class="group-title">{{ several ? 'From the PDFs' : 'From the PDF' }}</h2>
           <div class="card">
             <label class="field check">
               <input v-model="pdfFlip" type="checkbox">
@@ -252,7 +303,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
             </label>
           </div>
           <p class="group-footer">
-            Each line of the statement that starts with a date and ends with an amount is read as a transaction.
+            Each line of a statement that starts with a date and ends with an amount is read as a transaction.
             Check the preview against your statement: if a payment or deposit shows as money out, tick this.
           </p>
         </section>
@@ -260,21 +311,24 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
         <section class="group" aria-labelledby="preview-title">
           <h2 id="preview-title" class="group-title">Preview</h2>
           <div class="card card-pad stack">
+            <p v-if="several">
+              <span v-for="(x, i) in readable" :key="i">{{ i ? ', ' : '' }}{{ x.file.name }} ({{ plural(x.read.rows.length, 'transaction') }})</span>.
+            </p>
             <p v-if="range">
-              <strong>{{ plural(read.rows.length, 'transaction') }}</strong>,
+              <strong>{{ plural(rows.length, 'transaction') }}</strong>,
               {{ day(range.first) }} to {{ day(range.last) }}.
               <span class="muted">Out <span class="num">{{ formatCents(totals.out) }}</span>, in <span class="num">{{ formatCents(totals.into) }}</span>.</span>
             </p>
             <p v-else>No transactions could be read. Check the columns above.</p>
-            <div v-if="read.problems.length" class="notice notice-info">
-              {{ plural(read.problems.length, 'line') }} won't be imported:
-              <span v-for="(p, i) in read.problems.slice(0, 3)" :key="p.line">{{ i ? '; ' : ' ' }}line {{ p.line }}, {{ p.problem }}</span>{{ read.problems.length > 3 ? '…' : '.' }}
+            <div v-if="problems.length" class="notice notice-info">
+              {{ plural(problems.length, 'line') }} won't be imported:
+              <span v-for="(p, i) in problems.slice(0, 3)" :key="`${p.name}:${p.line}`">{{ i ? '; ' : ' ' }}{{ several ? `${p.name} ` : '' }}line {{ p.line }}, {{ p.problem }}</span>{{ problems.length > 3 ? '…' : '.' }}
             </div>
             <div class="scroll">
               <table class="preview">
                 <thead><tr><th scope="col">Date</th><th scope="col">Description</th><th scope="col" class="amt">Amount</th></tr></thead>
                 <tbody>
-                  <tr v-for="(r, i) in read.rows.slice(0, 20)" :key="i">
+                  <tr v-for="(r, i) in rows.slice(0, 20)" :key="i">
                     <td class="num nowrap">{{ r.posted }}</td>
                     <td>{{ r.description }}</td>
                     <td class="num amt" :class="moneyTone(r.amount_cents)">{{ formatCents(r.amount_cents) }}</td>
@@ -282,13 +336,12 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
                 </tbody>
               </table>
             </div>
-            <p v-if="read.rows.length > 20" class="footnote">And {{ plural(read.rows.length - 20, 'more', 'more') }}.</p>
+            <p v-if="rows.length > 20" class="footnote">And {{ plural(rows.length - 20, 'more', 'more') }}.</p>
             <div class="btn-row">
-              <button class="btn btn-primary" :disabled="send.busy.value || !read.rows.length" @click="importFile">
-                <span v-if="send.busy.value" class="spinner" aria-hidden="true" /> Import {{ plural(read.rows.length, 'transaction') }}
+              <button class="btn btn-primary" :disabled="sending || !rows.length" @click="importFiles">
+                <span v-if="sending" class="spinner" aria-hidden="true" /> Import {{ plural(rows.length, 'transaction') }}<template v-if="several"> from {{ readable.length }} files</template>
               </button>
             </div>
-            <p v-if="send.error.value" class="notice notice-error" role="alert">{{ send.error.value }}</p>
           </div>
         </section>
       </template>
