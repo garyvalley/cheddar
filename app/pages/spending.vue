@@ -169,7 +169,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
           </div>
           <div v-else class="card card-pad tight">
             <h2 id="cat-title" class="title-2">{{ label(category) }}</h2>
-            <p class="num title-3 total">{{ formatCents(current?.total_cents ?? 0) }}</p>
+            <p class="num title-3 total" :class="current?.spending ? spendTone(current.total_cents) : moneyTone(current?.total_cents ?? 0)">{{ formatCents(current?.total_cents ?? 0) }}</p>
             <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}<template v-if="viewing?.custom"> · Your own category</template></p>
             <template v-if="viewing?.custom">
               <form v-if="renaming" class="inline-form" @submit.prevent="saveRename">
@@ -208,7 +208,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
                   <span class="footnote">{{ day(t.posted) }}<template v-if="!account"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template></span>
                 </span>
                 <span class="tx-side">
-                  <span class="num amount" :class="{ income: t.amount_cents > 0 }">{{ formatCents(t.amount_cents) }}</span>
+                  <span class="num amount" :class="moneyTone(t.amount_cents)">{{ formatCents(t.amount_cents) }}</span>
                   <select
                     class="chip" :value="categoryOf(t.category, all).id" :disabled="move.busy.value"
                     :aria-label="`Category for ${t.description || 'this transaction'}`"
@@ -249,7 +249,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
         <section class="group" aria-labelledby="spent-title">
           <div class="card card-pad tight">
             <h2 id="spent-title" class="footnote">Spent in {{ period.label }}</h2>
-            <p class="num large-title">{{ formatCents(summary.spent_cents) }}</p>
+            <p class="num large-title" :class="spendTone(summary.spent_cents)">{{ formatCents(summary.spent_cents) }}</p>
             <p v-if="comparison" class="footnote">{{ comparison }}</p>
           </div>
         </section>
@@ -264,7 +264,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
             <li v-for="c in spending" :key="c.id">
               <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
                 <span class="row-label">
-                  <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num">{{ formatCents(c.total_cents) }}</span></span>
+                  <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="spendTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
                   <span class="bar" aria-hidden="true"><span class="bar-fill" :style="{ width: share(c.total_cents) }" /></span>
                   <span class="footnote">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
                 </span>
@@ -293,7 +293,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
             <li v-for="c in notSpending" :key="c.id">
               <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
                 <span class="row-label">
-                  <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="{ income: c.total_cents > 0 }">{{ formatCents(c.total_cents) }}</span></span>
+                  <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="moneyTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
                   <span class="footnote">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
                 </span>
                 <AppIcon name="chevron" class="chev" />
@@ -312,7 +312,6 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
 .list > li + li { border-top: 0.5px solid var(--separator); }
 .desc { overflow-wrap: anywhere; }
 .amount { white-space: nowrap; }
-.income { color: var(--success); }
 .pager { justify-content: space-between; align-items: center; margin-top: 0.5rem; }
 
 .period { justify-content: space-between; flex-wrap: wrap; }
@@ -325,7 +324,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
 .cat-head { display: flex; justify-content: space-between; gap: 0.75rem; }
 .cat-name { min-width: 0; overflow-wrap: anywhere; }
 .bar { display: block; height: 6px; margin: 0.375rem 0 0.25rem; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
-.bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--loss); }
 .chev { color: var(--text-3); flex: none; }
 
 .back-link { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0 0 0.5rem 0.5rem; min-height: 2.75rem; }

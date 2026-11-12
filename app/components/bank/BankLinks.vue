@@ -174,7 +174,7 @@ function when(pb: string) {
           <span class="row-label">
             {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
           </span>
-          <span class="row-value num">{{ formatCents(a.balance_cents) }}</span>
+          <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
         </div>
         <p v-if="l.message" class="field footnote" :class="{ warn: l.status !== 'ok' }">{{ l.message }}</p>
         <div v-if="removingId === l.id" class="field stack">

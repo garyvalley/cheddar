@@ -94,7 +94,7 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
             </span>
             <button class="btn btn-plain balance" :aria-label="`Set the balance of ${a.name}`" @click="startBalance(a)">
               <template v-if="a.balance_cents !== null">
-                <span class="num block">{{ formatCents(a.balance_cents) }}</span>
+                <span class="num block" :class="moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
                 <span class="footnote">as of {{ asOf(a.balance_date) }}</span>
               </template>
               <template v-else>Set balance</template>

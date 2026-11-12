@@ -232,7 +232,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
                   <tr v-for="(r, i) in read.rows.slice(0, 20)" :key="i">
                     <td class="num nowrap">{{ r.posted }}</td>
                     <td>{{ r.description }}</td>
-                    <td class="num amt" :class="{ income: r.amount_cents > 0 }">{{ formatCents(r.amount_cents) }}</td>
+                    <td class="num amt" :class="moneyTone(r.amount_cents)">{{ formatCents(r.amount_cents) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -282,6 +282,5 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 .preview td { padding: 0.375rem 0.5rem 0.375rem 0; border-top: 0.5px solid var(--separator); vertical-align: top; }
 .amt { text-align: right; white-space: nowrap; padding-right: 0 !important; }
 .nowrap { white-space: nowrap; }
-.income { color: var(--success); }
 .name { overflow-wrap: anywhere; }
 </style>
