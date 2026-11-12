@@ -138,6 +138,48 @@ describe('a card statement', () => {
   })
 })
 
+describe('a Wells Fargo card statement', () => {
+  // Its layout, with made-up rows: the card's last four digits before the
+  // dates, a reference number before the description, credits and charges
+  // in sections, and foreign purchases with a conversion line under them.
+  test('reads every charge and credit, matching the statement\'s totals', async () => {
+    const line = (card, trans, post, ref, text, amount) => [[40, card], [80, trans], [115, post], [150, ref], [260, text], [520, amount]]
+    const text = await textOf([rows(740, [
+      [[40, 'Statement Period 09/18/2026 to 10/18/2026']],
+      [[40, 'Payment Due Date'], [200, '11/12/2026']],
+      [[40, '- Payments'], [200, '$500.00'], [300, 'Cash Advance Limit'], [450, '$5,000']],
+      [[40, '+ Purchases, Balance Transfers &'], [200, '$1,390.12']],
+      [[40, 'Card'], [80, 'Trans'], [115, 'Post'], [150, 'Reference Number'], [260, 'Description'], [460, 'Credits'], [520, 'Charges']],
+      [[40, 'Payments']],
+      [[80, '10/09'], [115, '10/09'], [150, '1111111AA1AAAAA1A'], [260, 'ONLINE ACH PAYMENT THANK YOU'], [460, '500.00']],
+      [[40, 'TOTAL PAYMENTS FOR THIS PERIOD'], [460, '$500.00']],
+      [[40, 'Other Credits']],
+      line('1234', '09/21', '09/22', '2222222BB2BBBBB2B', 'CASH BACK REDEMPTION REF 100000001', '100.00'),
+      [[40, 'Purchases, Balance Transfers & Other Charges']],
+      line('1234', '09/17', '09/18', '3333333CC3CCCCC3C', 'NOODLE BAR SPRINGFIELD OR', '31.50'),
+      line('1234', '09/19', '09/19', '4444444DD4DDDDD4D', 'HARDWARE BARN SPRINGFIELD OR', '1,250.00'),
+      line('1234', '10/08', '10/08', '5555555EE5EEEEE5E', 'TEA ROOM LONDON GB', '18.75'),
+      [[40, '-'], [80, '10/08'], [260, 'GB POUND STERLNG']],
+      [[40, '-'], [80, '10/08'], [260, '14.00 X  1.33928571']],
+      line('1234', '10/17', '10/17', '6666666FF6FFFFF6F', 'CORNER CAFE 555-0100 OR', '89.87'),
+      [[40, 'TOTAL PURCHASES, BALANCE TRANSFERS & OTHER CHARGES FOR THIS PERIOD'], [520, '$1,390.12']],
+      [[40, 'Interest Charged']],
+      [[40, 'INTEREST CHARGE ON PURCHASES'], [520, '0.00']],
+    ])])
+    const read = readStatement('card.pdf', text, undefined, { liability: true })
+    assert.deepEqual(read.problems, [])
+    assert.deepEqual(read.rows.map(brief), [
+      ['2026-10-09', 'ONLINE ACH PAYMENT THANK YOU', 50000],
+      ['2026-09-21', 'CASH BACK REDEMPTION REF 100000001', 10000],
+      ['2026-09-17', 'NOODLE BAR SPRINGFIELD OR', -3150],
+      ['2026-09-19', 'HARDWARE BARN SPRINGFIELD OR', -125000],
+      ['2026-10-08', 'TEA ROOM LONDON GB', -1875],
+      ['2026-10-17', 'CORNER CAFE 555-0100 OR', -8987],
+    ])
+    assert.equal(read.rows.filter(r => r.amount_cents < 0).reduce((t, r) => t + r.amount_cents, 0), -139012)
+  })
+})
+
 describe('what isn\'t a statement', () => {
   test('a PDF with no dated lines says so, and so does one whose text never arrived', async () => {
     const text = await textOf([rows(720, [[[50, 'Thank you for banking with us.']]])])

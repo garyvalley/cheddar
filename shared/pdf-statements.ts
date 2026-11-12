@@ -112,8 +112,12 @@ export interface PdfOptions {
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?'
 
-/** A date at the start of a transaction line: 11/05, 11/05/26, 11/05/2026, 11-05, Nov 5, Nov 5, 2026, 5 Nov. */
-const LEAD_DATE = new RegExp(`^(\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?|${MONTH} \\d{1,2}(?:,? \\d{4})?|\\d{1,2} ${MONTH}(?: \\d{4})?)(?=\\s)`, 'i')
+/**
+ * A date at the start of a transaction line: 11/05, 11/05/26, 11/05/2026,
+ * 11-05, Nov 5, Nov 5, 2026, 5 Nov. A card's last four digits may come
+ * first, as on Wells Fargo's statements ("1234  09/17  09/18 …").
+ */
+const LEAD_DATE = new RegExp(`^(?:\\d{4}\\s+)?(\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?|${MONTH} \\d{1,2}(?:,? \\d{4})?|\\d{1,2} ${MONTH}(?: \\d{4})?)(?=\\s)`, 'i')
 /** An amount as statements print it: always with cents, maybe a sign, $, parentheses, or CR/DR. */
 const AMOUNT = '(?:\\(\\s*-?\\$?\\s?\\d{1,3}(?:,\\d{3})*\\.\\d{2}\\s*\\)|[-+]?\\s?\\$?\\s?-?\\d{1,3}(?:,\\d{3})*\\.\\d{2}(?:-|\\s?(?:CR|DR)\\b)?)'
 const TRAILING_AMOUNTS = new RegExp(`\\s+(${AMOUNT})(?:\\s+(${AMOUNT}))?\\s*$`, 'i')
@@ -251,6 +255,9 @@ export function readPdfText(text: string, options: PdfOptions = {}): { rows: Sta
     // A second date (the day it posted, next to the day of the purchase) belongs to neither.
     const second = LEAD_DATE.exec(`${description} `)
     if (second && placeDate(second[1]!, known, today)) description = description.slice(second[0].length).trim()
+    // So does the bank's reference number before the description ("1234567AB1CDEFG2H").
+    const reference = /^(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])[A-Z0-9]{12,}\s+(?=\S)/.exec(description)
+    if (reference) description = description.slice(reference[0].length)
     if (NOT_A_TRANSACTION.test(description) || !description) {
       if (BALANCE_LINE.test(description)) {
         const b = printed(tail[2] ?? tail[1]!)
