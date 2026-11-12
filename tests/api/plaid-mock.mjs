@@ -38,7 +38,7 @@ export function sampleBank() {
 
 export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8097) } = {}) {
   const publicTokens = new Map() // public_token -> bank, until exchanged
-  const items = new Map() // access_token -> { bank, itemId, removed }
+  const items = new Map() // access_token -> { bank, itemId, removed, removals }
 
   function answer(res, status, json) {
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(json))
@@ -64,12 +64,13 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
       if (!bank) return error(res, 'INVALID_PUBLIC_TOKEN')
       publicTokens.delete(body.public_token)
       const access = `access-sandbox-${id()}`
-      items.set(access, { bank, itemId: `item-${id()}`, removed: false })
+      items.set(access, { bank, itemId: `item-${id()}`, removed: false, removals: 0 })
       bank.access = access
       return answer(res, 200, { access_token: access, item_id: items.get(access).itemId, request_id: id() })
     }
 
     const item = items.get(body.access_token)
+    if (item && req.url === '/item/remove') item.removals++
     if (!item || item.removed) return error(res, 'INVALID_ACCESS_TOKEN')
     item.bank.calls.push({ path: req.url, cursor: body.cursor ?? null })
     if (item.bank.status) return error(res, item.bank.status)
@@ -108,6 +109,8 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
     },
     /** Whether Plaid was told to forget the bank's access. */
     removed: bank => !!items.get(bank.access)?.removed,
+    /** How many times Plaid was asked to forget it, the first time included. */
+    removals: bank => items.get(bank.access)?.removals ?? 0,
     close: () => new Promise(resolve => server.close(resolve)),
   }
 }

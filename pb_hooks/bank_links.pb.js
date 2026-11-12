@@ -36,6 +36,16 @@ onRecordUpdateRequest((e) => {
   e.next()
 }, "accounts")
 
+// However a link's row goes -- unlinking, the cascade when its owner deletes
+// their account, or a superuser in the admin UI -- Plaid is told to forget it.
+// After the delete commits, so a cascade never waits on Plaid inside its
+// transaction, and a delete that fails leaves the link working.
+onRecordAfterDeleteSuccess((e) => {
+  var glue = require(`${__hooks}/glue/plaid.js`)
+  glue.forget(e.record)
+  e.next()
+}, "bank_links")
+
 routerAdd("GET", "/api/bank-links", (e) => {
   var glue = require(`${__hooks}/glue/plaid.js`)
   var plaid = require(`${__hooks}/lib/plaid.js`)

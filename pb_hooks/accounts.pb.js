@@ -5,7 +5,8 @@
 //
 // The users collection's delete rule is closed, so this route, which asks for
 // the password, is the only way: a stolen session alone can't destroy
-// someone's records. Everything the account owns cascades with it.
+// someone's records. Everything the account owns cascades with it; each
+// bank link that goes tells Plaid to forget it (bank_links.pb.js).
 // ---------------------------------------------------------------------------
 
 routerAdd("POST", "/api/delete-account", (e) => {
