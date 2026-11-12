@@ -13,7 +13,6 @@ const { data: pj, error } = await useFetch<Projections>('/api/projections')
 const today = localToday()
 
 const signed = (cents: number) => (cents > 0 ? `+${formatCents(cents)}` : formatCents(cents))
-const tone = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : '')
 const percent = (rate: number) => `${rate < 0 ? '−' : ''}${Math.abs(rate * 100).toFixed(Math.abs(rate) < 0.1 ? 1 : 0)}%`
 const whole = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100)
 const compact = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100)
@@ -112,18 +111,18 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
       <h2 id="rate-title" class="group-title">Savings rate</h2>
       <div v-if="sv && sv.months_counted" class="card">
         <div class="card-pad hero">
-          <p class="num large-title" :class="tone(sv.kept_cents)" data-test="savings-rate">{{ sv.rate === null ? '—' : percent(sv.rate) }}</p>
+          <p class="num large-title" :class="moneyTone(sv.kept_cents)" data-test="savings-rate">{{ sv.rate === null ? '—' : percent(sv.rate) }}</p>
           <p class="footnote">
             of your income kept, on average over the last {{ sv.months_counted === 1 ? 'month' : `${sv.months_counted} months` }}
           </p>
         </div>
         <div class="card-pad">
           <dl class="figures">
-            <div><dt>Income</dt><dd class="num">{{ formatCents(sv.income_cents) }}</dd></div>
-            <div><dt>Spending</dt><dd class="num">{{ formatCents(sv.spent_cents) }}</dd></div>
+            <div><dt>Income</dt><dd class="num" :class="moneyTone(sv.income_cents)">{{ formatCents(sv.income_cents) }}</dd></div>
+            <div><dt>Spending</dt><dd class="num" :class="spendTone(sv.spent_cents)">{{ formatCents(sv.spent_cents) }}</dd></div>
             <div>
               <dt>{{ sv.kept_cents >= 0 ? 'Kept' : 'Over' }}</dt>
-              <dd class="num" :class="tone(sv.kept_cents)">{{ formatCents(Math.abs(sv.kept_cents)) }}</dd>
+              <dd class="num" :class="moneyTone(sv.kept_cents)">{{ formatCents(Math.abs(sv.kept_cents)) }}</dd>
             </div>
           </dl>
           <p class="footnote muted">A month, on average.</p>
@@ -156,7 +155,7 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
       <h2 id="future-title" class="group-title">Where it takes you</h2>
       <div class="card">
         <div class="card-pad hero">
-          <p class="num large-title" data-test="projected">{{ whole(end.balance_cents) }}</p>
+          <p class="num large-title" :class="moneyTone(end.balance_cents)" data-test="projected">{{ whole(end.balance_cents) }}</p>
           <p class="footnote">
             in your investments by {{ startYear + years }}, in today's dollars<template v-if="end.balance_cents > 0">.
               At {{ WITHDRAWAL_RATE * 100 }}% a year that's about <strong class="num">{{ whole(end.balance_cents * WITHDRAWAL_RATE / 12) }}</strong> a month.</template>
@@ -186,9 +185,9 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
             </div>
           </div>
           <dl class="figures">
-            <div><dt>Invested now</dt><dd class="num">{{ whole(pj?.invested_cents ?? 0) }}</dd></div>
-            <div><dt>Put in</dt><dd class="num">{{ whole(end.put_in_cents) }}</dd></div>
-            <div><dt>Growth</dt><dd class="num" :class="tone(end.balance_cents - end.put_in_cents)">{{ whole(end.balance_cents - end.put_in_cents) }}</dd></div>
+            <div><dt>Invested now</dt><dd class="num" :class="moneyTone(pj?.invested_cents ?? 0)">{{ whole(pj?.invested_cents ?? 0) }}</dd></div>
+            <div><dt>Put in</dt><dd class="num" :class="moneyTone(end.put_in_cents)">{{ whole(end.put_in_cents) }}</dd></div>
+            <div><dt>Growth</dt><dd class="num" :class="moneyTone(end.balance_cents - end.put_in_cents)">{{ whole(end.balance_cents - end.put_in_cents) }}</dd></div>
           </dl>
           <table class="visually-hidden">
             <caption>Projected investments by year</caption>
@@ -233,7 +232,7 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
       <div v-if="plans.length" class="card">
         <div class="card-pad hero">
           <p v-if="debtFree" class="num large-title" data-test="debt-free">{{ monthName(debtFree, true) }}</p>
-          <p v-else class="num large-title down" data-test="debt-free">Not yet</p>
+          <p v-else class="num large-title loss" data-test="debt-free">Not yet</p>
           <p class="footnote">
             <template v-if="debtFree">is when you're debt free at this pace, from {{ formatCents(plans.reduce((s, p) => s + p.d.owed_cents, 0)) }} owed today.</template>
             <template v-else>At this pace, not everything gets paid off. The debts below say which.</template>
@@ -250,9 +249,9 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
               </span>
             </span>
             <span class="row-value">
-              <span class="num block owed">{{ formatCents(-p.d.owed_cents) }}</span>
-              <span v-if="p.plan" class="footnote up">Paid off {{ monthName(p.when) }}</span>
-              <span v-else class="footnote down">{{ p.payment > 0 ? 'Doesn\'t outrun the interest' : 'Not shrinking' }}</span>
+              <span class="num block loss">{{ formatCents(-p.d.owed_cents) }}</span>
+              <span v-if="p.plan" class="footnote gain">Paid off {{ monthName(p.when) }}</span>
+              <span v-else class="footnote loss">{{ p.payment > 0 ? 'Doesn\'t outrun the interest' : 'Not shrinking' }}</span>
             </span>
           </div>
           <details class="debt-more">
@@ -296,9 +295,6 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
 <style scoped>
 .hero { border-bottom: 0.5px solid var(--separator); }
 .hero .large-title { margin: 0 0 0.25rem; }
-.up { color: var(--success); }
-.down { color: var(--critical); }
-.owed { color: var(--text); }
 .sub { margin-top: 1rem; }
 
 .figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0 0 0.25rem; }
@@ -312,14 +308,14 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
 .down-half { align-items: flex-start; }
 .kept-zero { border-top: 0.5px solid var(--text-3); }
 .kept-bar { width: min(1.25rem, 60%); }
-.up-bar { background: var(--success); border-radius: 3px 3px 0 0; }
-.down-bar { background: var(--critical); border-radius: 0 0 3px 3px; }
+.up-bar { background: var(--gain); border-radius: 3px 3px 0 0; }
+.down-bar { background: var(--loss); border-radius: 0 0 3px 3px; }
 .kept-label { font-size: 0.6875rem; color: var(--text-3); text-align: center; margin-top: 0.25rem; }
 
-/* The projection follows the theme's accent: worth filled, what was put in a dashed line. */
+/* The projection is money held, so it is the gain green in every theme: worth filled, what was put in a dashed line. */
 .legend { display: flex; gap: 1rem; font-size: 0.8125rem; color: var(--text-2); margin-bottom: 0.75rem; }
 .key { display: inline-block; width: 0.625rem; height: 0.625rem; border-radius: 3px; margin-right: 0.25rem; vertical-align: -0.05rem; }
-.key.worth { background: var(--accent); }
+.key.worth { background: var(--gain); }
 .key.put { background: var(--text-3); }
 .chart { display: flex; gap: 0.5rem; height: 11rem; margin-bottom: 1rem; }
 .axis {
@@ -332,8 +328,8 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
 .grid i { border-top: 0.5px solid var(--separator); }
 .grid i:last-child { border-top-color: var(--text-3); }
 .svg { position: relative; flex: 1; width: 100%; height: calc(100% - 1.375rem); overflow: visible; }
-.worth-area { fill: color-mix(in oklab, var(--accent) 22%, transparent); }
-.worth-line { fill: none; stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.worth-area { fill: color-mix(in oklab, var(--gain) 22%, transparent); }
+.worth-line { fill: none; stroke: var(--gain); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .put-line { fill: none; stroke: var(--text-3); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .years { height: 1.375rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.6875rem; color: var(--text-3); }
 

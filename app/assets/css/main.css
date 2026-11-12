@@ -11,8 +11,15 @@
  * the device. Their colour theme is data-theme on <html>: violet is the
  * default, cheddar the original orange on warm greys, and blue, rose
  * and mint each tint the greys toward their accent. Rose and mint sit
- * away from the loss red and gain green in hue, so money still reads. Red and green (losses,
- * gains) are the same in both. Every text pairing keeps 4.5:1 or more.
+ * away from the loss red and gain green in hue, so money still reads.
+ * Every text pairing keeps 4.5:1 or more.
+ *
+ * Money has its own two colours, the same in every theme: --gain (green)
+ * for what a person has or gets (assets, income, growth, money in) and
+ * --loss (red) for what they owe or pay (debts, spending, losses, tax,
+ * money out). Pages use them through .gain and .loss, or moneyTone() for
+ * a signed amount (app/utils/money.ts). No theme block may set either;
+ * tests/money-colors.test.mjs checks that and their contrast.
  */
 :root {
   color-scheme: light dark;
@@ -34,6 +41,8 @@
   --swatch-rose: light-dark(#b8326a, #ff9cc2);
   --swatch-mint: light-dark(#0b7468, #5fd4c2);
   --success: light-dark(#1e7a3c, #5ccf7f);
+  --gain: light-dark(#1e7a3c, #5ccf7f);        /* money: assets, income, gains */
+  --loss: light-dark(#b3261e, #ff8a80);        /* money: debts, spending, losses */
   --warning: light-dark(#8a5a00, #e8b54a);
   --critical: light-dark(#b3261e, #ff8a80);
   --on-critical: light-dark(#ffffff, #1b1a20);
@@ -232,3 +241,11 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .muted { color: var(--text-2); }
 .center { text-align: center; }
 .block { display: block; }
+
+/*
+ * Money that is held or gained, and money that is owed or spent: the same
+ * green and red in every theme. Last in the file, so they win over a text
+ * style (.footnote, .muted) on the same element.
+ */
+.gain { color: var(--gain); }
+.loss { color: var(--loss); }

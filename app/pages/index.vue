@@ -31,7 +31,6 @@ const greeting = computed(() => (me.value?.name ? `Hi, ${me.value.name.split(' '
 
 const day = (date: string, year = false) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' })
 const signed = (cents: number) => (cents > 0 ? `+${formatCents(cents)}` : formatCents(cents))
-const tone = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : '')
 
 // Net worth
 const worth = computed(() => ov.value?.net_worth)
@@ -82,9 +81,9 @@ const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Ma
       <h2 id="worth-title" class="group-title">Net worth</h2>
       <div v-if="worth && hasBalances" class="card">
         <div class="card-pad hero">
-          <p class="num large-title" data-test="net-worth">{{ formatCents(worth.total_cents) }}</p>
+          <p class="num large-title" :class="moneyTone(worth.total_cents)" data-test="net-worth">{{ formatCents(worth.total_cents) }}</p>
           <p v-if="ov?.change" class="footnote">
-            <span class="num change" :class="tone(ov.change.change_cents)">{{ signed(ov.change.change_cents) }}</span>
+            <span class="num change" :class="moneyTone(ov.change.change_cents)">{{ signed(ov.change.change_cents) }}</span>
             since {{ day(ov.change.since) }}
           </p>
           <p v-else class="footnote">As of {{ day(worth.as_of, true) }}</p>
@@ -94,7 +93,7 @@ const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Ma
             <span class="block">{{ g.label }}</span>
             <span class="footnote">{{ g.count }} {{ g.count === 1 ? 'account' : 'accounts' }}</span>
           </span>
-          <span class="num" :class="{ owed: g.total_cents < 0 }">{{ formatCents(g.total_cents) }}</span>
+          <span class="num" :class="moneyTone(g.total_cents)">{{ formatCents(g.total_cents) }}</span>
         </div>
       </div>
       <div v-else class="card card-pad stack">
@@ -140,11 +139,11 @@ const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Ma
             <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
           </select>
           <dl class="figures">
-            <div><dt>Income</dt><dd class="num">{{ formatCents(shown.income_cents) }}</dd></div>
-            <div><dt>Spending</dt><dd class="num">{{ formatCents(shown.spent_cents) }}</dd></div>
+            <div><dt>Income</dt><dd class="num" :class="moneyTone(shown.income_cents)">{{ formatCents(shown.income_cents) }}</dd></div>
+            <div><dt>Spending</dt><dd class="num" :class="spendTone(shown.spent_cents)">{{ formatCents(shown.spent_cents) }}</dd></div>
             <div>
               <dt>{{ shown.income_cents >= shown.spent_cents ? 'Kept' : 'Over' }}</dt>
-              <dd class="num" :class="tone(shown.income_cents - shown.spent_cents)">{{ formatCents(Math.abs(shown.income_cents - shown.spent_cents)) }}</dd>
+              <dd class="num" :class="moneyTone(shown.income_cents - shown.spent_cents)">{{ formatCents(Math.abs(shown.income_cents - shown.spent_cents)) }}</dd>
             </div>
           </dl>
           <NuxtLink :to="{ path: '/spending', query: { at: shown.month } }" class="footnote">See {{ monthName(shown.month).split(' ')[0] }}'s spending by category</NuxtLink>
@@ -173,9 +172,9 @@ const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Ma
             </div>
           </div>
           <div v-if="grown && grown.rate !== null" class="card-pad hero">
-            <p class="num large-title" :class="tone(grown.gain_cents)" data-test="growth">{{ percent(grown.rate) }}</p>
+            <p class="num large-title" :class="moneyTone(grown.gain_cents)" data-test="growth">{{ percent(grown.rate) }}</p>
             <p class="footnote">
-              <span class="num change" :class="tone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span>
+              <span class="num change" :class="moneyTone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span>
               since {{ day(grown.since, true) }}, on {{ formatCents(grown.start_cents) }}
             </p>
             <p v-if="grown.added_cents" class="footnote">
@@ -212,13 +211,10 @@ const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Ma
 
 .hero { border-bottom: 0.5px solid var(--separator); }
 .hero .large-title { margin: 0 0 0.25rem; }
-.up { color: var(--success); }
-.down { color: var(--critical); }
 .change { font-weight: 600; }
-.owed { color: var(--text-2); }
 
-/* The chart's two series follow the theme's accent: income in full, spending a lighter step of it. */
-.chart, .legend { --income: var(--accent); --spent: color-mix(in oklab, var(--accent) 45%, var(--surface)); }
+/* The chart's two series are money's colours, whatever the theme: income green, spending red. */
+.chart, .legend { --income: var(--gain); --spent: var(--loss); }
 .legend { display: flex; gap: 1rem; font-size: 0.8125rem; color: var(--text-2); margin-bottom: 0.75rem; }
 .key { display: inline-block; width: 0.625rem; height: 0.625rem; border-radius: 3px; margin-right: 0.25rem; vertical-align: -0.05rem; }
 .key.income { background: var(--income); }

@@ -64,20 +64,20 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
             <span class="block">Income</span>
             <span class="footnote">Since {{ day(ty.from) }}</span>
           </span>
-          <span class="num up" data-test="ytd-income">{{ formatCents(ty.income_cents) }}</span>
+          <span class="num gain" data-test="ytd-income">{{ formatCents(ty.income_cents) }}</span>
         </div>
         <div class="row">
           <span class="row-label">
             <span class="block">Tax payments</span>
             <span class="footnote">Estimated payments and amounts due, not payroll withholding</span>
           </span>
-          <span class="num" :class="{ down: ty.tax_paid_cents > 0 }">{{ ty.tax_paid_cents > 0 ? formatCents(-ty.tax_paid_cents) : formatCents(0) }}</span>
+          <span class="num" :class="moneyTone(-ty.tax_paid_cents)">{{ ty.tax_paid_cents > 0 ? formatCents(-ty.tax_paid_cents) : formatCents(0) }}</span>
         </div>
         <div v-if="ty.has_retirement" class="row">
           <span class="row-label">
             <span class="block">Moved into retirement accounts</span>
           </span>
-          <span class="num">{{ formatCents(ty.retirement_in_cents) }}</span>
+          <span class="num" :class="moneyTone(ty.retirement_in_cents)">{{ formatCents(ty.retirement_in_cents) }}</span>
         </div>
       </div>
       <div v-else class="card card-pad">
@@ -89,7 +89,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
       <h2 id="est-title" class="group-title">Federal estimate</h2>
       <div class="card">
         <div class="card-pad hero">
-          <p class="num large-title" data-test="federal-tax">{{ whole(est.tax_cents) }}</p>
+          <p class="num large-title" :class="moneyTone(-est.tax_cents)" data-test="federal-tax">{{ whole(est.tax_cents) }}</p>
           <p class="footnote">
             {{ pct(est.effective) }} of your income overall, and {{ est.marginal }}% on your next dollar, filing {{ statusLabel }}.
           </p>
@@ -109,11 +109,11 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
         </label>
         <div class="row">
           <span class="row-label">Income</span>
-          <span class="num">{{ whole(est.income_cents) }}</span>
+          <span class="num" :class="moneyTone(est.income_cents)">{{ whole(est.income_cents) }}</span>
         </div>
         <div class="row">
           <span class="row-label">Standard deduction</span>
-          <span class="num up">−{{ whole(est.deduction_cents) }}</span>
+          <span class="num gain">−{{ whole(est.deduction_cents) }}</span>
         </div>
         <div class="row">
           <span class="row-label">Taxable income</span>
@@ -121,7 +121,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
         </div>
         <div class="row">
           <span class="row-label"><strong>Federal income tax</strong></span>
-          <span class="num down"><strong>{{ whole(est.tax_cents) }}</strong></span>
+          <span class="num loss"><strong>{{ whole(est.tax_cents) }}</strong></span>
         </div>
       </div>
       <p class="group-footer">
@@ -142,7 +142,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
               <template v-if="b.current && est.to_next_cents !== null"> · {{ whole(est.to_next_cents) }} until {{ bars[bars.indexOf(b) + 1]!.rate }}%</template>
             </span>
           </span>
-          <span class="num tax" :class="{ muted: !b.tax_cents }">{{ whole(b.tax_cents) }}</span>
+          <span class="num tax" :class="b.tax_cents ? 'loss' : 'muted'">{{ whole(b.tax_cents) }}</span>
         </div>
       </div>
       <p class="group-footer">
@@ -154,18 +154,18 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
       <h2 id="state-title" class="group-title">{{ state.name }} estimate</h2>
       <div v-if="stateEst" class="card">
         <div class="card-pad hero">
-          <p class="num large-title" data-test="state-tax">{{ whole(stateEst.tax_cents) }}</p>
+          <p class="num large-title" :class="moneyTone(-stateEst.tax_cents)" data-test="state-tax">{{ whole(stateEst.tax_cents) }}</p>
           <p class="footnote">
             {{ pct(stateEst.effective) }} of your income overall, and {{ stateEst.marginal }}% on your next dollar.
           </p>
         </div>
         <div class="row">
           <span class="row-label">Income</span>
-          <span class="num">{{ whole(stateEst.income_cents) }}</span>
+          <span class="num" :class="moneyTone(stateEst.income_cents)">{{ whole(stateEst.income_cents) }}</span>
         </div>
         <div v-if="stateEst.deduction_cents" class="row">
           <span class="row-label">Deductions and exemptions</span>
-          <span class="num up">−{{ whole(stateEst.deduction_cents) }}</span>
+          <span class="num gain">−{{ whole(stateEst.deduction_cents) }}</span>
         </div>
         <div class="row">
           <span class="row-label">Taxable income</span>
@@ -173,15 +173,15 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
         </div>
         <div v-if="stateEst.credit_cents" class="row">
           <span class="row-label">Personal credits</span>
-          <span class="num up">−{{ whole(stateEst.credit_cents) }}</span>
+          <span class="num gain">−{{ whole(stateEst.credit_cents) }}</span>
         </div>
         <div class="row">
           <span class="row-label"><strong>{{ state.name }} income tax</strong></span>
-          <span class="num down"><strong>{{ whole(stateEst.tax_cents) }}</strong></span>
+          <span class="num loss"><strong>{{ whole(stateEst.tax_cents) }}</strong></span>
         </div>
         <div class="row">
           <span class="row-label"><strong>Federal and state together</strong></span>
-          <span class="num down" data-test="total-tax"><strong>{{ whole(est.tax_cents + stateEst.tax_cents) }}</strong></span>
+          <span class="num loss" data-test="total-tax"><strong>{{ whole(est.tax_cents + stateEst.tax_cents) }}</strong></span>
         </div>
       </div>
       <div v-else class="card card-pad">
@@ -247,8 +247,6 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
 .field .input { max-width: 14rem; margin-bottom: 0.25rem; }
 .field .footnote { display: block; }
 .link { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
-.up { color: var(--success); }
-.down { color: var(--critical); }
 
 .bracket .rate { width: 2.75rem; flex: none; font-weight: 600; color: var(--text-2); }
 .bracket.current { background: var(--accent-soft); }
