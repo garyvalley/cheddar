@@ -46,6 +46,13 @@ async function allowSync(linkId) {
   assert.equal(r.status, 200)
 }
 
+const daysAgo = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
+/** `n` days ago as a US bank's CSV writes it, 11/05/2026. */
+const usDay = (n) => {
+  const [y, m, d] = daysAgo(n).split('-')
+  return `${m}/${d}/${y}`
+}
+
 const transactions = async (c, accountId) =>
   (await pb('GET', `/api/collections/transactions/records?perPage=200&sort=posted&filter=${encodeURIComponent(`account='${accountId}'`)}`, c.token)).json.items
 
@@ -149,6 +156,59 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     const now = await all()
     assert.deepEqual(now.RENT, ['utilities', 'person'])
     assert.deepEqual(now['CAFE AGAIN'], ['entertainment', 'rule'])
+  })
+
+  test('a statement imported into a linked account adds older history and skips what the link already has', async () => {
+    const c = await person()
+    await link(c)
+    const checking = (await c.call('GET', '/api/accounts')).json.accounts.find(a => a.last4 === '0000')
+    assert.equal(checking.linked, true)
+
+    // The bank's file dates the rent two days off Plaid's, and has the payroll on Plaid's day.
+    const csv = 'Date,Description,Amount\n'
+      + `${usDay(201)},OLD RENT,-1800.00\n`
+      + `${usDay(200)},OLD PAYROLL,3200.00\n`
+      + `${usDay(45)},RENT OCTOBER,-1800.00\n`
+      + `${usDay(20)},ACME PAYROLL DIRECT DEP,3200.00\n`
+      + `${usDay(13)},RENT PAYMENT,-1800.00\n`
+    const r = await c.call('POST', '/api/imports', { account: checking.id, filename: 'history.csv', text: csv })
+    assert.equal(r.status, 201, JSON.stringify(r.json))
+    assert.deepEqual([r.json.import.added, r.json.import.skipped], [3, 2])
+    const rows = await transactions(c, checking.id)
+    assert.deepEqual(rows.map(t => [t.description, t.source]), [
+      ['OLD RENT', 'import'], ['OLD PAYROLL', 'import'], ['RENT OCTOBER', 'import'],
+      ['PAYROLL ACME', 'sync'], ['RENT', 'sync'], ['GROCER', 'sync'],
+    ])
+
+    // The same file again adds nothing.
+    const again = await c.call('POST', '/api/imports', { account: checking.id, filename: 'history.csv', text: csv })
+    assert.deepEqual([again.json.import.added, again.json.import.skipped], [0, 5])
+  })
+
+  test('a sync takes over a transaction a statement brought in first, and undoing the import keeps it', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    const checking = (await c.call('GET', '/api/accounts')).json.accounts.find(a => a.last4 === '0000')
+    const csv = 'Date,Description,Amount\n'
+      + `${usDay(3)},DINER #12,-25.00\n`
+      + `${usDay(3)},DINER #12,-25.00\n`
+    const imp = (await c.call('POST', '/api/imports', { account: checking.id, filename: 'recent.csv', text: csv })).json.import
+    assert.equal(imp.added, 2)
+
+    // Plaid learns of one of the two diners, a day later than the file says, and of a new charge.
+    bank.events.push(
+      { kind: 'added', t: { transaction_id: 't-diner', account_id: bank.accounts[0].account_id, amount: 25, date: daysAgo(2), name: 'DINER', merchant_name: 'Diner', pending: false } },
+      { kind: 'added', t: { transaction_id: 't-books', account_id: bank.accounts[0].account_id, amount: 25, date: daysAgo(12), name: 'BOOKS', merchant_name: null, pending: false } },
+    )
+    await allowSync(l.id)
+    const r = await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
+    assert.deepEqual(r.json.sync, { ok: true, added: 1, updated: 1, removed: 0 })
+    const diners = async () => (await transactions(c, checking.id)).filter(t => t.amount_cents === -2500 && t.description !== 'BOOKS')
+    assert.deepEqual((await diners()).map(t => [t.source, t.posted, t.import === '']).sort(), [['import', daysAgo(3), false], ['sync', daysAgo(2), true]])
+
+    // Undo takes away the diner only the file had, and keeps the one the bank has too.
+    assert.equal((await c.call('DELETE', `/api/imports/${imp.id}`)).status, 204)
+    assert.deepEqual((await diners()).map(t => [t.source, t.description]), [['sync', 'DINER']])
   })
 
   test('a bank that needs signing in again says so, and signing in again brings it back', async () => {

@@ -5,6 +5,7 @@ import { localToday, summarize, type Category, type SpendingSummary } from '~~/s
 import { GROWTH_PERIODS, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
 import { PACE_MONTHS, debts, invested, savings, type Projections } from '~~/shared/projections'
 import { taxYear, type TaxYear } from '~~/shared/taxes'
+import { alreadySynced, around, type Dated } from '~~/shared/overlap'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
 
@@ -161,29 +162,36 @@ export function externalIds(rows: StatementRow[]): string[] {
 const BATCH = 200 // migrations/0003: the batch API's maxRequests
 
 /**
- * Adds a statement's rows to an account, skipping each one it already has,
- * and records the import. All or nothing: if any write fails, the import is
- * deleted, which takes whatever it had added with it.
+ * Adds a statement's rows to an account, skipping each one it already has:
+ * the same file row from an earlier import, or the same transaction from the
+ * account's bank link (shared/overlap.ts). Records the import. All or
+ * nothing: if any write fails, the import is deleted, which takes whatever it
+ * had added with it.
  */
 export async function importRows(s: Session, account: string, file: { filename: string, format: StatementFormat, rows: StatementRow[] }) {
   const owner = callerId(s)
   const ids = externalIds(file.rows)
   const range = dateRange(file.rows)
   const have = new Set<string>()
+  let synced: Dated[] = []
   if (range) {
+    const span = around(range.first, range.last)
     const existing = await s.collection('transactions').getFullList({
-      fields: 'external_id',
-      filter: s.filter('account = {:account} && posted >= {:first} && posted <= {:last}', { account, ...range }),
+      fields: 'external_id,source,posted,amount_cents',
+      filter: s.filter('account = {:account} && posted >= {:from} && posted <= {:to}', { account, ...span }),
     })
     for (const r of existing) have.add(r.external_id)
+    synced = existing.filter(r => r.source === 'sync').map(r => ({ posted: r.posted, amount_cents: r.amount_cents }))
   }
-  const fresh: { row: StatementRow, id: string }[] = []
+  const candidates: { row: StatementRow, id: string }[] = []
   file.rows.forEach((row, i) => {
     const id = ids[i]!
     if (have.has(id)) return
     have.add(id) // an OFX file that repeats an id
-    fresh.push({ row, id })
+    candidates.push({ row, id })
   })
+  const fromLink = alreadySynced(candidates.map(c => c.row), synced)
+  const fresh = candidates.filter((_, i) => !fromLink[i])
 
   const record = await s.collection('imports').create({
     owner, account, filename: file.filename.slice(0, 200), format: file.format,
