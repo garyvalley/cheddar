@@ -148,13 +148,15 @@ const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Ma
           </dl>
           <NuxtLink :to="{ path: '/spending', query: { at: shown.month } }" class="footnote">See {{ monthName(shown.month).split(' ')[0] }}'s spending by category</NuxtLink>
         </div>
-        <table class="visually-hidden">
-          <caption>Income and spending by month</caption>
-          <thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead>
-          <tbody>
-            <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td></tr>
-          </tbody>
-        </table>
+        <div class="visually-hidden">
+          <table>
+            <caption>Income and spending by month</caption>
+            <thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead>
+            <tbody>
+              <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <div v-else class="card card-pad">
         <p class="footnote">Each month's income and spending shows here once your accounts have transactions from the last year.</p>

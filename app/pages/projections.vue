@@ -134,15 +134,17 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
               <span class="kept-label">{{ m.label }}</span>
             </div>
           </div>
-          <table class="visually-hidden">
-            <caption>Kept or overspent by month</caption>
-            <thead><tr><th>Month</th><th>Income</th><th>Spending</th><th>Kept</th></tr></thead>
-            <tbody>
-              <tr v-for="m in months" :key="m.month">
-                <td>{{ monthName(m.month, true) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td><td>{{ signed(m.income_cents - m.spent_cents) }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="visually-hidden">
+            <table>
+              <caption>Kept or overspent by month</caption>
+              <thead><tr><th>Month</th><th>Income</th><th>Spending</th><th>Kept</th></tr></thead>
+              <tbody>
+                <tr v-for="m in months" :key="m.month">
+                  <td>{{ monthName(m.month, true) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td><td>{{ signed(m.income_cents - m.spent_cents) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div v-else class="card card-pad">
@@ -189,13 +191,15 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
             <div><dt>Put in</dt><dd class="num" :class="moneyTone(end.put_in_cents)">{{ whole(end.put_in_cents) }}</dd></div>
             <div><dt>Growth</dt><dd class="num" :class="moneyTone(end.balance_cents - end.put_in_cents)">{{ whole(end.balance_cents - end.put_in_cents) }}</dd></div>
           </dl>
-          <table class="visually-hidden">
-            <caption>Projected investments by year</caption>
-            <thead><tr><th>Year</th><th>Worth</th><th>Put in</th></tr></thead>
-            <tbody>
-              <tr v-for="p in points" :key="p.year"><td>{{ startYear + p.year }}</td><td>{{ whole(p.balance_cents) }}</td><td>{{ whole(p.put_in_cents) }}</td></tr>
-            </tbody>
-          </table>
+          <div class="visually-hidden">
+            <table>
+              <caption>Projected investments by year</caption>
+              <thead><tr><th>Year</th><th>Worth</th><th>Put in</th></tr></thead>
+              <tbody>
+                <tr v-for="p in points" :key="p.year"><td>{{ startYear + p.year }}</td><td>{{ whole(p.balance_cents) }}</td><td>{{ whole(p.put_in_cents) }}</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <h3 class="group-title sub">Assumptions</h3>

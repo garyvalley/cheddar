@@ -153,6 +153,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .caption { font-size: 0.75rem; color: var(--text-3); }
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
+/* A table keeps its content width whatever width it is given, so a hidden table goes inside one of these (a div), never carries the class itself. */
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
