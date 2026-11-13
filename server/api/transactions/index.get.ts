@@ -1,4 +1,4 @@
-import { listTransactions } from '~~/server/data/money'
+import { listTransactions } from '~~/server/data/transactions'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**

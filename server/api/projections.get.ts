@@ -1,4 +1,4 @@
-import { projections } from '~~/server/data/money'
+import { projections } from '~~/server/data/reports/projections'
 import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 

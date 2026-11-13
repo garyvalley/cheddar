@@ -1,6 +1,6 @@
 import { isCustomId } from '~~/shared/categories'
 import { setBudget } from '~~/server/data/budgets'
-import { removeCategory } from '~~/server/data/money'
+import { removeCategory } from '~~/server/data/categories'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**

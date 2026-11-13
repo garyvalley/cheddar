@@ -1,4 +1,4 @@
-import { overview } from '~~/server/data/money'
+import { overview } from '~~/server/data/reports/overview'
 import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 

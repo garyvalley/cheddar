@@ -1,5 +1,5 @@
 import { isCategoryRef } from '~~/shared/categories'
-import { recategorize } from '~~/server/data/money'
+import { recategorize } from '~~/server/data/transactions'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**

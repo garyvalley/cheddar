@@ -1,5 +1,5 @@
 import { isCustomId } from '~~/shared/categories'
-import { renameCategory } from '~~/server/data/money'
+import { renameCategory } from '~~/server/data/categories'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** POST /api/categories/:id/rename { name }: renames one of the caller's own categories. */

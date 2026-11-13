@@ -1,6 +1,6 @@
 import { isPeriodKind, periodOf } from '~~/shared/categories'
 import { todayFor } from '~~/server/data/profile'
-import { spendingSummary } from '~~/server/data/money'
+import { spendingSummary } from '~~/server/data/reports/spending'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**

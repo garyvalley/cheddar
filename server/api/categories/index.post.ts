@@ -1,4 +1,4 @@
-import { createCategory } from '~~/server/data/money'
+import { createCategory } from '~~/server/data/categories'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** POST /api/categories { name }: a category of the caller's own. Answers { category }. */

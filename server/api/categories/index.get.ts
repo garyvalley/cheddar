@@ -1,4 +1,4 @@
-import { listCategories } from '~~/server/data/money'
+import { listCategories } from '~~/server/data/categories'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** GET /api/categories: the caller's categories, built in first, then their own by name. */

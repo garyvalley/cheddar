@@ -1,4 +1,4 @@
-import { deleteAccount } from '~~/server/data/money'
+import { deleteAccount } from '~~/server/data/accounts'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** DELETE /api/accounts/:id: the account, with its transactions and imports. */

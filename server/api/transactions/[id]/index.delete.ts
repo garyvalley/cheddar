@@ -1,4 +1,4 @@
-import { deleteTransaction, getTransaction } from '~~/server/data/money'
+import { deleteTransaction, getTransaction } from '~~/server/data/transactions'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 const GONE = 'That transaction isn\'t there.'
