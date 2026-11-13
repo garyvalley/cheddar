@@ -112,7 +112,9 @@ tunnel, repository secrets) and day-to-day operations.
     `user_good`, password `pass_good`.
 - **Or add an account yourself** (Accounts), for one you'd rather not link:
   a name, the kind (checking, savings, credit card, loan…), and optionally
-  the bank and the last four digits. Then import its statements.
+  the bank and the last four digits. Then import its statements. Click its
+  balance to bring it up to date: one more than 30 days old (180 for
+  property) is marked **Out of date**, and Overview says how many are.
 - **Import a statement** (Import, on Accounts):
   - On your bank's website, download your transactions as CSV, or as
     Quicken (QFX) or Money (OFX).

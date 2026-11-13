@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ACCOUNT_KINDS, formatCents, isLiability, kindLabel, type Account, type AccountKind } from '~~/shared/accounts'
+import { ACCOUNT_KINDS, formatCents, isLiability, isStale, kindLabel, type Account, type AccountKind } from '~~/shared/accounts'
 import type { BankLinks } from '~~/shared/bank-links'
 import { GROUPS, groupOf } from '~~/shared/overview'
 
@@ -69,7 +69,10 @@ async function saveBalance(a: Account) {
   await refresh()
 }
 const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-const asOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+const today = useToday()
+const asOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(date.slice(0, 4) !== today.slice(0, 4) ? { year: 'numeric' } : {}), timeZone: 'UTC' })
+// A typed-in balance past its kind's age (shared/accounts.ts) is marked, as Overview counts it.
+const stale = (a: Account) => isStale(a, today)
 
 const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€¢â€¢${a.last4}`, a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' Â· ')
 </script>
@@ -130,10 +133,11 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
                   </template>
                   <template v-else>Balance unavailable</template>
                 </span>
-                <button v-else class="balance" :aria-label="`Set the balance of ${a.name}`" :title="`Set the balance of ${a.name}`" @click="startBalance(a)">
+                <button v-else class="balance" :aria-label="stale(a) ? `Update the out-of-date balance of ${a.name}` : `Set the balance of ${a.name}`" :title="stale(a) ? 'Out of date: click to bring it up to date' : `Set the balance of ${a.name}`" @click="startBalance(a)">
                   <template v-if="a.balance_cents !== null">
                     <span class="num block" :class="moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
                     <span class="caption">as of {{ asOf(a.balance_date) }}</span>
+                    <span v-if="stale(a)" class="caption stale">Out of date</span>
                   </template>
                   <template v-else>Set balance</template>
                 </button>
@@ -219,4 +223,5 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
 }
 .editing { list-style: none; }
 .closed-toggle { margin: -1rem 0 1.5rem; }
+.stale { color: var(--warning); font-weight: 600; }
 </style>

@@ -3,7 +3,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseBalance } from '../shared/accounts.ts'
+import { isStale, parseBalance } from '../shared/accounts.ts'
 import { asHeld, balancesOn, growth, growthStart, lastMonths, monthly, netWorth, netWorthChange } from '../shared/overview.ts'
 
 const acct = (id, kind, balance_cents, balance_date = '2026-11-09') => ({ id, name: id, kind, balance_cents, balance_date })
@@ -157,5 +157,20 @@ describe('closed accounts', () => {
     assert.deepEqual([year.start_cents, year.end_cents, year.added_cents, year.gain_cents], [500_000, 0, -600_000, 100_000])
     assert.equal(growth(held.accounts, held.history, moved, '1m', '2026-11-09').gain_cents, 0)
     assert.deepEqual([growth(held.accounts, held.history, moved, '1m', '2026-12-20')].map(g => [g.since, g.rate]), [['', null]])
+  })
+})
+
+describe('isStale', () => {
+  const typed = { kind: 'checking', linked: false, closed_on: '', excluded: false, balance_cents: 100, balance_date: '2026-10-01', owned: true }
+  test('a typed-in balance more than 30 days old, or 180 for property', () => {
+    assert.equal(isStale(typed, '2026-10-31'), false)
+    assert.equal(isStale(typed, '2026-11-01'), true)
+    assert.equal(isStale({ ...typed, kind: 'property' }, '2026-11-13'), false)
+    assert.equal(isStale({ ...typed, kind: 'property' }, '2027-04-01'), true)
+  })
+  test('never a linked, closed, left-out, shared or unset one', () => {
+    for (const change of [{ linked: true }, { closed_on: '2026-10-05' }, { excluded: true }, { owned: false }, { balance_cents: null, balance_date: '' }]) {
+      assert.equal(isStale({ ...typed, ...change }, '2027-01-01'), false, JSON.stringify(change))
+    }
   })
 })
