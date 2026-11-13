@@ -287,6 +287,8 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
           <p class="group-footer">Something in the wrong place? Open it and pick another category, or make one of your own. Cheddar remembers, and that merchant's other transactions follow.</p>
         </section>
 
+        <SpendingRecurring :account="account" :names="names" />
+
         <section v-if="notSpending.length" class="group" aria-labelledby="other-title">
           <h2 id="other-title" class="group-title">Income and transfers</h2>
           <ul class="card list">

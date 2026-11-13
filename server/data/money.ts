@@ -5,6 +5,7 @@ import { localToday, summarize, type Category, type SpendingSummary } from '~~/s
 import { GROWTH_PERIODS, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
 import { PACE_MONTHS, debts, invested, savings, type Projections } from '~~/shared/projections'
 import { taxYear, type TaxYear } from '~~/shared/taxes'
+import { LOOKBACK_YEARS, recurring, type Charge, type RecurringSummary } from '~~/shared/recurring'
 import { alreadySynced, around, type Dated } from '~~/shared/overlap'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
@@ -274,6 +275,22 @@ export async function overview(s: Session, today = localToday()): Promise<Overvi
     has_investments: invested.length > 0,
     growth: GROWTH_PERIODS.map(p => growth(accounts, history, transfers, p.id, today)),
   }
+}
+
+/**
+ * The subscriptions and bills in the last few years' spending
+ * (shared/recurring.ts), in one account or all of them.
+ */
+export async function recurringCharges(s: Session, account?: string, today = localToday()): Promise<RecurringSummary> {
+  const from = `${Number(today.slice(0, 4)) - LOOKBACK_YEARS}${today.slice(4)}`
+  const [rows, list] = await Promise.all([
+    s.collection('transactions').getFullList({
+      fields: 'account,posted,amount_cents,merchant_key,payee,description,category,pending',
+      filter: s.filter(`posted >= {:from} && amount_cents < 0 && pending = false${account ? ' && account = {:account}' : ''}`, { from, account: account ?? '' }),
+    }) as Promise<unknown> as Promise<Charge[]>,
+    listCategories(s),
+  ])
+  return recurring(rows, list, today)
 }
 
 /**
