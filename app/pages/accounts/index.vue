@@ -7,9 +7,20 @@ import type { BankLinks } from '~~/shared/bank-links'
 const { data, refresh } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
 const linked = computed(() => new Set(links.value.links.flatMap(l => l.accounts.map(a => a.id))))
+// Closed accounts stay, for their history, out of the way until asked for.
+const showClosed = ref(false)
+const closedCount = computed(() => data.value.accounts.filter(a => a.closed_on).length)
+watch(closedCount, (n) => { if (!n) showClosed.value = false })
 // Accounts a current link keeps up to date are listed under that link; these are the rest,
 // including the accounts of a link that was removed.
-const accounts = computed(() => data.value.accounts.filter(a => !linked.value.has(a.id)))
+const accounts = computed(() => data.value.accounts.filter(a => !linked.value.has(a.id) && (showClosed.value || !a.closed_on)))
+
+// Name, kind, closed, counted: AccountEditor, in place of the row.
+const changing = ref('')
+async function changed(saved: boolean) {
+  changing.value = ''
+  if (saved) await refresh()
+}
 
 const add = useAction()
 const remove = useAction()
@@ -49,9 +60,10 @@ async function saveBalance(a: Account) {
   editing.value = ''
   await refresh()
 }
+const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 const asOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
-const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€¢â€¢${a.last4}`].filter(Boolean).join(' Â· ')
+const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€¢â€¢${a.last4}`, a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' Â· ')
 </script>
 
 <template>
@@ -64,13 +76,14 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
       Connect every account here. Overview, Spending, Projections and Taxes are all worked out from what these accounts hold.
     </p>
 
-    <BankLinks @changed="refresh()" />
+    <BankLinks :show-closed="showClosed" @changed="refresh()" />
 
     <section v-if="accounts.length" class="group" aria-labelledby="list-title">
       <h2 id="list-title" class="group-title">{{ links.links.length ? 'Other accounts' : 'Your accounts' }}</h2>
       <ul class="card list">
-        <li v-for="a in accounts" :key="a.id" class="row acct">
-          <template v-if="deleting === a.id">
+        <li v-for="a in accounts" :key="a.id" :class="changing === a.id ? 'editing' : 'row acct'">
+          <AccountEditor v-if="changing === a.id" :account="a" @done="changed" />
+          <template v-else-if="deleting === a.id">
             <span class="row-label footnote">Delete {{ a.name }} and every transaction in it?</span>
             <button class="btn btn-plain" @click="deleting = ''">Cancel</button>
             <button class="btn btn-danger" :disabled="remove.busy.value" @click="confirmDelete(a.id)">
@@ -89,7 +102,7 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
           </form>
           <template v-else>
             <span class="row-label">
-              <span class="block">{{ a.name }}</span>
+              <span class="block">{{ a.name }} <span v-if="a.excluded" class="badge badge-off">Not counted</span></span>
               <span class="footnote">{{ detail(a) }}</span>
             </span>
             <button class="btn btn-plain balance" :aria-label="`Set the balance of ${a.name}`" @click="startBalance(a)">
@@ -100,6 +113,7 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
               <template v-else>Set balance</template>
             </button>
             <span class="actions">
+              <button class="btn btn-plain" :aria-label="`Edit ${a.name}`" @click="changing = a.id">Edit</button>
               <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="btn btn-plain" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
               <button class="btn btn-plain danger" :aria-label="`Delete ${a.name}`" @click="deleting = a.id">Delete</button>
             </span>
@@ -108,8 +122,14 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
       </ul>
       <p v-if="remove.error.value" class="notice notice-error" role="alert">{{ remove.error.value }}</p>
       <p v-if="balance.error.value" class="notice notice-error" role="alert">{{ balance.error.value }}</p>
-      <p class="group-footer">Tap a balance to bring it up to date. Overview adds them up into your net worth.</p>
+      <p class="group-footer">Tap a balance to bring it up to date. Overview adds them up into your net worth. Edit renames an account, closes it, or leaves it out of your numbers.</p>
     </section>
+
+    <div v-if="closedCount" class="closed-toggle">
+      <button class="btn btn-plain" :aria-pressed="showClosed" @click="showClosed = !showClosed">
+        {{ showClosed ? 'Hide closed accounts' : `Show closed accounts (${closedCount})` }}
+      </button>
+    </div>
 
     <section class="group" aria-labelledby="add-title">
       <h2 id="add-title" class="group-title">Add an account yourself</h2>
@@ -163,5 +183,8 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
   .acct { flex-wrap: wrap; row-gap: 0; }
   .acct .actions { width: 100%; justify-content: flex-end; margin-right: -0.5rem; }
 }
+.editing { list-style: none; }
+.editing + .row, .row + .editing { border-top: 0.5px solid var(--separator); }
+.closed-toggle { margin: 0 0 1.5rem; }
 .add-row { width: 100%; border: 0; background: none; font: inherit; color: var(--accent); text-align: left; cursor: pointer; }
 </style>

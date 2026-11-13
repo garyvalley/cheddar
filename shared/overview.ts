@@ -88,6 +88,25 @@ export function balancesOn(history: BalancePoint[], date: string): Map<string, n
 }
 
 /**
+ * The accounts and their history with each closed account holding nothing
+ * from the day it closed: `open` for what's held now (net worth, what's
+ * invested), `accounts` and `history` for sums over time, where a closed
+ * account still counts before that day. Balances a link synced after it
+ * closed are left out.
+ */
+export function asHeld<T extends Holding & { closed_on?: string }>(accounts: T[], history: BalancePoint[]): { open: T[], accounts: T[], history: BalancePoint[] } {
+  const closed = new Map(accounts.filter(a => a.closed_on).map(a => [a.id, a.closed_on!]))
+  return {
+    open: accounts.filter(a => !closed.has(a.id)),
+    accounts: accounts.map(a => (closed.has(a.id) ? { ...a, balance_cents: 0, balance_date: a.closed_on! } : a)),
+    history: [
+      ...history.filter(p => !closed.has(p.account) || p.date < closed.get(p.account)!),
+      ...[...closed].map(([account, date]) => ({ account, date, balance_cents: 0 })),
+    ],
+  }
+}
+
+/**
  * Net worth on an earlier day, for the change since then, from the accounts
  * that had a balance both then and now (an account added since would
  * otherwise read as growth). Null when none did.

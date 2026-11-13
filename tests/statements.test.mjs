@@ -3,7 +3,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkAccount, formatCents } from '../shared/accounts.ts'
+import { checkAccount, checkAccountChange, formatCents } from '../shared/accounts.ts'
 import { detectFormat, guessMapping, parseAmount, parseCsv, parseDate, readStatement } from '../shared/statements.ts'
 
 describe('amounts', () => {
@@ -150,6 +150,26 @@ describe('a new account', () => {
     assert.match(checkAccount({ name: 'A', kind: 'crypto' }).problem, /kind/)
     assert.match(checkAccount({ name: 'A', kind: 'loan', last4: '12' }).problem, /four digits/)
     assert.match(checkAccount({ name: 'A', kind: 'loan', institution: 5 }).problem, /bank/)
+  })
+
+  test('a change takes only what was sent, checked as a new account is', () => {
+    const now = { name: 'Visa', kind: 'other', institution: 'Big Bank', last4: '1234' }
+    assert.deepEqual(checkAccountChange({ kind: 'credit_card', name: ' Card ' }, now, '2026-11-13'), { ok: { name: 'Card', kind: 'credit_card' } })
+    assert.deepEqual(checkAccountChange({ last4: '', institution: '' }, now, '2026-11-13'), { ok: { institution: '', last4: '' } })
+    assert.deepEqual(checkAccountChange({}, now, '2026-11-13'), { ok: {} })
+    assert.match(checkAccountChange({ name: '' }, now, '2026-11-13').problem, /name/)
+    assert.match(checkAccountChange({ kind: 'crypto' }, now, '2026-11-13').problem, /kind/)
+    assert.match(checkAccountChange({ last4: '12' }, now, '2026-11-13').problem, /four digits/)
+  })
+
+  test('closes on a real day no later than today, opens again with none, and is counted or not', () => {
+    const now = { name: 'Loan', kind: 'loan', institution: '', last4: '' }
+    assert.deepEqual(checkAccountChange({ closed_on: '2026-11-13', excluded: true }, now, '2026-11-13'), { ok: { closed_on: '2026-11-13', excluded: true } })
+    assert.deepEqual(checkAccountChange({ closed_on: '' }, now, '2026-11-13'), { ok: { closed_on: '' } })
+    assert.match(checkAccountChange({ closed_on: '2026-11-14' }, now, '2026-11-13').problem, /future/)
+    assert.match(checkAccountChange({ closed_on: '2026-02-30' }, now, '2026-11-13').problem, /date/)
+    assert.match(checkAccountChange({ closed_on: 20261101 }, now, '2026-11-13').problem, /date/)
+    assert.match(checkAccountChange({ excluded: 'yes' }, now, '2026-11-13').problem, /count/)
   })
 
   test('money shows with a true minus sign', () => {

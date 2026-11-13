@@ -29,6 +29,10 @@ export interface Account {
   balance_date: string
   /** A bank link keeps it up to date, balance and all. */
   linked: boolean
+  /** The day it was closed (YYYY-MM-DD), or '' while it's open. */
+  closed_on: string
+  /** Left out of every page's numbers; it's kept, and a link keeps syncing it. */
+  excluded: boolean
 }
 
 export interface NewAccount {
@@ -77,6 +81,40 @@ export function checkAccount(input: Record<string, unknown>): { ok: NewAccount }
   if (institution === null || institution.length > 100) return { problem: 'The bank\'s name must be at most 100 characters.' }
   if (last4 === null || (last4 && !/^\d{4}$/.test(last4))) return { problem: 'The last four digits must be four digits.' }
   return { ok: { name, kind: input.kind as AccountKind, institution, last4 } }
+}
+
+/** What a person may change about an account: any of these. */
+export interface AccountChange extends Partial<NewAccount> {
+  closed_on?: string
+  excluded?: boolean
+}
+
+const isDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v)
+
+/**
+ * The fields of a change to `current`, checked as a new account's are, or
+ * the first problem. A closing day is a real one, no later than `today`;
+ * '' opens the account again.
+ */
+export function checkAccountChange(input: Record<string, unknown>, current: NewAccount, today: string): { ok: AccountChange } | { problem: string } {
+  const out: AccountChange = {}
+  const keys = (['name', 'kind', 'institution', 'last4'] as const).filter(k => input[k] !== undefined)
+  if (keys.length) {
+    const checked = checkAccount({ ...current, ...Object.fromEntries(keys.map(k => [k, input[k]])) })
+    if ('problem' in checked) return checked
+    for (const k of keys) Object.assign(out, { [k]: checked.ok[k] })
+  }
+  if (input.excluded !== undefined) {
+    if (typeof input.excluded !== 'boolean') return { problem: 'Say whether to count the account.' }
+    out.excluded = input.excluded
+  }
+  if (input.closed_on !== undefined) {
+    const day = typeof input.closed_on === 'string' ? input.closed_on.trim() : null
+    if (day === null || (day && !isDay(day))) return { problem: 'Give the day it closed as a date.' }
+    if (day > today) return { problem: 'The day it closed can\'t be in the future.' }
+    out.closed_on = day
+  }
+  return { ok: out }
 }
 
 /** Liabilities: what they hold is owed, and a charge to them is money out. */

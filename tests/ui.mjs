@@ -174,6 +174,22 @@ try {
   await page.locator('.figures').filter({ hasText: '$2,500.00' }).filter({ hasText: '$86.60' }).waitFor()
   await page.getByText('Add a brokerage or retirement account').waitFor()
 
+  // An account is changed in place: closed, it leaves the list until asked for, and opens again.
+  await page.goto(`${APP}/accounts`)
+  await page.getByRole('button', { name: 'Edit Everyday checking' }).click()
+  const editor = page.getByRole('form', { name: 'Edit Everyday checking' })
+  await editor.getByLabel('Bank or card issuer (optional)').fill('Big Bank')
+  await editor.getByLabel('It\'s closed').check()
+  await editor.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'Show closed accounts (1)' }).click()
+  await page.getByText(/Checking · Big Bank · Closed/).waitFor()
+  await page.getByRole('button', { name: 'Edit Everyday checking' }).click()
+  await editor.getByLabel('It\'s closed').uncheck()
+  await editor.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: /Show closed accounts|Hide closed accounts/ }).waitFor({ state: 'detached' })
+  await page.getByText('Checking · Big Bank', { exact: true }).waitFor()
+
   // Taxes: the federal estimate and California's, from a typed income, for the profile's state and status.
   await page.goto(`${APP}/taxes`)
   await page.locator('[data-test="income"]').fill('100,000')

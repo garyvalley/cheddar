@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import type { RecordModel } from 'pocketbase'
-import type { Account, Import, NewAccount, Transaction } from '~~/shared/accounts'
+import type { Account, AccountChange, Import, NewAccount, Transaction } from '~~/shared/accounts'
 import { localToday, summarize, type Category, type SpendingSummary } from '~~/shared/categories'
-import { GROWTH_PERIODS, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
+import { GROWTH_PERIODS, asHeld, growth, growthStart, isInvestment, lastMonths, monthly, netWorth, netWorthChange, type BalancePoint, type Overview } from '~~/shared/overview'
 import { PACE_MONTHS, debts, invested, savings, type Projections } from '~~/shared/projections'
 import { taxYear, type TaxYear } from '~~/shared/taxes'
 import { LOOKBACK_YEARS, recurring, type Charge, type RecurringSummary } from '~~/shared/recurring'
@@ -27,6 +27,8 @@ const toAccount = (r: RecordModel): Account => ({
   balance_cents: r.balance_date ? (r.balance_cents ?? 0) : null,
   balance_date: r.balance_date ?? '',
   linked: !!r.link,
+  closed_on: r.closed_on ?? '',
+  excluded: !!r.excluded,
 })
 
 const toTransaction = (r: RecordModel): Transaction => ({
@@ -58,6 +60,14 @@ export async function listAccounts(s: Session): Promise<Account[]> {
   return (await s.collection('accounts').getFullList({ sort: 'name,created' })).map(toAccount)
 }
 
+/**
+ * What every page counts leaves out the accounts the person excluded: this
+ * filter, on a transaction query, and `counted()` on a list of accounts.
+ * Closed accounts still count, for the time they were open (asHeld()).
+ */
+const COUNTED = 'account.excluded = false'
+const counted = async (s: Session) => (await listAccounts(s)).filter(a => !a.excluded)
+
 /** One of the caller's accounts; a 404 from the store for anyone else's. */
 export async function getAccount(s: Session, id: string): Promise<Account> {
   return toAccount(await s.collection('accounts').getOne(id))
@@ -76,6 +86,14 @@ export async function setBalance(s: Session, id: string, cents: number, date: st
   return toAccount(await s.collection('accounts').update(id, { balance_cents: cents, balance_date: date }))
 }
 
+/**
+ * Changes what the person may change about an account (checkAccountChange()),
+ * and with `balance_cents` its balance too, as setBalance() does.
+ */
+export async function updateAccount(s: Session, id: string, change: AccountChange & { balance_cents?: number, balance_date?: string }): Promise<Account> {
+  return toAccount(await s.collection('accounts').update(id, change))
+}
+
 /** Deletes the account with every transaction and import in it. */
 export async function deleteAccount(s: Session, id: string): Promise<void> {
   await s.collection('accounts').delete(id)
@@ -90,12 +108,15 @@ export interface TransactionQuery {
   /** YYYY-MM-DD, both ends included. */
   from?: string
   to?: string
+  /** Also the accounts left out of every page's numbers, as an export reads them. Picking one account always does. */
+  uncounted?: boolean
 }
 
 function transactionFilter(s: Session, q: TransactionQuery): string {
   const parts: string[] = []
   const params: Record<string, string> = {}
   if (q.account) { parts.push('account = {:account}'); params.account = q.account }
+  else if (!q.uncounted) parts.push(COUNTED)
   if (q.category === 'other') parts.push('(category = \'other\' || category = \'\')')
   else if (q.category) { parts.push('category = {:category}'); params.category = q.category }
   if (q.from) { parts.push('posted >= {:from}'); params.from = q.from }
@@ -258,15 +279,16 @@ export async function removeCategory(s: Session, id: string): Promise<{ resorted
  */
 export async function overview(s: Session, today = localToday()): Promise<Overview> {
   const months = lastMonths(today, 12)
-  const [accounts, rows, history, list] = await Promise.all([
-    listAccounts(s),
+  const [all, rows, kept, list] = await Promise.all([
+    counted(s),
     s.collection('transactions').getFullList({
       fields: 'account,posted,amount_cents,category',
-      filter: s.filter('posted >= {:from} && posted <= {:to}', { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
+      filter: s.filter(`posted >= {:from} && posted <= {:to} && ${COUNTED}`, { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
     }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
     s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
     listCategories(s),
   ])
+  const { open, accounts, history } = asHeld(all, kept)
   const invested = accounts.filter(a => isInvestment(a.kind) && a.balance_cents !== null)
   const ids = new Set(invested.map(a => a.id))
   // Transfers into the investment accounts aren't growth. Older ones than the
@@ -275,15 +297,15 @@ export async function overview(s: Session, today = localToday()): Promise<Overvi
   const older = oldest < `${months[0]}-01` && ids.size
     ? await s.collection('transactions').getFullList({
       fields: 'account,posted,amount_cents,category',
-      filter: s.filter('posted >= {:from} && posted < {:to} && category = \'transfer\'', { from: oldest, to: `${months[0]}-01` }),
+      filter: s.filter(`posted >= {:from} && posted < {:to} && category = 'transfer' && ${COUNTED}`, { from: oldest, to: `${months[0]}-01` }),
     }) as unknown as typeof rows
     : []
   const transfers = [...older, ...rows].filter(r => ids.has(r.account) && r.category === 'transfer')
   return {
-    net_worth: netWorth(accounts),
+    net_worth: netWorth(open),
     change: netWorthChange(accounts, history, growthStart('1m', today)),
     months: monthly(rows, months, list),
-    has_investments: invested.length > 0,
+    has_investments: open.some(a => isInvestment(a.kind) && a.balance_cents !== null),
     growth: GROWTH_PERIODS.map(p => growth(accounts, history, transfers, p.id, today)),
   }
 }
@@ -297,7 +319,7 @@ export async function recurringCharges(s: Session, account?: string, today = loc
   const [rows, list] = await Promise.all([
     s.collection('transactions').getFullList({
       fields: 'account,posted,amount_cents,merchant_key,payee,description,category,pending',
-      filter: s.filter(`posted >= {:from} && amount_cents < 0 && pending = false${account ? ' && account = {:account}' : ''}`, { from, account: account ?? '' }),
+      filter: s.filter(`posted >= {:from} && amount_cents < 0 && pending = false && ${account ? 'account = {:account}' : COUNTED}`, { from, account: account ?? '' }),
     }) as Promise<unknown> as Promise<Charge[]>,
     listCategories(s),
   ])
@@ -312,22 +334,23 @@ export async function recurringCharges(s: Session, account?: string, today = loc
  */
 export async function projections(s: Session, today = localToday()): Promise<Projections> {
   const months = lastMonths(today, PACE_MONTHS + 1).slice(0, PACE_MONTHS)
-  const [accounts, rows, history, list] = await Promise.all([
-    listAccounts(s),
+  const [all, rows, kept, list] = await Promise.all([
+    counted(s),
     s.collection('transactions').getFullList({
       fields: 'account,posted,amount_cents,category',
-      filter: s.filter('posted >= {:from} && posted <= {:to}', { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
+      filter: s.filter(`posted >= {:from} && posted <= {:to} && ${COUNTED}`, { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
     }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
     s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
     listCategories(s),
   ])
   const monthsIn = monthly(rows, months, list)
+  const { open, history } = asHeld(all, kept)
   return {
     months: monthsIn,
     savings: savings(monthsIn),
-    invested_cents: invested(accounts),
-    has_investments: accounts.some(a => isInvestment(a.kind) && a.balance_cents !== null),
-    debts: debts(accounts, rows, history, months),
+    invested_cents: invested(open),
+    has_investments: open.some(a => isInvestment(a.kind) && a.balance_cents !== null),
+    debts: debts(open, rows, history, months),
   }
 }
 
@@ -338,12 +361,12 @@ export async function projections(s: Session, today = localToday()): Promise<Pro
 export async function taxes(s: Session, today = localToday()): Promise<TaxYear> {
   const jan1 = `${today.slice(0, 4)}-01-01`
   const [accounts, rows, first] = await Promise.all([
-    listAccounts(s),
+    counted(s),
     s.collection('transactions').getFullList({
       fields: 'account,posted,amount_cents,category',
-      filter: s.filter('posted >= {:from} && posted <= {:to}', { from: jan1, to: today }),
+      filter: s.filter(`posted >= {:from} && posted <= {:to} && ${COUNTED}`, { from: jan1, to: today }),
     }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
-    s.collection('transactions').getList(1, 1, { fields: 'posted', sort: 'posted', skipTotal: true }),
+    s.collection('transactions').getList(1, 1, { fields: 'posted', sort: 'posted', skipTotal: true, filter: COUNTED }),
   ])
   return taxYear(rows, accounts, today, (first.items[0]?.posted as string | undefined) ?? '')
 }

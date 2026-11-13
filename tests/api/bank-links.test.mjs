@@ -128,6 +128,30 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
       [['PAYROLL ACME', 320000, false], ['RENT NOVEMBER', -180000, false], ['GROCER', -4310, false]])
   })
 
+  test('a linked account\'s name, kind and bank are the person\'s, and one left out keeps syncing but counts nowhere', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    const checking = l.accounts.find(a => a.last4 === '0000')
+    const r = await c.call('PATCH', `/api/accounts/${checking.id}`, { name: 'Joint', kind: 'savings', institution: 'Our bank', excluded: true })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    // A linked balance is the bank's: neither typed in nor turned round by a new kind.
+    assert.equal(r.json.account.balance_cents, 245017)
+    assert.equal((await c.call('PATCH', `/api/accounts/${checking.id}`, { balance: '1' })).status, 400)
+    const counted = (await c.call('GET', '/api/overview')).json.net_worth.total_cents
+    assert.equal(counted, -31055)
+
+    bank.accounts[0].balances.current = 2000
+    await allowSync(l.id)
+    const synced = await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
+    const after = synced.json.link.accounts.find(a => a.id === checking.id)
+    assert.deepEqual([after.name, after.kind, after.institution, after.excluded, after.balance_cents], ['Joint', 'savings', 'Our bank', true, 200000])
+    assert.equal((await c.call('GET', '/api/overview')).json.net_worth.total_cents, -31055)
+    assert.equal((await c.call('GET', '/api/transactions')).json.items.every(t => t.account !== checking.id), true)
+
+    assert.equal((await c.call('PATCH', `/api/accounts/${checking.id}`, { excluded: false })).status, 200)
+    assert.equal((await c.call('GET', '/api/overview')).json.net_worth.total_cents, 200000 - 31055)
+  })
+
   test('synced transactions are sorted by Plaid\'s category, and a person\'s choice outlasts the next sync', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)

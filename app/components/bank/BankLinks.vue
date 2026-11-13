@@ -1,10 +1,23 @@
 <script setup lang="ts">
+import type { AccountKind } from '~~/shared/accounts'
 import { formatCents, type BankLink, type BankLinks, type LinkAnswer, type SyncResult } from '~~/shared/bank-links'
 
 // The Accounts page reads the same key, to tell linked accounts from the ones added by hand.
 const { data, refresh } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
 /** A link was added, synced or removed, so the accounts it brings in may have changed. */
 const emit = defineEmits<{ changed: [] }>()
+/** Closed accounts are listed only when the Accounts page asks for them. */
+const props = defineProps<{ showClosed?: boolean }>()
+const shownAccounts = (l: BankLink) => l.accounts.filter(a => props.showClosed || !a.closed_on)
+
+// A linked account's name, kind, closed day and whether it counts are the person's (AccountEditor).
+const changing = ref('')
+async function changed(saved: boolean) {
+  changing.value = ''
+  if (!saved) return
+  await refresh()
+  emit('changed')
+}
 
 const add = useAction()
 const work = useAction()
@@ -134,6 +147,8 @@ async function remove(l: BankLink) {
   emit('changed')
 }
 
+const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+
 const title = (l: BankLink) => (l.institutions.length ? l.institutions.join(', ') : 'Linked bank')
 
 function when(pb: string) {
@@ -170,14 +185,24 @@ function when(pb: string) {
           </span>
           <span v-if="l.status !== 'ok'" class="badge badge-warn">{{ l.status === 'reconnect' ? 'Sign in needed' : 'Update failed' }}</span>
         </div>
-        <div v-for="a in l.accounts" :key="a.id" class="row">
-          <span class="row-label">
-            {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
-          </span>
-          <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
-          <!-- A statement adds what the link doesn't reach, such as older history; what the link already has is skipped. -->
-          <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="btn btn-plain import" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
-        </div>
+        <template v-for="a in shownAccounts(l)" :key="a.id">
+          <div v-if="changing === a.id" class="editing">
+            <AccountEditor :account="{ ...a, kind: a.kind as AccountKind, linked: true }" @done="changed" />
+          </div>
+          <div v-else class="row">
+            <span class="row-label">
+              {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
+              <span v-if="a.excluded" class="badge badge-off">Not counted</span>
+              <span v-if="a.closed_on" class="footnote block">Closed {{ closedDay(a.closed_on) }}</span>
+            </span>
+            <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
+            <span class="actions">
+              <button class="btn btn-plain" :aria-label="`Edit ${a.name}`" @click="changing = a.id">Edit</button>
+              <!-- A statement adds what the link doesn't reach, such as older history; what the link already has is skipped. -->
+              <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="btn btn-plain" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
+            </span>
+          </div>
+        </template>
         <p v-if="l.message" class="field footnote" :class="{ warn: l.status !== 'ok' }">{{ l.message }}</p>
         <div v-if="removingId === l.id" class="field stack">
           <p class="footnote">Unlink {{ title(l) }}? Cheddar stops reading it and deletes its access. Its accounts and transactions stay.</p>
@@ -225,7 +250,9 @@ function when(pb: string) {
 
 <style scoped>
 .link { margin-bottom: 0.75rem; }
-.import { margin-right: -0.5rem; }
+.actions { display: flex; margin-right: -0.5rem; }
+.editing { border-top: 0.5px solid var(--separator); }
+.badge { margin-left: 0.375rem; }
 .warn { color: var(--warning); }
 .off code { font-size: 0.75rem; }
 .badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }
