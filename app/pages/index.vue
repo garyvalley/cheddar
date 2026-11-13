@@ -202,6 +202,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
             <div class="tile-head">
               <h2 id="kept-title" class="tile-label">Savings rate</h2>
               <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
+              <NuxtLink to="/goals" class="panel-link">Goals</NuxtLink>
             </div>
             <template v-if="kept">
               <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>

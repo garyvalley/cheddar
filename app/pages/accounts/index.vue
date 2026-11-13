@@ -113,15 +113,24 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `â€
               </form>
               <template v-else>
                 <span class="row-label">
-                  <span class="block">{{ a.name }} <span v-if="a.excluded" class="badge badge-off">Not counted</span></span>
+                  <span class="block">{{ a.name }} <span v-if="a.shared" class="badge">Shared household</span><span v-if="a.excluded" class="badge badge-off">Not counted</span></span>
                   <span class="caption">{{ detail(a) }}</span>
                 </span>
                 <span class="actions">
-                  <button class="act" :aria-label="`Edit ${a.name}`" @click="changing = a.id">Edit</button>
-                  <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="act" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
-                  <button class="act danger" :aria-label="`Delete ${a.name}`" @click="deleting = a.id">Delete</button>
+                  <template v-if="a.owned !== false">
+                    <button class="act" :aria-label="`Edit ${a.name}`" @click="changing = a.id">Edit</button>
+                    <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="act" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
+                    <button class="act danger" :aria-label="`Delete ${a.name}`" @click="deleting = a.id">Delete</button>
+                  </template>
                 </span>
-                <button class="balance" :aria-label="`Set the balance of ${a.name}`" :title="`Set the balance of ${a.name}`" @click="startBalance(a)">
+                <span v-if="a.owned === false" class="balance" :aria-label="`Shared balance of ${a.name}`">
+                  <template v-if="a.balance_cents !== null">
+                    <span class="num block" :class="moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
+                    <span class="caption">as of {{ asOf(a.balance_date) }}</span>
+                  </template>
+                  <template v-else>Balance unavailable</template>
+                </span>
+                <button v-else class="balance" :aria-label="`Set the balance of ${a.name}`" :title="`Set the balance of ${a.name}`" @click="startBalance(a)">
                   <template v-if="a.balance_cents !== null">
                     <span class="num block" :class="moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
                     <span class="caption">as of {{ asOf(a.balance_date) }}</span>
