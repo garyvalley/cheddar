@@ -1,6 +1,29 @@
 # Docker's official images, from AWS's mirror of them (the same digests):
 # Docker Hub's anonymous limit, shared by every build from the home
 # connection, ran out mid-deploy.
+
+# Litestream, which streams the database to the NAS, encrypted with age
+# (k8s/backup/litestream.yaml, scripts/restore-drill.sh). 0.3.13 is the last
+# release that encrypts; its own binary is built with a 2023 Go and modules
+# with known CVEs, so it is built here from that tag's commit with today's Go
+# and those modules moved to fixed releases. GitHub Actions caches the layer,
+# so only a change here pays for compiling SQLite under emulation.
+FROM public.ecr.aws/docker/library/golang:1-alpine AS litestream
+RUN apk add --no-cache git gcc musl-dev
+WORKDIR /src
+RUN git init -q . \
+    && git fetch -q --depth 1 https://github.com/benbjohnson/litestream.git 977d4a5ee45ae546537324a3cfbf926de3bebc97 \
+    && git checkout -q FETCH_HEAD \
+    && go get golang.org/x/crypto@v0.59.0 golang.org/x/net@v0.62.0 golang.org/x/oauth2@v0.38.0 \
+        google.golang.org/grpc@v1.85.0 google.golang.org/protobuf@v1.36.12 \
+        github.com/mattn/go-sqlite3@v1.14.53 github.com/aws/aws-sdk-go@v1.55.8 \
+        github.com/pkg/sftp@v1.13.12 filippo.io/age@v1.3.2 \
+        google.golang.org/api@v0.315.0 cloud.google.com/go/storage@v1.70.0 \
+        github.com/go-jose/go-jose/v4@v4.1.6 \
+    && go mod tidy \
+    && CGO_ENABLED=1 go build -trimpath -tags osusergo,netgo,sqlite_omit_load_extension \
+        -ldflags "-s -w -X 'main.Version=v0.3.13' -extldflags '-static'" -o /litestream ./cmd/litestream
+
 FROM public.ecr.aws/docker/library/alpine:3.24
 
 ARG PB_VERSION=0.40.6
@@ -16,13 +39,16 @@ ARG IMAGE_TAG
 RUN apk upgrade --no-cache && apk add --no-cache \
     unzip \
     ca-certificates \
-    curl
+    curl \
+    age
 
 RUN curl -fsSL -o /tmp/pb.zip \
     "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${TARGETARCH}.zip" \
     && unzip /tmp/pb.zip -d /pb/ \
     && rm /tmp/pb.zip \
     && chmod +x /pb/pocketbase
+
+COPY --from=litestream /litestream /usr/local/bin/litestream
 
 # Built in so that a deploy which changes only a hook still changes the
 # image, and the new pod loads it on start. The dev and CI stacks mount the

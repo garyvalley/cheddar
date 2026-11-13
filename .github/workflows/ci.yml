@@ -106,6 +106,10 @@ jobs:
           cat nuxt.log; docker logs cheddar-nginx; exit 1
       - name: API suite
         run: node --test 'tests/api/*.test.mjs'
+      - name: Backup and restore drill
+        # Litestream in the PocketBase image, against a replica in a temp dir:
+        # encrypted on the way out, put back whole (scripts/restore-drill.sh).
+        run: scripts/restore-drill.sh --self-test cheddar-pb:ci
       - name: Browser smoke test
         # GitHub's Ubuntu image has Chrome installed.
         run: node tests/ui.mjs
@@ -252,6 +256,14 @@ jobs:
       HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
       HEALTHCHECK_SYNC_URL: ${{ vars.HEALTHCHECK_SYNC_URL }}
       SIGNUP_ALLOW: ${{ secrets.SIGNUP_ALLOW }}
+      # Backups (k8s/README.md "Backups"): off until LITESTREAM_REPLICA_URL is set.
+      LITESTREAM_REPLICA_URL: ${{ secrets.LITESTREAM_REPLICA_URL }}
+      LITESTREAM_ENDPOINT: ${{ vars.LITESTREAM_ENDPOINT }}
+      LITESTREAM_ACCESS_KEY_ID: ${{ secrets.LITESTREAM_ACCESS_KEY_ID }}
+      LITESTREAM_SECRET_ACCESS_KEY: ${{ secrets.LITESTREAM_SECRET_ACCESS_KEY }}
+      LITESTREAM_AGE_RECIPIENT: ${{ vars.LITESTREAM_AGE_RECIPIENT }}
+      BACKUP_NAS_CIDR: ${{ vars.BACKUP_NAS_CIDR }}
+      BACKUP_NAS_PORT: ${{ vars.BACKUP_NAS_PORT }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Apply the manifests and wait for the rollout

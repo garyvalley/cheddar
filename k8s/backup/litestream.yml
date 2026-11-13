@@ -1,0 +1,21 @@
+# Litestream's settings (k8s/backup/litestream.yaml runs it). It streams
+# PocketBase's database to the replica as it changes, encrypted with age, so
+# the copy on the NAS gives nothing away without the identity (the private
+# key), which never goes to the cluster: only scripts/restore-drill.sh, run
+# by a person, uses it. ${...} are read from the environment as it starts.
+#
+# A snapshot a day, and 30 days of them with every change in between, so the
+# database can be put back as it was at any moment of the last month (say,
+# just before a bad migration).
+dbs:
+  - path: /pb/pb_data/data.db
+    replicas:
+      # s3://bucket/path (MinIO or any S3: endpoint, keys from the
+      # environment), sftp://user@host/path, or file:///path (the self-test).
+      - url: ${LITESTREAM_REPLICA_URL}
+        endpoint: ${LITESTREAM_ENDPOINT}
+        retention: 720h
+        snapshot-interval: 24h
+        age:
+          identities: [${LITESTREAM_AGE_IDENTITY}]
+          recipients: [${LITESTREAM_AGE_RECIPIENT}]

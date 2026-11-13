@@ -98,7 +98,39 @@ for f in k8s/app/*.yaml; do
 done > "$tmp/app.yaml"
 kubectl apply -f "$tmp/app.yaml"
 
+# Backups (k8s/backup/litestream.yaml), once a replica is named. Never
+# unencrypted: without an age recipient the deploy stops here. Turning them
+# off again is a person's step (k8s/README.md, "Backups"): the deployer
+# can't delete.
+if [ -n "${LITESTREAM_REPLICA_URL:-}" ]; then
+  case "${LITESTREAM_AGE_RECIPIENT:-}" in
+    age1*) ;;
+    *) echo "LITESTREAM_AGE_RECIPIENT must be an age public key (age1...): backups are never sent unencrypted." >&2; exit 1 ;;
+  esac
+  {
+    echo "LITESTREAM_REPLICA_URL=$LITESTREAM_REPLICA_URL"
+    echo "LITESTREAM_ENDPOINT=${LITESTREAM_ENDPOINT:-}"
+    echo "LITESTREAM_ACCESS_KEY_ID=${LITESTREAM_ACCESS_KEY_ID:-}"
+    echo "LITESTREAM_SECRET_ACCESS_KEY=${LITESTREAM_SECRET_ACCESS_KEY:-}"
+    echo "LITESTREAM_AGE_RECIPIENT=$LITESTREAM_AGE_RECIPIENT"
+  } > "$tmp/pb-backup.env"
+  apply_secret pb-backup --from-env-file="$tmp/pb-backup.env"
+  kubectl -n "$NS" create configmap litestream --from-file=litestream.yml=k8s/backup/litestream.yml --dry-run=client -o yaml | kubectl apply -f -
+  BACKUP_CONFIG=$(cat "$tmp/pb-backup.env" k8s/backup/litestream.yml | checksum)
+  # Without a NAS address, only an S3 service on the internet is reachable
+  # (192.0.2.1 is the documentation range: nothing answers there).
+  BACKUP_NAS_CIDR=${BACKUP_NAS_CIDR:-192.0.2.1/32}
+  BACKUP_NAS_PORT=${BACKUP_NAS_PORT:-443}
+  export BACKUP_CONFIG BACKUP_NAS_CIDR BACKUP_NAS_PORT
+  # shellcheck disable=SC2016 # envsubst's names, as above
+  envsubst '${NAMESPACE} ${IMAGE_PREFIX} ${PB_TAG} ${BACKUP_CONFIG} ${BACKUP_NAS_CIDR} ${BACKUP_NAS_PORT}' < k8s/backup/litestream.yaml > "$tmp/backup.yaml"
+  kubectl apply -f "$tmp/backup.yaml"
+fi
+
 # PocketBase first: Nuxt's migrate step and readiness check need it.
 for d in pocketbase nuxt nginx cloudflared; do
   kubectl -n "$NS" rollout status "deployment/$d" --timeout=6m
 done
+if [ -n "${LITESTREAM_REPLICA_URL:-}" ]; then
+  kubectl -n "$NS" rollout status deployment/pb-backup --timeout=6m
+fi
