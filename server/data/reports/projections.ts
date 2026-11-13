@@ -29,7 +29,8 @@ export async function projections(
     transactionsBetween(s, `${months[0]}-01`, `${months.at(-1)}-31`, {
       ownedOnly: true,
     }),
-    balanceHistory(s, { ownedOnly: true }),
+    // A debt's pace needs only its oldest balance (shared/projections.ts).
+    balanceHistory(s, { ownedOnly: true, dailyFrom: `${months[0]}-01` }),
     listCategories(s),
   ]);
   const rows = expandSplits(fetched);
