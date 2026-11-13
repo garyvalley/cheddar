@@ -17,6 +17,7 @@ const kind = computed(() => (route.query.period === 'year' ? 'year' : 'month'))
 const today = useToday()
 const period = computed(() => periodOf(kind.value, text(route.query.at) || undefined, today))
 const account = computed(() => text(route.query.account))
+const reviewMode = computed(() => route.query.review === 'true')
 // A category's id, "all" for every transaction, or "" for the categories.
 const category = computed(() => (route.query.category === 'all' || isCategoryRef(route.query.category) ? route.query.category as string : ''))
 const page = computed(() => Math.max(1, Number.parseInt(text(route.query.page), 10) || 1))
@@ -30,7 +31,7 @@ function go(change: Record<string, string | undefined>) {
   const query: Record<string, string> = {}
   const next = {
     period: kind.value === 'year' ? 'year' : undefined, at: text(route.query.at) || undefined, account: account.value || undefined, category: category.value || undefined,
-    q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, page: undefined, ...change,
+    q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, review: reviewMode.value ? 'true' : undefined, page: undefined, ...change,
   }
   for (const [k, v] of Object.entries(next)) if (v) query[k] = v
   return router.push({ query })
@@ -59,14 +60,15 @@ const count = computed(() => summary.value.categories.reduce((n, c) => n + c.cou
 const listQuery = computed(() => {
   const query: Record<string, string> = {}
   if (account.value) query.account = account.value
-  if (searching.value) Object.assign(query, { q: q.value, min: min.value, max: max.value })
+  if (reviewMode.value) query.reviewed = 'false'
+  else if (searching.value) Object.assign(query, { q: q.value, min: min.value, max: max.value })
   else {
     Object.assign(query, { from: period.value.from, to: period.value.to })
     if (category.value && category.value !== 'all') query.category = category.value
   }
   return query
 })
-const listing = computed(() => searching.value || !!category.value)
+const listing = computed(() => reviewMode.value || searching.value || !!category.value)
 const { data: txs, pending, error: txError, refresh: refreshTxs } = await useFetch<{ items: Transaction[], page: number, pages: number, total: number }>('/api/transactions', {
   query: computed(() => ({ ...listQuery.value, page: page.value })),
   default: () => ({ items: [], page: 1, pages: 0, total: 0 }),
@@ -78,6 +80,7 @@ watch([listQuery, page], () => { if (listing.value) refreshTxs() })
 // What's shown, as a spreadsheet: the search, or the period, account and category picked.
 const csvHref = computed(() => `/api/transactions/csv?${new URLSearchParams(Object.entries(listQuery.value).filter(([, v]) => v))}`)
 const csvWhat = computed(() => {
+  if (reviewMode.value) return 'transactions needing review'
   if (searching.value) return 'what the search found'
   return category.value && category.value !== 'all' ? `${label(category.value)} for ${period.value.label}` : `every transaction for ${period.value.label}`
 })
@@ -89,12 +92,15 @@ const sizing = ref(!!(min.value || max.value))
 function find() {
   const words = search.q.trim()
   if (!words && !search.min.trim() && !search.max.trim()) return clearSearch()
-  return go({ q: words || undefined, min: search.min.trim() || undefined, max: search.max.trim() || undefined, category: undefined })
+  return go({ q: words || undefined, min: search.min.trim() || undefined, max: search.max.trim() || undefined, category: undefined, review: undefined })
 }
 function clearSearch() {
   Object.assign(search, { q: '', min: '', max: '' })
   sizing.value = false
-  return go({ q: undefined, min: undefined, max: undefined })
+  return go({ q: undefined, min: undefined, max: undefined, review: undefined })
+}
+function showReview(value: boolean) {
+  return go({ review: value ? 'true' : undefined, category: undefined, q: undefined, min: undefined, max: undefined, page: undefined })
 }
 const found = computed(() => {
   const size = min.value && max.value ? `$${min.value} to $${max.value}` : min.value ? `$${min.value} or more` : max.value ? `up to $${max.value}` : ''
@@ -105,12 +111,16 @@ const found = computed(() => {
 // Something changed (moved, edited, added, deleted): the totals follow, then it's said.
 const notice = ref('')
 // Adding by hand only goes into an account no bank link keeps.
-const canAdd = computed(() => list.value.accounts.some(a => !a.linked))
+const canAdd = computed(() => list.value.accounts.some(a => a.owned !== false && !a.linked))
 const adding = ref(false)
 async function changed(message: string) {
   notice.value = ''
   await Promise.all([refreshSummary(), refreshTxs()])
   notice.value = message
+}
+async function markReviewed(ids: string[]) {
+  const result = await $fetch<{ updated: number }>('/api/transactions/review', { method: 'POST', body: { ids, reviewed: true } })
+  await changed(`${result.updated} ${result.updated === 1 ? 'transaction' : 'transactions'} marked reviewed.`)
 }
 
 const comparison = computed(() => {
@@ -149,6 +159,7 @@ async function confirmDelete() {
 <template>
   <div>
     <AppHeader title="Spending">
+      <NuxtLink to="/cashflow" class="btn btn-tinted">Cash flow</NuxtLink>
       <button v-if="canAdd && !adding" class="btn btn-tinted" @click="adding = true">Add a transaction</button>
     </AppHeader>
 
@@ -164,11 +175,11 @@ async function confirmDelete() {
       <!-- One toolbar: when, which account, and a search. -->
       <section class="group toolbar" aria-label="Which spending">
         <div v-if="!searching" class="bar-row">
-          <div class="segmented" role="group" aria-label="Period">
+          <div v-if="!reviewMode" class="segmented" role="group" aria-label="Period">
             <button class="seg" :aria-pressed="kind === 'month'" @click="go({ period: undefined, at: undefined })">Month</button>
             <button class="seg" :aria-pressed="kind === 'year'" @click="go({ period: 'year', at: undefined })">Year</button>
           </div>
-          <div class="stepper">
+          <div v-if="!reviewMode" class="stepper">
             <button class="btn btn-plain" :aria-label="`Before ${period.label}`" @click="go({ at: period.prev })"><AppIcon name="chevron" class="back" /></button>
             <span class="headline num when" aria-live="polite">{{ period.label }}</span>
             <button class="btn btn-plain" :aria-label="`After ${period.label}`" @click="go({ at: period.next })"><AppIcon name="chevron" /></button>
@@ -180,6 +191,9 @@ async function confirmDelete() {
               <option v-for="a in list.accounts" :key="a.id" :value="a.id">{{ a.name }}{{ a.excluded ? ' (not counted)' : a.closed_on ? ' (closed)' : '' }}</option>
             </select>
           </label>
+          <button class="btn" :class="reviewMode ? 'btn-primary' : 'btn-tinted'" :aria-pressed="reviewMode" @click="showReview(!reviewMode)">
+            {{ reviewMode ? 'Back to spending' : 'Needs review' }}
+          </button>
         </div>
         <form class="bar-row search" role="search" @submit.prevent="find">
           <label class="visually-hidden" for="search-q">Search transactions</label>
@@ -200,12 +214,15 @@ async function confirmDelete() {
       <p v-if="summaryError" class="notice notice-error group" role="alert">{{ errorMessage(summaryError) }}</p>
 
       <!-- What a search found, on any date. -->
-      <template v-else-if="searching">
+      <template v-else-if="searching || reviewMode">
         <section class="group" aria-labelledby="found-title">
           <div class="card card-pad tight">
-            <h2 id="found-title" class="title-2">Search</h2>
-            <p class="footnote" aria-live="polite">{{ found }}<template v-if="account"> in {{ names.get(account) }}</template></p>
-            <p><button class="btn btn-plain clear" @click="clearSearch">Clear search</button></p>
+            <h2 id="found-title" class="title-2">{{ reviewMode ? 'Needs review' : 'Search' }}</h2>
+            <p class="footnote" aria-live="polite">
+              <template v-if="reviewMode">{{ txs.total.toLocaleString() }} {{ txs.total === 1 ? 'transaction' : 'transactions' }} to review<template v-if="account"> in {{ names.get(account) }}</template></template>
+              <template v-else>{{ found }}<template v-if="account"> in {{ names.get(account) }}</template></template>
+            </p>
+            <p v-if="!reviewMode"><button class="btn btn-plain clear" @click="clearSearch">Clear search</button></p>
           </div>
         </section>
         <section class="group" aria-label="Transactions found">
@@ -213,7 +230,7 @@ async function confirmDelete() {
           <div v-else-if="!txs.items.length" class="card card-pad">
             <p class="muted">Nothing matches. Try fewer words, or a wider amount.</p>
           </div>
-          <SpendingTransactions v-else :items="txs.items" :categories="all" :names="names" :show-account="!account" :busy="pending" @changed="changed" />
+          <SpendingTransactions v-else :items="txs.items" :categories="all" :names="names" :show-account="!account" :busy="pending" :review-mode="reviewMode" @changed="changed" @reviewed="markReviewed" />
           <div v-if="txs.pages > 1" class="btn-row pager">
             <button class="btn btn-plain" :disabled="page <= 1" @click="go({ page: String(page - 1) })">Newer</button>
             <span class="footnote">Page {{ txs.page }} of {{ txs.pages }}</span>
@@ -234,8 +251,8 @@ async function confirmDelete() {
           <div v-else class="card card-pad tight">
             <h2 id="cat-title" class="title-2">{{ label(category) }}</h2>
             <p class="num title-3 total" :class="current?.spending ? spendTone(current.total_cents) : moneyTone(current?.total_cents ?? 0)">{{ formatCents(current?.total_cents ?? 0) }}</p>
-            <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}<template v-if="viewing?.custom"> · Your own category</template></p>
-            <template v-if="viewing?.custom">
+            <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}<template v-if="viewing?.custom"> · {{ viewing.shared ? 'Shared category' : 'Your own category' }}</template></p>
+            <template v-if="viewing?.custom && !viewing.shared">
               <form v-if="renaming" class="inline-form" @submit.prevent="saveRename">
                 <label class="visually-hidden" for="rename">New name</label>
                 <input id="rename" v-model="rename" class="input" maxlength="40" required>

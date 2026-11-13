@@ -12,10 +12,11 @@ signing in to your bank, so transactions arrive on their own.
 The finance features arrive in this order:
 
 1. **Accounts and net worth.** Checking, savings, credit, brokerage,
-   retirement, loans and property, plus net worth over time.
+  retirement, loans and property, plus net worth over time.
 2. **Spending.** Import CSV, OFX or QFX files from your bank, sort them with
-   category rules, and get weekly and monthly reports.
-3. **Projections.** Savings rate, investment growth and debt payoff.
+  category rules, review new transactions, and get spending reports.
+3. **Planning.** Savings rate, investment growth, debt payoff, savings goals,
+  and a cash-flow forecast from planned items and detected regular charges.
 4. **Taxes.** Federal and state income tax estimates (every state, and DC), contribution room, holding
    periods, tax-loss harvesting with wash-sale warnings, and which account
    suits which asset. Cheddar's ideas are educational, not tax advice.
@@ -130,6 +131,9 @@ tunnel, repository secrets) and day-to-day operations.
   hold: to add more, go to Accounts.
   - **Search** by words (in the description, a name you gave it, or its
     note) and by amount, money in or out, on any date.
+  - **Needs review** shows transactions added since the review inbox was
+    introduced. Select rows on the current page and mark them reviewed; this
+    does not pause automatic categorization.
   - **Add one by hand** (cash, or one a statement missed) to an account that
     isn't linked. Open any transaction to give it a name of your own, add a
     note, or **leave it out** of spending, Overview, Projections and Taxes
@@ -149,9 +153,25 @@ tunnel, repository secrets) and day-to-day operations.
     transactions again on their own.
   - **Download CSV** saves the transactions for the period, account and
     category you're looking at as a spreadsheet.
+- **Plan ahead.** Goals (linked from Overview) track a target, an earmarked
+  amount and an optional date. Cash flow (linked from Spending) combines the
+  current balances of your own accounts with planned income and expenses and
+  detected regular charges over 30, 60 or 90 days. Forecasts are estimates:
+  Cheddar never schedules or makes payments. Goals and forecasts do not change
+  account balances or net worth.
+- **Share selected accounts with a household** (Settings → Household). The
+  owner invites verified Cheddar users; an invite must be accepted before
+  access is granted. Household members can see selected accounts and their
+  transactions, and edit transaction names, notes and exclusions. Only the
+  owner can manage accounts, balances, bank links, categories and merchant
+  rules. Unshared accounts, tax settings, Projections, cash-flow schedules and
+  personal exports remain private. Removing a member or unsharing an account
+  revokes access immediately.
 - **Export your data** (Settings → Your data): a zip of `accounts.csv`,
   `transactions.csv` and `balance_history.csv`, and `cheddar.json` with
-  everything, your categories and merchant rules too. It asks for your
+  everything you own, including goals and planned cash flow, your categories
+  and merchant rules too. Shared accounts owned by someone else are not in
+  your export. It asks for your
   password, and never holds a bank link's token or a two-step secret. A
   cell a spreadsheet would run as a formula (`=`, `+`, `-`, `@`) starts
   with `'`. Delete account offers it first.

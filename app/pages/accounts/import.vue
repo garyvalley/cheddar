@@ -7,7 +7,7 @@ useHead({ title: 'Import statements' })
 const route = useRoute()
 
 const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
-const accounts = computed(() => list.value.accounts)
+const accounts = computed(() => list.value.accounts.filter(a => a.owned !== false))
 const accountId = ref(typeof route.query.account === 'string' ? route.query.account : '')
 watch(accounts, (all) => {
   if (!all.some(a => a.id === accountId.value)) accountId.value = all[0]?.id ?? ''

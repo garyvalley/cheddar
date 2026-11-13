@@ -10,82 +10,110 @@
 // link, and is looked up by that owner, never by an id the caller sent.
 // ---------------------------------------------------------------------------
 
-var plaid = require(`${__hooks}/lib/plaid.js`)
-var dates = require(`${__hooks}/lib/dates.js`)
-var overlap = require(`${__hooks}/lib/overlap.js`)
+var plaid = require(`${__hooks}/lib/plaid.js`);
+var dates = require(`${__hooks}/lib/dates.js`);
+var overlap = require(`${__hooks}/lib/overlap.js`);
 
 function cfg() {
-  return plaid.config($os.getenv)
+  return plaid.config($os.getenv);
 }
 
 /** Why `owner` can't make one more link (lib/plaid.js linkLimit), or null. */
 function linkLimitFor(app, owner) {
-  return plaid.linkLimit(cfg(), app.countRecords("bank_links", $dbx.hashExp({ owner: owner })), app.countRecords("bank_links"))
+  return plaid.linkLimit(
+    cfg(),
+    app.countRecords("bank_links", $dbx.hashExp({ owner: owner })),
+    app.countRecords("bank_links"),
+  );
 }
 
 /** Throws when `owner` can't make one more link, and logs which limit it was, so it shows in the cluster's logs. */
 function checkLinkLimit(app, owner) {
-  var hit = linkLimitFor(app, owner)
-  if (!hit) return
-  console.log("[bank_links] " + hit.who + " limit of " + hit.limit + " reached: refused a new link for " + owner)
-  throw new BadRequestError(hit.message)
+  var hit = linkLimitFor(app, owner);
+  if (!hit) return;
+  console.log(
+    "[bank_links] " +
+      hit.who +
+      " limit of " +
+      hit.limit +
+      " reached: refused a new link for " +
+      owner,
+  );
+  throw new BadRequestError(hit.message);
 }
 
 /** A failed Plaid call: `failure` is lib/plaid.js's { code, status, message }. */
 function PlaidError(failure) {
-  this.failure = failure
+  this.failure = failure;
 }
 
 /** One Plaid call: its JSON on success, or throws a PlaidError. */
 function call(path, body) {
-  var res
+  var res;
   try {
-    res = $http.send(plaid.request(cfg(), path, body))
-  }
-  catch (_) {
-    throw new PlaidError(plaid.failure(0, null))
+    res = $http.send(plaid.request(cfg(), path, body));
+  } catch (_) {
+    throw new PlaidError(plaid.failure(0, null));
   }
   if (res.statusCode !== 200) {
-    var f = plaid.failure(res.statusCode, res.json)
-    console.log("[plaid] " + path + " failed: " + f.code)
-    throw new PlaidError(f)
+    var f = plaid.failure(res.statusCode, res.json);
+    console.log("[plaid] " + path + " failed: " + f.code);
+    throw new PlaidError(f);
   }
-  return res.json
+  return res.json;
 }
 
 function encrypt(text) {
-  return $security.encrypt(text, cfg().key)
+  return $security.encrypt(text, cfg().key);
 }
 
 /** The link's access token, or null if it can't be read (BANK_LINK_KEY changed). */
 function accessOf(link) {
   try {
-    return toString($security.decrypt(link.getString("access"), cfg().key))
-  }
-  catch (_) {
-    return null
+    return toString($security.decrypt(link.getString("access"), cfg().key));
+  } catch (_) {
+    return null;
   }
 }
 
 /** A link_token for Plaid Link: a new link, or with `link`, signing in again to that one. */
 function linkToken(userId, link) {
-  var access = null
+  var access = null;
   if (link) {
-    access = accessOf(link)
-    if (!access) throw new PlaidError({ code: "UNREADABLE", status: "reconnect", message: "Cheddar can no longer read this link. Remove it and link the bank again." })
+    access = accessOf(link);
+    if (!access)
+      throw new PlaidError({
+        code: "UNREADABLE",
+        status: "reconnect",
+        message:
+          "Cheddar can no longer read this link. Remove it and link the bank again.",
+      });
   }
-  return String(call("/link/token/create", plaid.linkTokenBody(userId, access)).link_token || "")
+  return String(
+    call("/link/token/create", plaid.linkTokenBody(userId, access))
+      .link_token || "",
+  );
 }
 
 /** Swaps Link's public_token for an access token and Plaid's id for the link. */
 function exchange(publicToken) {
-  var out = call("/item/public_token/exchange", { public_token: publicToken })
-  return { access: String(out.access_token || ""), itemId: String(out.item_id || "") }
+  var out = call("/item/public_token/exchange", { public_token: publicToken });
+  return {
+    access: String(out.access_token || ""),
+    itemId: String(out.item_id || ""),
+  };
 }
 
 /** The link as the app shows it. */
 function summary(app, link) {
-  var accounts = app.findRecordsByFilter("accounts", "link = {:id}", "name", 0, 0, { id: link.id })
+  var accounts = app.findRecordsByFilter(
+    "accounts",
+    "link = {:id}",
+    "name",
+    0,
+    0,
+    { id: link.id },
+  );
   return {
     id: link.id,
     provider: link.getString("provider"),
@@ -104,37 +132,41 @@ function summary(app, link) {
         balance_date: a.getString("balance_date"),
         closed_on: a.getString("closed_on"),
         excluded: a.getBool("excluded"),
-      }
+      };
     }),
-  }
+  };
 }
 
 /** The account a Plaid account syncs into, made the first time it's seen. */
 function accountFor(txApp, link, row) {
-  var owner = link.getString("owner")
-  var account
+  var owner = link.getString("owner");
+  var account;
   try {
-    account = txApp.findFirstRecordByFilter("accounts", "owner = {:owner} && external_id = {:ext}", { owner: owner, ext: row.external_id })
-  }
-  catch (_) {
-    account = new Record(txApp.findCollectionByNameOrId("accounts"))
-    account.set("owner", owner)
-    account.set("external_id", row.external_id)
-    account.set("source", "sync")
+    account = txApp.findFirstRecordByFilter(
+      "accounts",
+      "owner = {:owner} && external_id = {:ext}",
+      { owner: owner, ext: row.external_id },
+    );
+  } catch (_) {
+    account = new Record(txApp.findCollectionByNameOrId("accounts"));
+    account.set("owner", owner);
+    account.set("external_id", row.external_id);
+    account.set("source", "sync");
     // Only the first time: after that these are the person's (Accounts' Edit).
-    account.set("name", row.name)
-    account.set("kind", row.kind)
-    if (row.last4) account.set("last4", row.last4)
+    account.set("name", row.name);
+    account.set("kind", row.kind);
+    if (row.last4) account.set("last4", row.last4);
   }
-  account.set("link", link.id)
-  if (row.institution && !account.getString("institution")) account.set("institution", row.institution)
-  account.set("currency", row.currency)
+  account.set("link", link.id);
+  if (row.institution && !account.getString("institution"))
+    account.set("institution", row.institution);
+  account.set("currency", row.currency);
   if (row.balance_cents !== null) {
-    account.set("balance_cents", row.balance_cents)
-    account.set("balance_date", row.balance_date)
+    account.set("balance_cents", row.balance_cents);
+    account.set("balance_date", row.balance_date);
   }
-  txApp.save(account)
-  return account
+  txApp.save(account);
+  return account;
 }
 
 /**
@@ -143,12 +175,30 @@ function accountFor(txApp, link, row) {
  * link's now, so each imported row stands for one transaction at most.
  */
 function imported(txApp, account, t) {
-  var span = overlap.around(t.posted)
-  var rows = txApp.findRecordsByFilter("transactions",
-    "account = {:account} && source = 'import' && amount_cents = {:amount} && posted >= {:from} && posted <= {:to}", "posted", 0, 0,
-    { account: account.id, amount: t.amount_cents, from: span.from, to: span.to })
-  var i = overlap.nearest(t, rows.map(function (r) { return { posted: r.getString("posted"), amount_cents: r.getInt("amount_cents") } }))
-  return i === -1 ? null : rows[i]
+  var span = overlap.around(t.posted);
+  var rows = txApp.findRecordsByFilter(
+    "transactions",
+    "account = {:account} && source = 'import' && amount_cents = {:amount} && posted >= {:from} && posted <= {:to}",
+    "posted",
+    0,
+    0,
+    {
+      account: account.id,
+      amount: t.amount_cents,
+      from: span.from,
+      to: span.to,
+    },
+  );
+  var i = overlap.nearest(
+    t,
+    rows.map(function (r) {
+      return {
+        posted: r.getString("posted"),
+        amount_cents: r.getInt("amount_cents"),
+      };
+    }),
+  );
+  return i === -1 ? null : rows[i];
 }
 
 /**
@@ -159,23 +209,27 @@ function imported(txApp, account, t) {
  * left to fix (shared/splits.ts).
  */
 function carryOver(txApp, account, t, rec) {
-  if (!t.pending_of) return
-  var was
+  if (!t.pending_of) return;
+  var was;
   try {
-    was = txApp.findFirstRecordByFilter("transactions", "account = {:account} && external_id = {:ext}", { account: account.id, ext: t.pending_of })
+    was = txApp.findFirstRecordByFilter(
+      "transactions",
+      "account = {:account} && external_id = {:ext}",
+      { account: account.id, ext: t.pending_of },
+    );
+  } catch (_) {
+    return;
   }
-  catch (_) {
-    return
-  }
-  if (was.getString("payee")) rec.set("payee", was.getString("payee"))
-  rec.set("note", was.getString("note"))
-  rec.set("excluded", was.getBool("excluded"))
+  if (was.getString("payee")) rec.set("payee", was.getString("payee"));
+  rec.set("note", was.getString("note"));
+  rec.set("excluded", was.getBool("excluded"));
+  rec.set("reviewed", was.getBool("reviewed"));
   if (was.getString("category_by") === "person") {
-    rec.set("category", was.getString("category"))
-    rec.set("category_by", "person")
+    rec.set("category", was.getString("category"));
+    rec.set("category_by", "person");
   }
-  var parts = JSON.parse(was.getString("splits") || "null")
-  if (parts) rec.set("splits", parts)
+  var parts = JSON.parse(was.getString("splits") || "null");
+  if (parts) rec.set("splits", parts);
 }
 
 /**
@@ -183,73 +237,79 @@ function carryOver(txApp, account, t, rec) {
  * statement already brought in for it; answers "added", "updated" or "".
  */
 function upsert(txApp, collection, account, t) {
-  var rec
+  var rec;
   try {
-    rec = txApp.findFirstRecordByFilter("transactions", "account = {:account} && external_id = {:ext}", { account: account.id, ext: t.external_id })
+    rec = txApp.findFirstRecordByFilter(
+      "transactions",
+      "account = {:account} && external_id = {:ext}",
+      { account: account.id, ext: t.external_id },
+    );
+  } catch (_) {
+    rec = null;
   }
-  catch (_) {
-    rec = null
-  }
-  var outcome = "updated"
-  var took = !rec && imported(txApp, account, t)
+  var outcome = "updated";
+  var took = !rec && imported(txApp, account, t);
   if (took) {
     // The statement had it first: the row becomes the link's, so the bank's
     // later changes and removals reach it, and undoing that import keeps it.
-    rec = took
-    rec.set("source", "sync")
-    rec.set("external_id", t.external_id)
-    rec.set("import", "")
-    if (!rec.getString("payee")) rec.set("payee", t.payee)
-  }
-  else if (rec) {
-    if (rec.getString("posted") === t.posted && rec.getInt("amount_cents") === t.amount_cents
-      && rec.getBool("pending") === t.pending && rec.getString("description") === t.description
-      && rec.getString("bank_category") === t.bank_category) return ""
-  }
-  else {
-    rec = new Record(collection)
-    rec.set("owner", account.getString("owner"))
-    rec.set("account", account.id)
-    rec.set("source", "sync")
-    rec.set("external_id", t.external_id)
+    rec = took;
+    rec.set("source", "sync");
+    rec.set("external_id", t.external_id);
+    rec.set("import", "");
+    if (!rec.getString("payee")) rec.set("payee", t.payee);
+  } else if (rec) {
+    if (
+      rec.getString("posted") === t.posted &&
+      rec.getInt("amount_cents") === t.amount_cents &&
+      rec.getBool("pending") === t.pending &&
+      rec.getString("description") === t.description &&
+      rec.getString("bank_category") === t.bank_category
+    )
+      return "";
+  } else {
+    rec = new Record(collection);
+    rec.set("owner", account.getString("owner"));
+    rec.set("account", account.id);
+    rec.set("source", "sync");
+    rec.set("external_id", t.external_id);
     // The bank's own words; the person's edits to these later stay theirs.
-    rec.set("payee", t.payee)
-    carryOver(txApp, account, t, rec)
-    outcome = "added"
+    rec.set("payee", t.payee);
+    carryOver(txApp, account, t, rec);
+    outcome = "added";
   }
-  rec.set("posted", t.posted)
-  rec.set("amount_cents", t.amount_cents)
-  rec.set("description", t.description)
-  rec.set("pending", t.pending)
+  rec.set("posted", t.posted);
+  rec.set("amount_cents", t.amount_cents);
+  rec.set("description", t.description);
+  rec.set("pending", t.pending);
   // Plaid's category; pb_hooks/categories.pb.js sorts the row by it as it saves.
-  rec.set("bank_category", t.bank_category)
-  txApp.save(rec)
-  return outcome
+  rec.set("bank_category", t.bank_category);
+  txApp.save(rec);
+  return outcome;
 }
 
 /** Fetches every page of what's changed since `cursor`. Answers { added, modified, removed, cursor }. */
 function fetchChanges(access, cursor) {
-  var all = { added: [], modified: [], removed: [], cursor: cursor }
+  var all = { added: [], modified: [], removed: [], cursor: cursor };
   for (var page = 0; page < plaid.MAX_PAGES; page++) {
-    var body = { access_token: access, count: 500 }
-    if (all.cursor) body.cursor = all.cursor
-    var p = plaid.syncPage(call("/transactions/sync", body))
-    all.added = all.added.concat(p.added)
-    all.modified = all.modified.concat(p.modified)
-    all.removed = all.removed.concat(p.removed)
-    all.cursor = p.cursor || all.cursor
-    if (!p.more) break
+    var body = { access_token: access, count: 500 };
+    if (all.cursor) body.cursor = all.cursor;
+    var p = plaid.syncPage(call("/transactions/sync", body));
+    all.added = all.added.concat(p.added);
+    all.modified = all.modified.concat(p.modified);
+    all.removed = all.removed.concat(p.removed);
+    all.cursor = p.cursor || all.cursor;
+    if (!p.more) break;
   }
-  return all
+  return all;
 }
 
 /** Records a failed sync on the link; answers the sync result. */
 function failed(app, link, f, result) {
-  link.set("status", f.status)
-  link.set("message", f.message)
-  app.save(link)
-  result.problem = f.message
-  return result
+  link.set("status", f.status);
+  link.set("message", f.message);
+  app.save(link);
+  result.problem = f.message;
+  return result;
 }
 
 /**
@@ -259,76 +319,106 @@ function failed(app, link, f, result) {
  * for the balances' date (dates.personToday); the UTC day without one.
  */
 function sync(app, link, today) {
-  var now = Date.now()
-  var result = { ok: false, added: 0, updated: 0, removed: 0 }
-  link.set("last_attempt", dates.toPb(now))
+  var now = Date.now();
+  var result = { ok: false, added: 0, updated: 0, removed: 0 };
+  link.set("last_attempt", dates.toPb(now));
 
-  var access = accessOf(link)
+  var access = accessOf(link);
   if (!access) {
-    return failed(app, link, { status: "reconnect", message: "Cheddar can no longer read this link. Remove it and link the bank again." }, result)
+    return failed(
+      app,
+      link,
+      {
+        status: "reconnect",
+        message:
+          "Cheddar can no longer read this link. Remove it and link the bank again.",
+      },
+      result,
+    );
   }
 
-  var accounts
-  var changes
+  var accounts;
+  var changes;
   try {
-    accounts = call("/accounts/get", { access_token: access })
+    accounts = call("/accounts/get", { access_token: access });
     try {
-      changes = fetchChanges(access, link.getString("cursor"))
-    }
-    catch (err) {
+      changes = fetchChanges(access, link.getString("cursor"));
+    } catch (err) {
       // The bank's data changed between pages: start again from the saved cursor, once.
-      if (!(err instanceof PlaidError) || err.failure.code !== "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") throw err
-      changes = fetchChanges(access, link.getString("cursor"))
+      if (
+        !(err instanceof PlaidError) ||
+        err.failure.code !== "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
+      )
+        throw err;
+      changes = fetchChanges(access, link.getString("cursor"));
     }
-  }
-  catch (err) {
-    if (err instanceof PlaidError) return failed(app, link, err.failure, result)
-    throw err
+  } catch (err) {
+    if (err instanceof PlaidError)
+      return failed(app, link, err.failure, result);
+    throw err;
   }
 
-  var item = accounts.item || {}
-  var institution = plaid.clean(item.institution_name) || (link.get("institutions") || [])[0] || ""
-  var rows = plaid.accountRows(accounts, institution, dates.personToday(today, now))
+  var item = accounts.item || {};
+  var institution =
+    plaid.clean(item.institution_name) ||
+    (link.get("institutions") || [])[0] ||
+    "";
+  var rows = plaid.accountRows(
+    accounts,
+    institution,
+    dates.personToday(today, now),
+  );
 
   app.runInTransaction(function (txApp) {
-    var byPlaidId = {}
-    rows.forEach(function (row) { byPlaidId[row.external_id] = accountFor(txApp, link, row) })
-    var collection = txApp.findCollectionByNameOrId("transactions")
+    var byPlaidId = {};
+    rows.forEach(function (row) {
+      byPlaidId[row.external_id] = accountFor(txApp, link, row);
+    });
+    var collection = txApp.findCollectionByNameOrId("transactions");
     changes.added.concat(changes.modified).forEach(function (t) {
-      var account = byPlaidId[t.account]
-      if (!account) return
-      var outcome = upsert(txApp, collection, account, t)
-      if (outcome === "added") result.added++
-      else if (outcome === "updated") result.updated++
-    })
+      var account = byPlaidId[t.account];
+      if (!account) return;
+      var outcome = upsert(txApp, collection, account, t);
+      if (outcome === "added") result.added++;
+      else if (outcome === "updated") result.updated++;
+    });
     // A pending charge that posts comes back removed, and again as a new
     // transaction; a refunded or cancelled one is just removed.
     changes.removed.forEach(function (ext) {
-      txApp.findRecordsByFilter("transactions", "owner = {:owner} && source = 'sync' && external_id = {:ext}", "", 0, 0,
-        { owner: link.getString("owner"), ext: ext }).forEach(function (rec) {
-        txApp.delete(rec)
-        result.removed++
-      })
-    })
-    if (institution) link.set("institutions", [institution])
-    link.set("cursor", changes.cursor)
-    link.set("status", "ok")
-    link.set("message", "")
-    link.set("last_synced", dates.toPb(now))
-    txApp.save(link)
-  })
-  result.ok = true
-  return result
+      txApp
+        .findRecordsByFilter(
+          "transactions",
+          "owner = {:owner} && source = 'sync' && external_id = {:ext}",
+          "",
+          0,
+          0,
+          { owner: link.getString("owner"), ext: ext },
+        )
+        .forEach(function (rec) {
+          txApp.delete(rec);
+          result.removed++;
+        });
+    });
+    if (institution) link.set("institutions", [institution]);
+    link.set("cursor", changes.cursor);
+    link.set("status", "ok");
+    link.set("message", "");
+    link.set("last_synced", dates.toPb(now));
+    txApp.save(link);
+  });
+  result.ok = true;
+  return result;
 }
 
 /** The caller's own link, or a 404 for one that isn't theirs. */
 function ownLink(app, auth, id) {
   try {
-    var link = app.findRecordById("bank_links", id)
-    if (link.getString("owner") === auth.id) return link
+    var link = app.findRecordById("bank_links", id);
+    if (link.getString("owner") === auth.id) return link;
+  } catch (_) {
+    /* not found: the same answer as someone else's */
   }
-  catch (_) { /* not found: the same answer as someone else's */ }
-  throw new NotFoundError("That link isn't there.")
+  throw new NotFoundError("That link isn't there.");
 }
 
 /**
@@ -341,14 +431,18 @@ function ownLink(app, auth, id) {
  */
 function forget(link) {
   try {
-    if (!plaid.isEnabled(cfg())) return
-    var access = accessOf(link)
-    if (!access) return
-    call("/item/remove", { access_token: access })
-  }
-  catch (err) {
+    if (!plaid.isEnabled(cfg())) return;
+    var access = accessOf(link);
+    if (!access) return;
+    call("/item/remove", { access_token: access });
+  } catch (err) {
     // Already gone at Plaid, or Plaid unreachable.
-    console.log("[plaid] /item/remove for " + link.id + " failed: " + (err && err.failure ? err.failure.code : err))
+    console.log(
+      "[plaid] /item/remove for " +
+        link.id +
+        " failed: " +
+        (err && err.failure ? err.failure.code : err),
+    );
   }
 }
 
@@ -358,12 +452,16 @@ function forget(link) {
  */
 function remove(app, link) {
   app.runInTransaction(function (txApp) {
-    txApp.findRecordsByFilter("accounts", "link = {:id}", "", 0, 0, { id: link.id }).forEach(function (a) {
-      a.set("link", "")
-      txApp.save(a)
-    })
-    txApp.delete(link)
-  })
+    txApp
+      .findRecordsByFilter("accounts", "link = {:id}", "", 0, 0, {
+        id: link.id,
+      })
+      .forEach(function (a) {
+        a.set("link", "");
+        txApp.save(a);
+      });
+    txApp.delete(link);
+  });
 }
 
 module.exports = {
@@ -379,4 +477,4 @@ module.exports = {
   ownLink: ownLink,
   remove: remove,
   forget: forget,
-}
+};

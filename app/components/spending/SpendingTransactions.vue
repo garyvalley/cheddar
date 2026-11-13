@@ -17,14 +17,25 @@ const props = defineProps<{
   /** Say which account each is in (the list spans several). */
   showAccount: boolean
   busy: boolean
+  reviewMode?: boolean
 }>()
 // What changed, said once the page has the new totals (the list may no longer hold it).
-const emit = defineEmits<{ changed: [message: string] }>()
+const emit = defineEmits<{ changed: [message: string], reviewed: [ids: string[]] }>()
+const selected = ref<string[]>([])
+const allSelected = computed(() => props.items.length > 0 && props.items.every(t => selected.value.includes(t.id)))
+function selectAll(event: Event) {
+  selected.value = (event.target as HTMLInputElement).checked ? props.items.map(t => t.id) : []
+}
+function selectOne(id: string, event: Event) {
+  selected.value = (event.target as HTMLInputElement).checked
+    ? [...selected.value, id]
+    : selected.value.filter(selectedId => selectedId !== id)
+}
 
 const NEW = '__new'
 const label = (id: string) => categoryOf(id, props.categories).label
 const builtInSpending = computed(() => props.categories.filter(c => !c.custom && c.spending))
-const yours = computed(() => props.categories.filter(c => c.custom))
+const yours = computed(() => props.categories.filter(c => c.custom && !c.shared))
 const notSpent = computed(() => props.categories.filter(c => !c.spending))
 
 const today = useToday()
@@ -75,7 +86,7 @@ function open(t: Transaction) {
   editing.value = editing.value === t.id ? '' : t.id
 }
 async function save(t: Transaction) {
-  const manual = t.source === 'manual'
+  const manual = t.source === 'manual' && !t.shared
   const change: Record<string, unknown> = { payee: form.payee, note: form.note, excluded: form.excluded }
   if (manual) Object.assign(change, { posted: form.posted, amount: form.amount, direction: form.direction, description: form.description })
   const checked = checkEdit(change, manual)
@@ -117,22 +128,29 @@ watch(() => props.items, () => {
 <template>
   <div>
     <p v-if="move.error.value" class="notice notice-error gap" role="alert">{{ move.error.value }}</p>
+    <div v-if="reviewMode" class="review-tools">
+      <label class="check"><input type="checkbox" :checked="allSelected" @change="selectAll"><span>Select all on this page</span></label>
+      <button class="btn btn-primary" :disabled="!selected.length || busy" @click="emit('reviewed', selected)">Mark {{ selected.length || '' }} reviewed</button>
+    </div>
     <ul class="card list" :aria-busy="busy || move.busy.value || edit.busy.value">
       <li v-for="t in items" :key="t.id" class="tx-item" :class="{ out: t.excluded }">
         <div class="row tx">
+          <input v-if="reviewMode" type="checkbox" class="review-check" :checked="selected.includes(t.id)" :aria-label="`Select ${shownName(t)}`" @change="selectOne(t.id, $event)">
           <button class="row-label opener" :aria-expanded="editing === t.id" :aria-label="`Change ${shownName(t)}, ${day(t.posted)}`" @click="open(t)">
             <span class="block desc">{{ shownName(t) }}</span>
             <span v-if="t.payee && t.description && t.payee !== t.description" class="footnote block desc">{{ t.description }}</span>
             <span class="footnote">{{ day(t.posted) }}<template v-if="showAccount"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template><template v-if="origin(t)"> · {{ origin(t) }}</template></span>
-            <span v-if="t.splits.length" class="footnote block parts">{{ partsText(t) }}</span>
+            <span v-if="t.splits.length && t.shared" class="footnote block parts">Split details belong to the account owner.</span>
+            <span v-else-if="t.splits.length" class="footnote block parts">{{ partsText(t) }}</span>
             <span v-if="leftOver(t)" class="badge badge-warn">Split needs fixing</span>
             <span v-if="t.excluded" class="badge badge-off">Left out</span>
             <span v-if="t.note" class="footnote block note">{{ t.note }}</span>
           </button>
           <span class="tx-side">
             <span class="num amount" :class="moneyTone(t.amount_cents)">{{ formatCents(t.amount_cents) }}</span>
+            <span v-if="t.shared" class="chip" :title="t.splits.length ? 'Split details belong to the account owner' : 'Categories are managed by the account owner'">{{ t.splits.length ? `Split · ${t.splits.length}` : label(t.category) }}</span>
             <button
-              v-if="t.splits.length" type="button" class="chip" :aria-expanded="splitting === t.id"
+              v-else-if="t.splits.length" type="button" class="chip" :aria-expanded="splitting === t.id"
               :aria-label="`Split of ${shownName(t)}: ${partsText(t)}. Change it`" @click="split(t)"
             >
               Split · {{ t.splits.length }}
@@ -164,7 +182,7 @@ watch(() => props.items, () => {
         </form>
         <SpendingSplit v-if="splitting === t.id" class="panel" :transaction="t" :categories="categories" @saved="splitSaved" @cancel="splitting = ''" />
         <form v-if="editing === t.id" class="panel edit" @submit.prevent="save(t)">
-          <template v-if="t.source === 'manual'">
+          <template v-if="t.source === 'manual' && !t.shared">
             <label class="field">
               <span class="field-label">What it was</span>
               <input v-model="form.description" class="input" :maxlength="DESCRIPTION_MAX" required>
@@ -197,7 +215,8 @@ watch(() => props.items, () => {
             <span>Leave out of spending, Overview, Projections and Taxes</span>
           </label>
           <p class="footnote">
-            <template v-if="t.source === 'manual'">You added this one by hand.</template>
+            <template v-if="t.shared">Shared by another household member. You can change its name, note, or whether it counts.</template>
+            <template v-else-if="t.source === 'manual'">You added this one by hand.</template>
             <template v-else>Its date, amount and description are what your {{ t.source === 'sync' ? 'bank sent' : 'statement says' }}. A name you give it groups it with that merchant.</template>
           </p>
           <p v-if="edit.error.value" class="notice notice-error" role="alert">{{ edit.error.value }}</p>
@@ -209,8 +228,8 @@ watch(() => props.items, () => {
           <div v-else class="btn-row">
             <button class="btn btn-primary" :disabled="edit.busy.value"><span v-if="edit.busy.value" class="spinner" aria-hidden="true" /> Save</button>
             <button type="button" class="btn btn-plain" @click="editing = ''">Cancel</button>
-            <button type="button" class="btn btn-plain" @click="split(t)">{{ t.splits.length ? 'Change the split…' : 'Split…' }}</button>
-            <button v-if="t.source === 'manual'" type="button" class="btn btn-plain danger push" @click="deleting = true">Delete…</button>
+            <button v-if="!t.shared" type="button" class="btn btn-plain" @click="split(t)">{{ t.splits.length ? 'Change the split…' : 'Split…' }}</button>
+            <button v-if="t.source === 'manual' && !t.shared" type="button" class="btn btn-plain danger push" @click="deleting = true">Delete…</button>
           </div>
         </form>
       </li>
@@ -225,6 +244,9 @@ watch(() => props.items, () => {
 .desc { overflow-wrap: anywhere; }
 .amount { white-space: nowrap; }
 .tx { align-items: flex-start; }
+.review-tools { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.review-tools .check { display: flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; }
+.review-check { width: 1.25rem; height: 1.25rem; flex: none; accent-color: var(--accent); margin: 0; }
 .opener {
   display: block; min-width: 0; padding: 0; border: 0; background: none;
   font: inherit; color: inherit; text-align: left; cursor: pointer;

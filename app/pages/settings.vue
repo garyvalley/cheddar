@@ -5,6 +5,7 @@
     <div class="cols">
       <div>
         <SettingsProfile />
+        <SettingsHousehold />
         <SettingsAppearance />
       </div>
       <div>
