@@ -19,6 +19,7 @@ export const email = () => `t-${randomBytes(6).toString('hex')}@cheddar.test`
 export function client(from = ip()) {
   let cookie = ''
   return {
+    from,
     get cookie() { return cookie },
     set cookie(v) { cookie = v },
     async call(method, path, body, headers = {}) {

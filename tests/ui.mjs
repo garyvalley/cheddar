@@ -11,9 +11,11 @@
 // PocketBase as the superuser (PB_URL, PB_SU_EMAIL, PB_SU_PASS).
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { loadHookModule } from './load-hook-module.mjs'
 import { makePdf, rows } from './make-pdf.mjs'
+import { unzip } from './unzip.mjs'
 
 const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
 const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
@@ -148,6 +150,18 @@ try {
   await page.getByRole('heading', { name: 'Categories' }).waitFor()
   await page.getByRole('link', { name: /Dining and drinks/ }).waitFor()
   assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
+
+  // Taking it out again: the month's transactions as a spreadsheet, and everything from Settings.
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download CSV' }).click()])
+  assert.match(csv.suggestedFilename(), new RegExp(`^cheddar-transactions-${yyyy}-${mm}-01-to-${yyyy}-${mm}-\\d\\d\\.csv$`))
+  assert.match(readFileSync(await csv.path(), 'utf8'), /GROCERY, INC/)
+  await page.goto(`${APP}/settings`)
+  await page.getByRole('button', { name: 'Export…' }).click()
+  await page.getByLabel('Enter your password to export everything').fill(password)
+  const [zip] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download', exact: true }).click()])
+  assert.match(zip.suggestedFilename(), /^cheddar-export-\d{4}-\d{2}-\d{2}\.zip$/)
+  assert.deepEqual(Object.keys(unzip(readFileSync(await zip.path()))).sort(), ['accounts.csv', 'balance_history.csv', 'cheddar.json', 'transactions.csv'])
+  await page.getByText('Your export is downloading.').waitFor()
 
   // Net worth: a balance entered on Accounts, added up on Overview beside the month's income and spending.
   await page.goto(`${APP}/accounts`)

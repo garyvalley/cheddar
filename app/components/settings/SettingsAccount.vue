@@ -37,12 +37,19 @@ async function changePassword() {
   passwordChanged.value = true
 }
 
+const copy = useDataExport()
+
 const sent = ref(false)
 const deleting = ref(false)
 const password = ref('')
+const exported = ref(false)
 
 async function resend() {
   sent.value = await verify.succeed(() => $fetch('/api/auth/request-verification', { method: 'POST', body: { email: me.value?.email } }))
+}
+
+async function downloadFirst() {
+  exported.value = await copy.download(password.value)
 }
 
 async function deleteAccount() {
@@ -143,14 +150,19 @@ async function deleteAccount() {
           <span class="field-label">Enter your password to delete your account for good</span>
           <input v-model="password" v-focus class="input" type="password" autocomplete="current-password" required>
         </label>
+        <p class="footnote">Want a copy first? Download your data with the same password, then delete.</p>
         <div class="btn-row">
+          <button type="button" class="btn btn-tinted" :disabled="copy.busy.value || !password" @click="downloadFirst">
+            <span v-if="copy.busy.value" class="spinner" aria-hidden="true" /> Download my data
+          </button>
           <button class="btn btn-danger" :disabled="remove.busy.value">
             <span v-if="remove.busy.value" class="spinner" aria-hidden="true" /> Delete my account
           </button>
-          <button type="button" class="btn btn-plain" @click="deleting = false; password = ''">Cancel</button>
+          <button type="button" class="btn btn-plain" @click="deleting = false; password = ''; exported = false">Cancel</button>
         </div>
       </form>
     </div>
-    <p v-if="remove.error.value" class="notice notice-error" role="alert">{{ remove.error.value }}</p>
+    <p v-if="exported" class="notice notice-success" role="status">Your data is downloading.</p>
+    <p v-if="remove.error.value || copy.error.value" class="notice notice-error" role="alert">{{ remove.error.value || copy.error.value }}</p>
   </section>
 </template>

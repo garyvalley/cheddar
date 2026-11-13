@@ -112,6 +112,17 @@ export async function listTransactions(s: Session, q: TransactionQuery & { page:
   return { items: list.items.map(toTransaction), page: list.page, pages: list.totalPages, total: list.totalItems }
 }
 
+/** Every transaction a query finds, oldest first, as a download lists them. */
+export async function allTransactions(s: Session, q: TransactionQuery): Promise<(Transaction & { import: string })[]> {
+  const filter = transactionFilter(s, q)
+  const rows = await s.collection('transactions').getFullList({
+    sort: 'posted,created',
+    fields: 'id,account,import,posted,amount_cents,description,payee,category,category_by,pending,source',
+    ...(filter ? { filter } : {}),
+  })
+  return rows.map(r => ({ ...toTransaction(r), import: r.import ?? '' }))
+}
+
 /** What each category came to between two dates, and the spending of the same span before. */
 export async function spendingSummary(s: Session, q: { account?: string, from: string, to: string, previous: { from: string, to: string } }): Promise<SpendingSummary> {
   const rows = (range: { from: string, to: string }) => s.collection('transactions').getFullList({

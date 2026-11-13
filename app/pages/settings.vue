@@ -4,6 +4,7 @@
     <SettingsProfile />
     <SettingsAppearance />
     <SettingsTwoStep />
+    <SettingsExport />
     <SettingsAccount />
   </div>
 </template>

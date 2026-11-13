@@ -126,6 +126,12 @@ server {
         include snippets/proxy-to-nuxt.conf;
     }
 
+    # Exporting everything checks the password.
+    location = /api/export {
+        limit_req zone=auth burst=5 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
     # Guesses at an emailed token (and, for an email change, the password).
     location ~ ^/api/auth/confirm-(password-reset|verification|email-change)$ {
         limit_req zone=auth burst=5 nodelay;

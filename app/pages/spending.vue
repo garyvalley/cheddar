@@ -58,6 +58,15 @@ const { data: txs, pending, error: txError, refresh: refreshTxs } = await useFet
 })
 watch([category, account, period, page], () => { if (category.value) refreshTxs() })
 
+// What's shown, as a spreadsheet: the period, the account and the category picked.
+const csvHref = computed(() => {
+  const q = new URLSearchParams({ from: period.value.from, to: period.value.to })
+  if (account.value) q.set('account', account.value)
+  if (category.value && category.value !== 'all') q.set('category', category.value)
+  return `/api/transactions/csv?${q}`
+})
+const csvWhat = computed(() => (category.value && category.value !== 'all' ? `${label(category.value)} for ${period.value.label}` : `every transaction for ${period.value.label}`))
+
 const comparison = computed(() => {
   const was = summary.value.previous_spent_cents
   const now = summary.value.spent_cents
@@ -155,6 +164,10 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
               <option v-for="a in list.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </label>
+          <div class="row">
+            <span class="row-label footnote">Download {{ csvWhat }} as a spreadsheet.</span>
+            <a class="btn btn-tinted" :href="csvHref" download>Download CSV</a>
+          </div>
         </div>
       </section>
 

@@ -137,6 +137,14 @@ tunnel, repository secrets) and day-to-day operations.
     one and move it there; Cheddar remembers it for that merchant like any
     other. Rename or delete it on its own page; deleting one sorts its
     transactions again on their own.
+  - **Download CSV** saves the transactions for the period, account and
+    category you're looking at as a spreadsheet.
+- **Export your data** (Settings → Your data): a zip of `accounts.csv`,
+  `transactions.csv` and `balance_history.csv`, and `cheddar.json` with
+  everything, your categories and merchant rules too. It asks for your
+  password, and never holds a bank link's token or a two-step secret. A
+  cell a spreadsheet would run as a formula (`=`, `+`, `-`, `@`) starts
+  with `'`. Delete account offers it first.
 - **Change your password** (Settings → Account) with your current one. Every
   other device is signed out; this one stays signed in.
 - **Change your email** (Settings → Account): your password, then a link
