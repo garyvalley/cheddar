@@ -62,11 +62,16 @@ export function toCsv(header: string[], rows: (string | number | boolean)[][]): 
 /** Cents as a plain decimal a spreadsheet reads as a number: -1234 is -12.34. */
 export const dollars = (cents: number): number => Math.round(cents) / 100
 
+/** A split's parts in one cell: "Groceries 80.00; Household 40.00". Empty for one that isn't split. */
+export function splitText(t: Pick<Transaction, 'splits'>, categories: Category[]): string {
+  return (t.splits ?? []).map(p => `${categoryLabel(p.category, categories)} ${dollars(p.amount_cents).toFixed(2)}`).join('; ')
+}
+
 export function transactionsCsv(rows: Transaction[], accounts: Pick<Account, 'id' | 'name'>[], categories: Category[]): string {
   const names = new Map(accounts.map(a => [a.id, a.name]))
   return toCsv(
-    ['Date', 'Account', 'Amount', 'Description', 'Payee', 'Category', 'Pending', 'Note', 'Left out'],
-    rows.map(t => [t.posted, names.get(t.account) ?? '', dollars(t.amount_cents), t.description, t.payee, categoryLabel(t.category, categories), t.pending, t.note, t.excluded]),
+    ['Date', 'Account', 'Amount', 'Description', 'Payee', 'Category', 'Pending', 'Note', 'Left out', 'Split'],
+    rows.map(t => [t.posted, names.get(t.account) ?? '', dollars(t.amount_cents), t.description, t.payee, categoryLabel(t.category, categories), t.pending, t.note, t.excluded, splitText(t, categories)]),
   )
 }
 

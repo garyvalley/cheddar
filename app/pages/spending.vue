@@ -219,7 +219,7 @@ async function confirmDelete() {
             <span class="footnote">Page {{ txs.page }} of {{ txs.pages }}</span>
             <button class="btn btn-plain" :disabled="page >= txs.pages" @click="go({ page: String(page + 1) })">Older</button>
           </div>
-          <p class="group-footer">Open one to give it a name of your own, add a note, or leave it out of spending and taxes.</p>
+          <p class="group-footer">Open one to give it a name of your own, add a note, split it across categories, or leave it out of spending and taxes.</p>
         </section>
       </template>
 
@@ -268,7 +268,7 @@ async function confirmDelete() {
             <span class="footnote">Page {{ txs.page }} of {{ txs.pages }}</span>
             <button class="btn btn-plain" :disabled="page >= txs.pages" @click="go({ page: String(page + 1) })">Older</button>
           </div>
-          <p class="group-footer">In the wrong place? Pick its category, or make a new one. The rest from the same place move with it, and new ones follow. Open one to name it, add a note, or leave it out of spending and taxes.</p>
+          <p class="group-footer">In the wrong place? Pick its category, or make a new one. The rest from the same place move with it, and new ones follow. Open one to name it, add a note, split it across categories, or leave it out of spending and taxes.</p>
         </section>
       </template>
 

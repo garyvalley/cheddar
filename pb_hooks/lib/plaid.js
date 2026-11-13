@@ -218,6 +218,8 @@ function transactionRow(t) {
     payee: clean(t.merchant_name).slice(0, 200),
     pending: !!t.pending,
     bank_category: bankCategory(t.personal_finance_category),
+    // The pending charge this one posted from, whose person's changes carry over (glue/plaid.js).
+    pending_of: t.pending_transaction_id ? (PREFIX + t.pending_transaction_id).slice(0, 200) : "",
   }
 }
 

@@ -152,6 +152,33 @@ function imported(txApp, account, t) {
 }
 
 /**
+ * A pending charge that posts comes back as a new transaction (and the
+ * pending one is removed): what the person made of the pending one, its
+ * name, note, being left out, a category chosen by hand and a split, moves
+ * to the posted one. A split whose amount changed as it posted (a tip) is
+ * left to fix (shared/splits.ts).
+ */
+function carryOver(txApp, account, t, rec) {
+  if (!t.pending_of) return
+  var was
+  try {
+    was = txApp.findFirstRecordByFilter("transactions", "account = {:account} && external_id = {:ext}", { account: account.id, ext: t.pending_of })
+  }
+  catch (_) {
+    return
+  }
+  if (was.getString("payee")) rec.set("payee", was.getString("payee"))
+  rec.set("note", was.getString("note"))
+  rec.set("excluded", was.getBool("excluded"))
+  if (was.getString("category_by") === "person") {
+    rec.set("category", was.getString("category"))
+    rec.set("category_by", "person")
+  }
+  var parts = JSON.parse(was.getString("splits") || "null")
+  if (parts) rec.set("splits", parts)
+}
+
+/**
  * Adds or brings up to date one transaction, or takes over the row a
  * statement already brought in for it; answers "added", "updated" or "".
  */
@@ -187,6 +214,7 @@ function upsert(txApp, collection, account, t) {
     rec.set("external_id", t.external_id)
     // The bank's own words; the person's edits to these later stay theirs.
     rec.set("payee", t.payee)
+    carryOver(txApp, account, t, rec)
     outcome = "added"
   }
   rec.set("posted", t.posted)

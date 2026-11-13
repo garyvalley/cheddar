@@ -56,8 +56,8 @@ describe('exporting everything', () => {
     assert.doesNotMatch(all, /access_token|recovery|totp|password/i)
 
     const tx = files['transactions.csv'].split('\r\n')
-    assert.equal(tx[0], '﻿Date,Account,Amount,Description,Payee,Category,Pending,Note,Left out')
-    assert.ok(tx.includes('2026-11-02,Everyday,-82.1,"GROCERY, INC",,Groceries,no,,no'), tx.join('\n'))
+    assert.equal(tx[0], '﻿Date,Account,Amount,Description,Payee,Category,Pending,Note,Left out,Split')
+    assert.ok(tx.includes('2026-11-02,Everyday,-82.1,"GROCERY, INC",,Groceries,no,,no,'), tx.join('\n'))
     // A description a spreadsheet would run as a formula is text.
     assert.ok(tx.some(l => l.includes('"\'=HYPERLINK(""http://evil"")"')), tx.join('\n'))
   })

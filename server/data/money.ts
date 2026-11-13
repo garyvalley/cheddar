@@ -8,6 +8,7 @@ import { taxYear, type TaxYear } from '~~/shared/taxes'
 import { LOOKBACK_YEARS, recurring, type Charge, type RecurringSummary } from '~~/shared/recurring'
 import { alreadySynced, around, type Dated } from '~~/shared/overlap'
 import type { EditFields, ManualFields } from '~~/shared/transactions'
+import { expandSplits, partsOf, type SplitPart } from '~~/shared/splits'
 import { dateRange, type StatementFormat, type StatementRow } from '~~/shared/statements'
 import { callerId, type Session } from './session'
 
@@ -45,6 +46,7 @@ const toTransaction = (r: RecordModel): Transaction => ({
   source: r.source,
   note: r.note ?? '',
   excluded: !!r.excluded,
+  splits: partsOf(r.splits),
 })
 
 const toImport = (r: RecordModel): Import => ({
@@ -127,15 +129,20 @@ export interface TransactionQuery {
   counted?: boolean
 }
 
-type CountedRow = { account: string, posted: string, amount_cents: number, category: string, excluded: boolean }
+type CountedRow = { account: string, posted: string, amount_cents: number, category: string, excluded: boolean, splits: unknown }
 
 function transactionFilter(s: Session, q: TransactionQuery): string {
   const parts: string[] = []
   const params: Record<string, string | number> = {}
   if (q.account) { parts.push('account = {:account}'); params.account = q.account }
   else if (!q.uncounted) parts.push(COUNTED)
-  if (q.category === 'other') parts.push('(category = \'other\' || category = \'\')')
-  else if (q.category) { parts.push('category = {:category}'); params.category = q.category }
+  // A split one is in each of its parts' categories instead of its own
+  // (PocketBase stores the parts as compact JSON, keys in order).
+  if (q.category) {
+    const own = q.category === 'other' ? '(category = \'other\' || category = \'\')' : 'category = {:category}'
+    parts.push(`((splits = null && ${own}) || splits ~ {:part})`)
+    Object.assign(params, { category: q.category, part: `"category":"${q.category}"` })
+  }
   if (q.from) { parts.push('posted >= {:from}'); params.from = q.from }
   if (q.to) { parts.push('posted <= {:to}'); params.to = q.to }
   if (q.q) { parts.push('(description ~ {:q} || payee ~ {:q} || note ~ {:q})'); params.q = q.q }
@@ -164,7 +171,7 @@ export async function allTransactions(s: Session, q: TransactionQuery): Promise<
   const filter = transactionFilter(s, q)
   const rows = await s.collection('transactions').getFullList({
     sort: 'posted,created',
-    fields: 'id,account,import,posted,amount_cents,description,payee,category,category_by,pending,source,note,excluded',
+    fields: 'id,account,import,posted,amount_cents,description,payee,category,category_by,pending,source,note,excluded,splits',
     ...(filter ? { filter } : {}),
   })
   return rows.map(r => ({ ...toTransaction(r), import: r.import ?? '' }))
@@ -172,10 +179,10 @@ export async function allTransactions(s: Session, q: TransactionQuery): Promise<
 
 /** What each category came to between two dates, and the spending of the same span before. */
 export async function spendingSummary(s: Session, q: { account?: string, from: string, to: string, previous: { from: string, to: string } }): Promise<SpendingSummary> {
-  const rows = (range: { from: string, to: string }) => s.collection('transactions').getFullList({
-    fields: 'amount_cents,category',
+  const rows = async (range: { from: string, to: string }) => expandSplits(await s.collection('transactions').getFullList({
+    fields: 'amount_cents,category,splits',
     filter: transactionFilter(s, { account: q.account, ...range, counted: true }),
-  }) as Promise<unknown> as Promise<{ amount_cents: number, category: string }[]>
+  }) as unknown as { amount_cents: number, category: string, splits: unknown }[])
   const [now, before, list] = await Promise.all([rows(q), rows(q.previous), listCategories(s)])
   return { from: q.from, to: q.to, ...summarize(now, list), previous_spent_cents: summarize(before, list).spent_cents }
 }
@@ -199,9 +206,11 @@ export async function addTransaction(s: Session, account: string, t: ManualField
  * named in EditFields ever reach the store: never its account, owner or
  * category.
  */
-export async function editTransaction(s: Session, id: string, change: EditFields): Promise<Transaction> {
+export async function editTransaction(s: Session, id: string, change: EditFields & { splits?: SplitPart[] }): Promise<Transaction> {
   const { payee, note, excluded, posted, amount_cents, description } = change
-  const body = Object.fromEntries(Object.entries({ payee, note, excluded, posted, amount_cents, description }).filter(([, v]) => v !== undefined))
+  const body: Record<string, unknown> = Object.fromEntries(Object.entries({ payee, note, excluded, posted, amount_cents, description }).filter(([, v]) => v !== undefined))
+  // An empty list undoes a split (pb_hooks/splits.pb.js checks the parts).
+  if (change.splits) body.splits = change.splits.length ? change.splits : null
   return toTransaction(await s.collection('transactions').update(id, body))
 }
 
@@ -334,15 +343,17 @@ export async function removeCategory(s: Session, id: string): Promise<{ resorted
  */
 export async function overview(s: Session, today = localToday()): Promise<Overview> {
   const months = lastMonths(today, 12)
-  const [all, rows, kept, list] = await Promise.all([
+  const [all, fetched, kept, list] = await Promise.all([
     counted(s),
     s.collection('transactions').getFullList({
-      fields: 'account,posted,amount_cents,category,excluded',
+      fields: 'account,posted,amount_cents,category,excluded,splits',
       filter: s.filter(`posted >= {:from} && posted <= {:to} && ${COUNTED}`, { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
     }) as Promise<unknown> as Promise<CountedRow[]>,
     s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
     listCategories(s),
   ])
+  // Totals count a split one as its parts (shared/splits.ts).
+  const rows = expandSplits(fetched)
   const { open, accounts, history } = asHeld(all, kept)
   const invested = accounts.filter(a => isInvestment(a.kind) && a.balance_cents !== null)
   const ids = new Set(invested.map(a => a.id))
@@ -389,15 +400,16 @@ export async function recurringCharges(s: Session, account?: string, today = loc
  */
 export async function projections(s: Session, today = localToday()): Promise<Projections> {
   const months = lastMonths(today, PACE_MONTHS + 1).slice(0, PACE_MONTHS)
-  const [all, rows, kept, list] = await Promise.all([
+  const [all, fetched, kept, list] = await Promise.all([
     counted(s),
     s.collection('transactions').getFullList({
-      fields: 'account,posted,amount_cents,category,excluded',
+      fields: 'account,posted,amount_cents,category,excluded,splits',
       filter: s.filter(`posted >= {:from} && posted <= {:to} && ${COUNTED}`, { from: `${months[0]}-01`, to: `${months.at(-1)}-31` }),
     }) as Promise<unknown> as Promise<CountedRow[]>,
     s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
     listCategories(s),
   ])
+  const rows = expandSplits(fetched)
   // Leaving one out changes what was earned and spent, not what a debt owes.
   const monthsIn = monthly(rows.filter(r => !r.excluded), months, list)
   const { open, history } = asHeld(all, kept)
@@ -416,13 +428,13 @@ export async function projections(s: Session, today = localToday()): Promise<Pro
  */
 export async function taxes(s: Session, today = localToday()): Promise<TaxYear> {
   const jan1 = `${today.slice(0, 4)}-01-01`
-  const [accounts, rows, first] = await Promise.all([
+  const [accounts, fetched, first] = await Promise.all([
     counted(s),
     s.collection('transactions').getFullList({
-      fields: 'account,posted,amount_cents,category',
+      fields: 'account,posted,amount_cents,category,splits',
       filter: s.filter(`posted >= {:from} && posted <= {:to} && ${COUNTED} && ${TX_COUNTED}`, { from: jan1, to: today }),
-    }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string }[]>,
+    }) as Promise<unknown> as Promise<{ account: string, posted: string, amount_cents: number, category: string, splits: unknown }[]>,
     s.collection('transactions').getList(1, 1, { fields: 'posted', sort: 'posted', skipTotal: true, filter: COUNTED }),
   ])
-  return taxYear(rows, accounts, today, (first.items[0]?.posted as string | undefined) ?? '')
+  return taxYear(expandSplits(fetched), accounts, today, (first.items[0]?.posted as string | undefined) ?? '')
 }

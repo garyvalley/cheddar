@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 var cats = require(`${__hooks}/lib/categories.js`)
+var splits = require(`${__hooks}/lib/splits.js`)
 
 /** The person's custom category with this id ("c-..."), or null. */
 function customOf(app, owner, id) {
@@ -116,8 +117,8 @@ function nameTaken(app, owner, name, except) {
 
 /**
  * Deletes a custom category. Rules for it go, and its transactions are
- * sorted again on their own, as if it had never been chosen. Answers how
- * many transactions were in it.
+ * sorted again on their own, as if it had never been chosen; parts of a
+ * split in it move to Other. Answers how many transactions were in it.
  */
 function remove(app, owner, custom) {
   var id = "c-" + custom.id
@@ -132,6 +133,12 @@ function remove(app, owner, custom) {
         t.set("category_by", "")
         txApp.save(t)
         count++
+      })
+    // Split parts in it go to Other, where its sorted-again transactions may land too.
+    txApp.findRecordsByFilter("transactions", "owner = {:owner} && splits ~ {:part}", "", 0, 0, { owner: owner, part: '"category":"' + id + '"' })
+      .forEach(function (t) {
+        t.set("splits", splits.moveParts(JSON.parse(t.getString("splits")), id, "other"))
+        txApp.save(t)
       })
   })
   return count

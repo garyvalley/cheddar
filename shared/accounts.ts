@@ -1,5 +1,7 @@
 /** Accounts and transactions as the browser sees them, and the rules for a new account. */
 
+import type { SplitPart } from './splits.ts'
+
 export const ACCOUNT_KINDS = [
   { value: 'checking', label: 'Checking' },
   { value: 'savings', label: 'Savings' },
@@ -59,6 +61,8 @@ export interface Transaction {
   note: string
   /** Left out of spending, Overview, Projections and Taxes, though it stays listed. */
   excluded: boolean
+  /** Its parts when it's split across categories (shared/splits.ts), else none. */
+  splits: SplitPart[]
 }
 
 export interface Import {

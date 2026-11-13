@@ -47,11 +47,16 @@ describe('CSV cells', () => {
 })
 
 describe('the spreadsheets', () => {
-  test('transactions: date, account, amount in dollars, description, payee, category by name, note, left out', () => {
-    const csv = transactionsCsv([tx({}), tx({ account: 'a2', amount_cents: 250000, description: '=cmd|calc', payee: 'ACME', category: 'income', pending: true, note: 'Bonus, finally', excluded: true })], accounts, BUILT_IN)
-    assert.equal(csv, `${BOM}Date,Account,Amount,Description,Payee,Category,Pending,Note,Left out\r\n`
-      + '2026-11-02,Everyday,-4.5,COFFEE,,Dining and drinks,no,,no\r\n'
-      + '2026-11-02,Visa,2500,\'=cmd|calc,ACME,Income,yes,"Bonus, finally",yes\r\n')
+  test('transactions: date, account, amount in dollars, description, payee, category by name, note, left out, split', () => {
+    const csv = transactionsCsv([
+      tx({}),
+      tx({ account: 'a2', amount_cents: 250000, description: '=cmd|calc', payee: 'ACME', category: 'income', pending: true, note: 'Bonus, finally', excluded: true }),
+      tx({ amount_cents: -12000, description: 'COSTCO', category: 'groceries', splits: [{ category: 'groceries', amount_cents: -8000 }, { category: 'shopping', amount_cents: -4000 }] }),
+    ], accounts, BUILT_IN)
+    assert.equal(csv, `${BOM}Date,Account,Amount,Description,Payee,Category,Pending,Note,Left out,Split\r\n`
+      + '2026-11-02,Everyday,-4.5,COFFEE,,Dining and drinks,no,,no,\r\n'
+      + '2026-11-02,Visa,2500,\'=cmd|calc,ACME,Income,yes,"Bonus, finally",yes,\r\n'
+      + '2026-11-02,Everyday,-120,COSTCO,,Groceries,no,,no,Groceries -80.00; Shopping -40.00\r\n')
   })
 
   test('accounts: a balance only once there is one', () => {
