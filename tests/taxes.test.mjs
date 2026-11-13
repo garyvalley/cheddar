@@ -2,7 +2,8 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { brackets, estimate, ideas, projectIncome, taxYear } from '../shared/taxes.ts'
+import { FEDERAL, NEWEST_TAX_YEAR, brackets, defaultTaxYear, estimate, federalFor, ideas, projectIncome, taxYear, taxYearsOn } from '../shared/taxes.ts'
+import { STATE_TAXES, stateTableYear } from '../shared/state-taxes.ts'
 import { FILING_STATUSES } from '../shared/filing-status.ts'
 
 describe('estimate', () => {
@@ -98,5 +99,52 @@ describe('ideas', () => {
   test('leave state tax out where there is none', () => {
     assert.doesNotMatch(ideas(estimate(90_000_00, 'single'), year, 'Florida', 0)[0].body, /Florida/)
     assert.match(ideas(estimate(90_000_00, 'single'), year, 'Ohio', 2.75)[0].body, /Ohio's by about \$28\./)
+  })
+})
+
+describe('tax years (#32)', () => {
+  test('last year is shown first until April 15, then this year', () => {
+    assert.equal(defaultTaxYear('2027-01-01'), 2026)
+    assert.equal(defaultTaxYear('2027-04-15'), 2026)
+    assert.equal(defaultTaxYear('2027-04-16'), 2027)
+    assert.deepEqual(taxYearsOn('2027-02-01'), [2027, 2026])
+  })
+
+  test('a year without figures uses the newest year before it, and says which', () => {
+    assert.equal(federalFor(NEWEST_TAX_YEAR).table_year, NEWEST_TAX_YEAR)
+    assert.equal(federalFor(NEWEST_TAX_YEAR + 1).table_year, NEWEST_TAX_YEAR)
+    assert.equal(estimate(100_000_00, 'single', NEWEST_TAX_YEAR + 1).table_year, NEWEST_TAX_YEAR)
+    assert.equal(estimate(100_000_00, 'single', NEWEST_TAX_YEAR + 1).year, NEWEST_TAX_YEAR + 1)
+    assert.equal(stateTableYear(NEWEST_TAX_YEAR + 1), NEWEST_TAX_YEAR)
+  })
+
+  test('the newest year has federal and state figures', () => {
+    assert.ok(NEWEST_TAX_YEAR in STATE_TAXES)
+    for (const y of Object.keys(STATE_TAXES)) assert.ok(y in FEDERAL, y)
+  })
+
+  test('2025 has its own federal figures, and no charity deduction without itemizing yet', () => {
+    const e = estimate(100_000_00, 'single', 2025)
+    assert.deepEqual([e.table_year, e.deduction_cents, e.marginal], [2025, 15_750_00, 22])
+    const y = { year: 2025, from: '2025-01-01', to: '2025-12-31', income_cents: 0, tax_paid_cents: 0, retirement_in_cents: 0, health_cents: 0, gifts_cents: 100_00, projected_income_cents: null, has_brokerage: false, has_retirement: false }
+    assert.equal(ideas(e, y, 'Ohio', 2.75).some(i => i.id === 'charity'), false)
+  })
+
+  test('a past year runs to December 31 and counts only its own days', () => {
+    const rows = [
+      { account: 'chk', posted: '2026-12-31', amount_cents: 500_00, category: 'income' },
+      { account: 'chk', posted: '2027-01-02', amount_cents: 700_00, category: 'income' },
+    ]
+    const t = taxYear(rows, [], '2027-02-01', '2026-01-01', 2026)
+    assert.deepEqual([t.year, t.from, t.to, t.income_cents, t.projected_income_cents], [2026, '2026-01-01', '2026-12-31', 500_00, 500_00])
+  })
+
+  // The autumn update can't be forgotten: from February of a year Cheddar has
+  // no figures for, this fails until shared/taxes.ts and
+  // shared/state-taxes.ts have them.
+  test('this year\'s figures are in by February', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const due = `${NEWEST_TAX_YEAR + 1}-02-01`
+    assert.ok(today < due, `Add ${NEWEST_TAX_YEAR + 1}'s federal and state tax figures (FEDERAL in shared/taxes.ts, STATE_TAXES in shared/state-taxes.ts).`)
   })
 })

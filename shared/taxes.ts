@@ -5,61 +5,146 @@
  * of account the person has. Pure, so the unit tests and the page use the
  * same sums.
  *
- * Figures are for tax year 2026: IRS Rev. Proc. 2025-32 (brackets, standard
- * deduction, long-term capital gains), Notice 2025-67 (401(k), IRA) and
- * Rev. Proc. 2025-19 (HSA). Update them together each autumn when the IRS
- * publishes the next year's.
+ * Figures are kept per tax year in FEDERAL, each with its IRS sources. Add
+ * the next year's each autumn when the IRS publishes them.
  */
 import type { FilingStatus } from './filing-status.ts'
 
-export const TAX_YEAR = 2026
-
-/** Where each rate stops, in dollars of taxable income; the last runs on without end. */
-const TOPS: Record<FilingStatus, number[]> = {
-  single: [12_400, 50_400, 105_700, 201_775, 256_225, 640_600],
-  married_joint: [24_800, 100_800, 211_400, 403_550, 512_450, 768_700],
-  married_separate: [12_400, 50_400, 105_700, 201_775, 256_225, 384_350],
-  head_of_household: [17_700, 67_450, 105_700, 201_775, 256_225, 640_600],
-  qualifying_surviving_spouse: [24_800, 100_800, 211_400, 403_550, 512_450, 768_700],
+/** One tax year's federal figures. */
+export interface FederalTable {
+  /** Where each rate stops, in dollars of taxable income; the last runs on without end. */
+  tops: Record<FilingStatus, number[]>
+  standardDeduction: Record<FilingStatus, number>
+  /** Taxable income up to which long-term gains and qualified dividends are taxed at 0%. */
+  zeroGainsTop: Record<FilingStatus, number>
+  /** What a person can put in each kind of tax-advantaged account that year, in dollars. */
+  limits: {
+    k401: number
+    k401_catch_up: number
+    k401_catch_up_60_63: number
+    ira: number
+    ira_catch_up: number
+    hsa_self: number
+    hsa_family: number
+  }
+  /** Cash gifts to charity a person can deduct without itemizing, in dollars (from 2026). */
+  charityNoItemize: Record<FilingStatus, number>
 }
+
+/**
+ * Federal figures by tax year; state ones are shared/state-taxes.ts's. Add next year's each autumn, once the IRS
+ * publishes them (tests/taxes.test.mjs fails from February of a year with
+ * no table). A year without one uses the newest year before it, and the
+ * page says so.
+ */
+export const FEDERAL: Record<number, FederalTable> = {
+  // Rev. Proc. 2024-40, with the standard deduction as the One Big Beautiful
+  // Bill Act raised it; Notice 2024-80 (401(k), IRA), Rev. Proc. 2024-25 (HSA).
+  2025: {
+    tops: {
+      single: [11_925, 48_475, 103_350, 197_300, 250_525, 626_350],
+      married_joint: [23_850, 96_950, 206_700, 394_600, 501_050, 751_600],
+      married_separate: [11_925, 48_475, 103_350, 197_300, 250_525, 375_800],
+      head_of_household: [17_000, 64_850, 103_350, 197_300, 250_500, 626_350],
+      qualifying_surviving_spouse: [23_850, 96_950, 206_700, 394_600, 501_050, 751_600],
+    },
+    standardDeduction: {
+      single: 15_750,
+      married_joint: 31_500,
+      married_separate: 15_750,
+      head_of_household: 23_625,
+      qualifying_surviving_spouse: 31_500,
+    },
+    zeroGainsTop: {
+      single: 48_350,
+      married_joint: 96_700,
+      married_separate: 48_350,
+      head_of_household: 64_750,
+      qualifying_surviving_spouse: 96_700,
+    },
+    limits: {
+      k401: 23_500,
+      k401_catch_up: 7_500,
+      k401_catch_up_60_63: 11_250,
+      ira: 7_000,
+      ira_catch_up: 1_000,
+      hsa_self: 4_300,
+      hsa_family: 8_550,
+    },
+    // The deduction without itemizing starts in 2026.
+    charityNoItemize: {
+      single: 0,
+      married_joint: 0,
+      married_separate: 0,
+      head_of_household: 0,
+      qualifying_surviving_spouse: 0,
+    },
+  },
+  // Rev. Proc. 2025-32, Notice 2025-67 (401(k), IRA), Rev. Proc. 2025-19 (HSA).
+  2026: {
+    tops: {
+      single: [12_400, 50_400, 105_700, 201_775, 256_225, 640_600],
+      married_joint: [24_800, 100_800, 211_400, 403_550, 512_450, 768_700],
+      married_separate: [12_400, 50_400, 105_700, 201_775, 256_225, 384_350],
+      head_of_household: [17_700, 67_450, 105_700, 201_775, 256_225, 640_600],
+      qualifying_surviving_spouse: [24_800, 100_800, 211_400, 403_550, 512_450, 768_700],
+    },
+    standardDeduction: {
+      single: 16_100,
+      married_joint: 32_200,
+      married_separate: 16_100,
+      head_of_household: 24_150,
+      qualifying_surviving_spouse: 32_200,
+    },
+    zeroGainsTop: {
+      single: 49_450,
+      married_joint: 98_900,
+      married_separate: 49_450,
+      head_of_household: 66_200,
+      qualifying_surviving_spouse: 98_900,
+    },
+    limits: {
+      k401: 24_500,
+      k401_catch_up: 8_000,
+      k401_catch_up_60_63: 11_250,
+      ira: 7_500,
+      ira_catch_up: 1_100,
+      hsa_self: 4_400,
+      hsa_family: 8_750,
+    },
+    charityNoItemize: {
+      single: 1_000,
+      married_joint: 2_000,
+      married_separate: 1_000,
+      head_of_household: 1_000,
+      qualifying_surviving_spouse: 1_000,
+    },
+  },
+}
+
 const RATES = [10, 12, 22, 24, 32, 35, 37]
 
-export const STANDARD_DEDUCTION: Record<FilingStatus, number> = {
-  single: 16_100,
-  married_joint: 32_200,
-  married_separate: 16_100,
-  head_of_household: 24_150,
-  qualifying_surviving_spouse: 32_200,
+/** The newest year Cheddar has federal figures for. */
+export const NEWEST_TAX_YEAR = Math.max(...Object.keys(FEDERAL).map(Number))
+
+/** The figures for `year`: its own, or the newest year's before it (`table_year` says which). */
+export function federalFor(year: number): FederalTable & { table_year: number } {
+  const years = Object.keys(FEDERAL).map(Number).sort((a, b) => b - a)
+  const table_year = years.find(y => y <= year) ?? years.at(-1)!
+  return { ...FEDERAL[table_year]!, table_year }
 }
 
-/** Taxable income up to which long-term gains and qualified dividends are taxed at 0%. */
-export const ZERO_GAINS_TOP: Record<FilingStatus, number> = {
-  single: 49_450,
-  married_joint: 98_900,
-  married_separate: 49_450,
-  head_of_household: 66_200,
-  qualifying_surviving_spouse: 98_900,
+/**
+ * The tax year Taxes shows first on `today`: last year's from January 1 to
+ * April 15, while its return is being filed, then this year's.
+ */
+export function defaultTaxYear(today: string): number {
+  const year = Number(today.slice(0, 4))
+  return today.slice(5) <= '04-15' ? year - 1 : year
 }
 
-/** What a person can put in each kind of tax-advantaged account this year, in dollars. */
-export const LIMITS = {
-  k401: 24_500,
-  k401_catch_up: 8_000,
-  k401_catch_up_60_63: 11_250,
-  ira: 7_500,
-  ira_catch_up: 1_100,
-  hsa_self: 4_400,
-  hsa_family: 8_750,
-}
-
-/** Cash gifts to charity a person can deduct from 2026 without itemizing, in dollars. */
-export const CHARITY_NO_ITEMIZE: Record<FilingStatus, number> = {
-  single: 1_000,
-  married_joint: 2_000,
-  married_separate: 1_000,
-  head_of_household: 1_000,
-  qualifying_surviving_spouse: 1_000,
-}
+/** The years Taxes offers: this year and last. */
+export const taxYearsOn = (today: string) => [Number(today.slice(0, 4)), Number(today.slice(0, 4)) - 1]
 
 const isJoint = (s: FilingStatus) => s === 'married_joint' || s === 'qualifying_surviving_spouse'
 
@@ -73,8 +158,8 @@ export interface Bracket {
   tax_cents: number
 }
 
-export function brackets(status: FilingStatus): { rate: number, from_cents: number, to_cents: number | null }[] {
-  const tops = TOPS[status]
+export function brackets(status: FilingStatus, year = NEWEST_TAX_YEAR): { rate: number, from_cents: number, to_cents: number | null }[] {
+  const tops = federalFor(year).tops[status]
   return RATES.map((rate, i) => ({
     rate,
     from_cents: i === 0 ? 0 : tops[i - 1]! * 100,
@@ -84,6 +169,9 @@ export function brackets(status: FilingStatus): { rate: number, from_cents: numb
 
 export interface Estimate {
   status: FilingStatus
+  /** The tax year, and the year whose figures were used for it. */
+  year: number
+  table_year: number
   income_cents: number
   deduction_cents: number
   taxable_cents: number
@@ -100,15 +188,16 @@ export interface Estimate {
 }
 
 /** Federal income tax on a year's income, with the standard deduction. */
-export function estimate(incomeCents: number, status: FilingStatus): Estimate {
+export function estimate(incomeCents: number, status: FilingStatus, year = NEWEST_TAX_YEAR): Estimate {
+  const table = federalFor(year)
   const income = Math.max(0, Math.round(incomeCents))
-  const deduction = STANDARD_DEDUCTION[status] * 100
+  const deduction = table.standardDeduction[status] * 100
   const taxable = Math.max(0, income - deduction)
   let tax = 0
   let marginal = RATES[0]!
   let toNext: number | null = null
   let inTop = 0
-  const out: Bracket[] = brackets(status).map((b) => {
+  const out: Bracket[] = brackets(status, year).map((b) => {
     const top = b.to_cents ?? Infinity
     const taxed = Math.max(0, Math.min(taxable, top) - b.from_cents)
     const t = Math.round(taxed * b.rate / 100)
@@ -122,6 +211,8 @@ export function estimate(incomeCents: number, status: FilingStatus): Estimate {
   })
   return {
     status,
+    year,
+    table_year: table.table_year,
     income_cents: income,
     deduction_cents: deduction,
     taxable_cents: taxable,
@@ -167,19 +258,21 @@ export function projectIncome(incomeCents: number, from: string, to: string): nu
 }
 
 /**
- * The tax year so far from the person's transactions and accounts. `first`
- * is the earliest transaction Cheddar has for them at all, so a person who
- * started importing in June isn't read as earning nothing until then.
+ * A tax year from the person's transactions and accounts: this year so far,
+ * or a past `year` whole. `first` is the earliest transaction Cheddar has for
+ * them at all, so a person who started importing in June isn't read as
+ * earning nothing until then.
  */
 export function taxYear(
   rows: { account: string, posted: string, amount_cents: number, category: string }[],
   accounts: { id: string, kind: string }[],
   today: string,
   first: string,
+  year = Number(today.slice(0, 4)),
 ): TaxYear {
-  const year = Number(today.slice(0, 4))
   const jan1 = `${year}-01-01`
-  const from = first && first > jan1 && first <= today ? first : jan1
+  const end = `${year}-12-31` < today ? `${year}-12-31` : today
+  const from = first && first > jan1 && first <= end ? first : jan1
   const retirement = new Set(accounts.filter(a => a.kind === 'retirement').map(a => a.id))
   let income = 0
   let paid = 0
@@ -187,7 +280,7 @@ export function taxYear(
   let health = 0
   let gifts = 0
   for (const r of rows) {
-    if (r.posted < jan1 || r.posted > today) continue
+    if (r.posted < jan1 || r.posted > end) continue
     if (r.category === 'income') income += r.amount_cents
     else if (r.category === 'taxes') paid -= r.amount_cents
     else if (r.category === 'health') health -= r.amount_cents
@@ -197,13 +290,13 @@ export function taxYear(
   return {
     year,
     from,
-    to: today,
+    to: end,
     income_cents: income,
     tax_paid_cents: paid,
     retirement_in_cents: moved,
     health_cents: health,
     gifts_cents: gifts,
-    projected_income_cents: projectIncome(income, from, today),
+    projected_income_cents: projectIncome(income, from, end),
     has_brokerage: accounts.some(a => a.kind === 'brokerage'),
     has_retirement: retirement.size > 0,
   }
@@ -225,12 +318,13 @@ const dollars = (cents: number) => new Intl.NumberFormat('en-US', { style: 'curr
 export function ideas(est: Estimate, ty: TaxYear, stateName: string, stateMarginal: number): Idea[] {
   const out: Idea[] = []
   const s = est.status
+  const { limits: LIMITS, zeroGainsTop: ZERO_GAINS_TOP, charityNoItemize: CHARITY_NO_ITEMIZE } = federalFor(est.year)
   if (!est.income_cents) return out
   if (est.marginal >= 22) {
     out.push({
       id: 'pre-tax',
       title: 'Save before tax',
-      body: `Your next dollars are taxed at ${est.marginal}%, so each $1,000 put into a traditional 401(k) or IRA cuts this year's federal tax by about ${dollars(est.marginal * 1000)}${stateMarginal > 0 ? `, and ${stateName}'s by about ${dollars(stateMarginal * 1000)}` : ''}. You can put up to ${dollars(LIMITS.k401 * 100)} into a 401(k) and ${dollars(LIMITS.ira * 100)} into an IRA this year.`,
+      body: `Your next dollars are taxed at ${est.marginal}%, so each $1,000 put into a traditional 401(k) or IRA cuts ${est.year}'s federal tax by about ${dollars(est.marginal * 1000)}${stateMarginal > 0 ? `, and ${stateName}'s by about ${dollars(stateMarginal * 1000)}` : ''}. You can put up to ${dollars(LIMITS.k401 * 100)} into a 401(k) and ${dollars(LIMITS.ira * 100)} into an IRA for ${est.year}.`,
     })
     const lower = RATES[RATES.indexOf(est.marginal) - 1]
     if (lower && est.in_top_cents > 0 && est.in_top_cents <= (LIMITS.k401 + LIMITS.ira) * 100) {
@@ -245,7 +339,7 @@ export function ideas(est: Estimate, ty: TaxYear, stateName: string, stateMargin
     out.push({
       id: 'roth',
       title: 'Roth is likely the better deal',
-      body: `At ${est.marginal}%, you pay little tax on what you put in a Roth IRA or Roth 401(k) now, and nothing when you take it out in retirement. You can put up to ${dollars(LIMITS.ira * 100)} into an IRA this year.`,
+      body: `At ${est.marginal}%, you pay little tax on what you put in a Roth IRA or Roth 401(k) now, and nothing when you take it out in retirement. You can put up to ${dollars(LIMITS.ira * 100)} into an IRA for ${est.year}.`,
     })
   }
   const zeroRoom = ZERO_GAINS_TOP[s] * 100 - est.taxable_cents
@@ -260,14 +354,14 @@ export function ideas(est: Estimate, ty: TaxYear, stateName: string, stateMargin
     out.push({
       id: 'hsa',
       title: 'Pay health costs before tax',
-      body: `You've spent ${dollars(ty.health_cents)} on health this year. With a high-deductible health plan, an HSA takes up to ${dollars(LIMITS.hsa_self * 100)} (${dollars(LIMITS.hsa_family * 100)} for a family) before tax, and pays medical bills tax-free.`,
+      body: `You've spent ${dollars(ty.health_cents)} on health in ${est.year}. With a high-deductible health plan, an HSA takes up to ${dollars(LIMITS.hsa_self * 100)} (${dollars(LIMITS.hsa_family * 100)} for a family) before tax, and pays medical bills tax-free.`,
     })
   }
-  if (ty.gifts_cents > 0) {
+  if (ty.gifts_cents > 0 && CHARITY_NO_ITEMIZE[s] > 0) {
     out.push({
       id: 'charity',
       title: 'Deduct gifts to charity',
-      body: `From ${TAX_YEAR}, you can deduct up to ${dollars(CHARITY_NO_ITEMIZE[s] * 100)} of cash gifts to charity without itemizing${isJoint(s) ? ' on a joint return' : ''}. Keep the receipts for what you gave.`,
+      body: `From 2026, you can deduct up to ${dollars(CHARITY_NO_ITEMIZE[s] * 100)} of cash gifts to charity without itemizing${isJoint(s) ? ' on a joint return' : ''}. Keep the receipts for what you gave.`,
     })
   }
   return out

@@ -1,6 +1,6 @@
 // Taxes end to end: this year's income, tax payments and money moved into
 // retirement accounts, from transactions imported on Accounts and sorted by
-// the hooks; last year's don't count, and nobody sees another's.
+// the hooks; this year or last whole (#32), and nobody sees another's.
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -34,12 +34,20 @@ describe('taxes', () => {
       [us(`${year}-01-04`), 'CVS PHARMACY', '-20.00'],
     ])
     await imported(c, ira.id, [[us(`${year}-01-05`), 'TRANSFER FROM CHECKING', '1000.00']])
-    const r = await c.call('GET', '/api/taxes')
+    const r = await c.call('GET', `/api/taxes?year=${year}`)
     assert.equal(r.status, 200, JSON.stringify(r.json))
     assert.deepEqual(
       [r.json.year, r.json.from, r.json.income_cents, r.json.tax_paid_cents, r.json.retirement_in_cents, r.json.health_cents, r.json.has_retirement],
       [Number(year), `${year}-01-01`, 250000, 40000, 100000, 2000, true],
     )
+    assert.deepEqual(r.json.years, [Number(year), Number(year) - 1])
+
+    // Last year, whole: only its own transactions, to December 31.
+    const last = (await c.call('GET', `/api/taxes?year=${Number(year) - 1}`)).json
+    assert.deepEqual([last.year, last.to, last.income_cents, last.projected_income_cents], [Number(year) - 1, `${Number(year) - 1}-12-31`, 90000, null])
+    // A year not offered is the default one.
+    const odd = (await c.call('GET', '/api/taxes?year=1999')).json.year
+    assert.ok([Number(year), Number(year) - 1].includes(odd))
   })
 
   test('start from the first transaction, and show nobody else\'s', async () => {
@@ -47,8 +55,8 @@ describe('taxes', () => {
     const other = await ready()
     const chk = await account(owner.c, 'Checking', 'checking')
     await imported(owner.c, chk.id, [[us(today), 'PAYROLL ACME', '100.00']])
-    assert.equal((await owner.c.call('GET', '/api/taxes')).json.from, today)
-    const theirs = (await other.c.call('GET', '/api/taxes')).json
+    assert.equal((await owner.c.call('GET', `/api/taxes?year=${year}`)).json.from, today)
+    const theirs = (await other.c.call('GET', `/api/taxes?year=${year}`)).json
     assert.deepEqual([theirs.income_cents, theirs.from], [0, `${year}-01-01`])
   })
 })

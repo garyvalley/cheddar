@@ -800,14 +800,17 @@ export async function projections(
 }
 
 /**
- * The tax year so far, from this year's transactions (shared/taxes.ts): the
- * earliest transaction the person has at all says where their data starts.
+ * A tax year from its transactions (shared/taxes.ts): this year so far, or
+ * a past one whole. The earliest transaction the person has at all says
+ * where their data starts.
  */
 export async function taxes(
   s: Session,
   today = localToday(),
+  year = Number(today.slice(0, 4)),
 ): Promise<TaxYear> {
-  const jan1 = `${today.slice(0, 4)}-01-01`;
+  const jan1 = `${year}-01-01`;
+  const end = `${year}-12-31` < today ? `${year}-12-31` : today;
   const owner = callerId(s);
   const [accounts, fetched, first] = await Promise.all([
     listAccounts(s, true),
@@ -815,7 +818,7 @@ export async function taxes(
       fields: "account,posted,amount_cents,category,splits",
       filter: s.filter(
         `owner = {:owner} && posted >= {:from} && posted <= {:to} && ${COUNTED} && ${TX_COUNTED}`,
-        { owner, from: jan1, to: today },
+        { owner, from: jan1, to: end },
       ),
     }) as Promise<unknown> as Promise<
       {
@@ -838,5 +841,6 @@ export async function taxes(
     accounts,
     today,
     (first.items[0]?.posted as string | undefined) ?? "",
+    year,
   );
 }
