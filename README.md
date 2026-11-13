@@ -223,6 +223,12 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
     account, and nothing else.
   - Emailed codes are refused, since whoever reads the inbox can also reset
     the password.
+  - The app's secret is stored encrypted with the newest data key, and
+    recovery codes only as an HMAC with it, so a copy of the database alone
+    can't make anyone's codes. `DATA_KEYS` lists the keys newest first
+    (`BANK_LINK_KEY`, from before it, is key v1); each value names its key,
+    so a key can be rotated (`pb_hooks/lib/data_keys.js`,
+    `pb_hooks/data_keys.pb.js`; k8s/README.md "Rotating the data key").
   - Five wrong codes lock the codes for 15 minutes, and each lockout after
     that lasts twice as long (up to a day) until a right code. A lockout
     after a right password, a new authenticator app and new recovery codes
@@ -250,7 +256,8 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
     Plaid's secret (`PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`), so the
     bank password never reaches Cheddar, and the token is useless without
     that secret. It reads balances and transactions; it can't move money.
-  - The access token is stored encrypted with `BANK_LINK_KEY` (AES-256),
+  - The access token is stored encrypted with the newest data key (AES-256,
+    `DATA_KEYS` below),
     in a collection no record API rule opens. Only the hooks read it, and it
     never reaches Nuxt or the browser. Without the keys, linking is off.
   - Syncs use `/transactions/sync` from a saved cursor, and write through

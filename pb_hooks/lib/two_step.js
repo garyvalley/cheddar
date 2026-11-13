@@ -42,16 +42,17 @@ function recoveryHashes(stored) {
 
 /**
  * Ten new recovery codes: `codes` to show once, formatted, and the `hashes`
- * to store. `random(length, alphabet)` and `sha256(text)` are $security's in
- * PocketBase.
+ * to store. `random(length, alphabet)` is $security's in PocketBase, and
+ * `hash(raw)` makes what is stored (lib/data_keys.js hashCode: an HMAC with
+ * the newest data key).
  */
-function newRecoveryCodes(random, sha256) {
+function newRecoveryCodes(random, hash) {
   var codes = []
   var hashes = []
   for (var i = 0; i < RECOVERY_COUNT; i++) {
     var raw = random(10, RECOVERY_ALPHABET) // 49 bits
     codes.push(formatRecoveryCode(raw))
-    hashes.push(sha256(raw))
+    hashes.push(hash(raw))
   }
   return { codes: codes, hashes: hashes }
 }
@@ -61,14 +62,20 @@ function newRecoveryCodes(random, sha256) {
  * digits from the app, or an unused recovery code. Returns `kind` "app",
  * "recovery" or "" for a wrong one, and what to store to spend what it
  * accepted: the app's `last_step`, or the recovery `hashes` left.
+ * `matches(stored, raw)` says whether a stored hash is the code's
+ * (lib/data_keys.js codeMatches).
  */
-function acceptCode(row, code, now, sha256) {
+function acceptCode(row, code, now, matches) {
   var digits = String(code || "").replace(/\s+/g, "")
   if (/^\d{6}$/.test(digits)) {
     var step = totp.matchStep(row.secret, digits, now, row.last_step)
     return step < 0 ? { kind: "" } : { kind: "app", last_step: step }
   }
-  var at = row.hashes.indexOf(sha256(normaliseRecoveryCode(code)))
+  var raw = normaliseRecoveryCode(code)
+  var at = -1
+  for (var i = 0; i < row.hashes.length && at < 0; i++) {
+    if (matches(row.hashes[i], raw)) at = i
+  }
   if (at < 0) return { kind: "" }
   var left = row.hashes.slice()
   left.splice(at, 1)

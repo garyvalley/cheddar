@@ -19,14 +19,11 @@ var providers = require(`${__hooks}/glue/providers.js`);
 
 var ProviderError = providers.ProviderError;
 
-/** 32 characters that encrypt each link's access token (BANK_LINK_KEY). */
-function key() {
-  return String($os.getenv("BANK_LINK_KEY") || "");
-}
+var dataKeys = require(`${__hooks}/glue/data_keys.js`);
 
-/** Linking is on with the key and the current provider's settings. */
+/** Linking is on with a data key to seal access tokens with (DATA_KEYS, or BANK_LINK_KEY) and the current provider's settings. */
 function isEnabled() {
-  return key().length === 32 && providers.current().enabled();
+  return dataKeys.hasKey() && providers.current().enabled();
 }
 
 /** Why `owner` can't make one more link (lib/plaid.js linkLimit, on the provider's limits), or null. */
@@ -53,17 +50,17 @@ function checkLinkLimit(app, owner) {
   throw new BadRequestError(hit.message);
 }
 
+/** An access token sealed with the newest data key (glue/data_keys.js). */
 function encrypt(text) {
-  return $security.encrypt(text, key());
+  return dataKeys.seal(text);
 }
 
-/** The link's access token, or null if it can't be read (BANK_LINK_KEY changed). */
+/**
+ * The link's access token, or null if it can't be read (its key is no longer
+ * in DATA_KEYS). One with no key id was sealed with BANK_LINK_KEY, key v1.
+ */
 function accessOf(link) {
-  try {
-    return toString($security.decrypt(link.getString("access"), key()));
-  } catch (_) {
-    return null;
-  }
+  return dataKeys.open(link.getString("access"), "v1") || null;
 }
 
 /** What the page opens the provider's sign-in with: a new link, or with `link`, signing in again to that one. */

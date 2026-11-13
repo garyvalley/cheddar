@@ -33,9 +33,6 @@ var BASES = { sandbox: "https://sandbox.plaid.com", production: "https://product
 function config(getenv) {
   var env = String(getenv("PLAID_ENV") || "sandbox").trim().toLowerCase()
   return {
-    // 32 characters: what $security.encrypt takes for AES-256. Each link's
-    // access token is stored encrypted with it.
-    key: String(getenv("BANK_LINK_KEY") || ""),
     clientId: String(getenv("PLAID_CLIENT_ID") || "").trim(),
     secret: String(getenv("PLAID_SECRET") || "").trim(),
     env: BASES[env] ? env : "sandbox",
@@ -72,9 +69,12 @@ function linkLimit(cfg, mine, all) {
   return null
 }
 
-/** Linking is on with the key and both Plaid keys; without any of them, it's off. */
+/**
+ * Plaid's side is on with both Plaid keys; without either, it's off. (Linking
+ * also needs a data key to seal access tokens with: glue/bank_links.js.)
+ */
 function isEnabled(cfg) {
-  return cfg.key.length === 32 && !!cfg.clientId && !!cfg.secret
+  return !!cfg.clientId && !!cfg.secret
 }
 
 /** One Plaid API call, as $http.send takes it. The keys go in the body, as Plaid documents. */

@@ -75,14 +75,12 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```
 6. 👤 **Bank links** (optional; without these, linking stays off). People
    sign in to their bank through Plaid Link; Cheddar keeps only Plaid's
-   access token, encrypted with `BANK_LINK_KEY`. That key is made once:
-   changing it later means every link must be made again. Plaid's keys are
+   access token, encrypted with the data key (step 8). Plaid's keys are
    at [dashboard.plaid.com](https://dashboard.plaid.com) → Developers → Keys:
    the client ID, and the secret for the environment in `PLAID_ENV`
    (`sandbox` to try it with Plaid's test bank, `user_good` / `pass_good`;
    `production` for real banks, once Plaid approves it).
    ```sh
-   openssl rand -hex 16 | tr -d '\n' | gh secret set BANK_LINK_KEY --env production -R garyvalley/cheddar
    gh secret set PLAID_CLIENT_ID --env production -R garyvalley/cheddar
    gh secret set PLAID_SECRET --env production -R garyvalley/cheddar
    gh variable set PLAID_ENV --body sandbox -R garyvalley/cheddar
@@ -113,6 +111,17 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    `cheddar.poweredbycheese.com` → `http://nginx.cheddar.svc.cluster.local:80`.
    Cloudflare creates the DNS record. Until the pods are up and the tunnel
    connected, the host answers Cloudflare error 1033.
+9. 👤 **Data key.** Two-step app secrets and bank links' access tokens are
+   stored encrypted with it, and recovery codes hashed with it, so a copy of
+   the database alone gives none of them away. Make it once, then deploy;
+   the next night (or "Rotating the data key" step 2 now) seals the
+   secrets already there. Keep `BANK_LINK_KEY` if it is set: it stays key
+   `v1` for the links made with it.
+   ```sh
+   printf 'v2:%s' "$(openssl rand -hex 16)" | gh secret set DATA_KEYS --env production -R garyvalley/cheddar
+   ```
+   Without `DATA_KEYS` or `BANK_LINK_KEY`, two-step secrets stay unencrypted
+   and bank linking is off.
 
 The zone settings Homefile needed (Bot Fight Mode, Email Address
 Obfuscation and Rocket Loader off) are zone-wide, so they cover Cheddar too
@@ -140,6 +149,24 @@ stop at Cloudflare's edge.
 - Someone who lost their phone and recovery codes: in the admin UI, clear
   `mfa_enabled` on their user record, after proving who they are some other
   way. Their next sign-in takes them to set up a new app.
+- **Rotating the data key** (after a suspected leak, or now and then).
+  `DATA_KEYS` is `id:<32 characters>` entries, newest first; new values are
+  sealed with the first, and each value names the key that sealed it.
+  1. Put a new key in front, keeping the old ones, and deploy:
+     `gh secret set DATA_KEYS --env production -R garyvalley/cheddar`, pasting
+     e.g. `v3:<openssl rand -hex 16>,v2:<the old one>`.
+  2. Re-seal everything with it (it also runs every night at 04:41 UTC),
+     with the superuser's token from the port-forward above:
+     `curl -X POST -H "Authorization: $TOKEN" http://localhost:8090/api/data-keys/reseal`.
+     It answers `{ current, resealed, unreadable, codes_on_old_keys }`.
+  3. Recovery codes can't be re-hashed without the codes themselves:
+     `codes_on_old_keys` people still have codes made with an old key. Wait
+     until it is 0 (codes are remade when someone makes new ones in
+     Settings), or accept that those people sign in with their app only and
+     make new codes.
+  4. Drop the old key from `DATA_KEYS` (and unset `BANK_LINK_KEY` once v1 is
+     retired) and deploy. `unreadable` counts values on a key that is gone:
+     those bank links must be linked again.
 - Rotate the superuser: delete the `pocketbase-superuser` Secret (as admin)
   and deploy; PocketBase sets the new password on start.
 
