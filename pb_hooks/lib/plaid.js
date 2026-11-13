@@ -41,7 +41,35 @@ function config(getenv) {
     env: BASES[env] ? env : "sandbox",
     // Only the API suite's stand-in sets this.
     base: String(getenv("PLAID_API_URL") || "").trim().replace(/\/+$/, "") || BASES[BASES[env] ? env : "sandbox"],
+    // Plaid bills whoever runs Cheddar for each linked bank, so new links stop
+    // at these. Signing in to a bank again is never counted as a new link.
+    perPerson: whole(getenv("PLAID_LINKS_PER_PERSON"), DEFAULT_LINKS_PER_PERSON),
+    // 0: no limit for the whole Cheddar.
+    maxLinks: whole(getenv("PLAID_MAX_LINKS"), 0),
   }
+}
+
+/** A whole number of 0 or more from the environment, or `fallback` when it's unset or unreadable. */
+function whole(value, fallback) {
+  var s = String(value || "").trim()
+  return /^\d{1,6}$/.test(s) ? parseInt(s, 10) : fallback
+}
+
+var DEFAULT_LINKS_PER_PERSON = 10
+
+/**
+ * Why one more link can't be made, or "" when it can: `mine` is how many the
+ * person has, `all` how many this Cheddar has. `who` says which limit it was,
+ * for the log: "person" or "instance".
+ */
+function linkLimit(cfg, mine, all) {
+  if (cfg.maxLinks > 0 && all >= cfg.maxLinks) {
+    return { who: "instance", limit: cfg.maxLinks, message: "This Cheddar has as many linked banks as whoever runs it allows. Ask them to raise the limit, or add the account yourself and import its statements." }
+  }
+  if (mine >= cfg.perPerson) {
+    return { who: "person", limit: cfg.perPerson, message: "That's as many linked banks as one person can have here (" + cfg.perPerson + "). Unlink one first, or add the account yourself and import its statements." }
+  }
+  return null
 }
 
 /** Linking is on with the key and both Plaid keys; without any of them, it's off. */
@@ -226,6 +254,7 @@ module.exports = {
   MAX_PAGES: MAX_PAGES,
   config: config,
   isEnabled: isEnabled,
+  linkLimit: linkLimit,
   request: request,
   linkTokenBody: linkTokenBody,
   clean: clean,

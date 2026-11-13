@@ -18,6 +18,19 @@ function cfg() {
   return plaid.config($os.getenv)
 }
 
+/** Why `owner` can't make one more link (lib/plaid.js linkLimit), or null. */
+function linkLimitFor(app, owner) {
+  return plaid.linkLimit(cfg(), app.countRecords("bank_links", $dbx.hashExp({ owner: owner })), app.countRecords("bank_links"))
+}
+
+/** Throws when `owner` can't make one more link, and logs which limit it was, so it shows in the cluster's logs. */
+function checkLinkLimit(app, owner) {
+  var hit = linkLimitFor(app, owner)
+  if (!hit) return
+  console.log("[bank_links] " + hit.who + " limit of " + hit.limit + " reached: refused a new link for " + owner)
+  throw new BadRequestError(hit.message)
+}
+
 /** A failed Plaid call: `failure` is lib/plaid.js's { code, status, message }. */
 function PlaidError(failure) {
   this.failure = failure
@@ -328,6 +341,8 @@ function remove(app, link) {
 module.exports = {
   PlaidError: PlaidError,
   cfg: cfg,
+  checkLinkLimit: checkLinkLimit,
+  linkLimitFor: linkLimitFor,
   encrypt: encrypt,
   linkToken: linkToken,
   exchange: exchange,

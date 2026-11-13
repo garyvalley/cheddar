@@ -88,7 +88,27 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    gh variable set PLAID_ENV --body sandbox -R garyvalley/cheddar
    ```
    Then run the deploy again (`gh workflow run ci.yml --ref main -R garyvalley/cheddar`).
-7. 👤 **Route,** once the tunnel shows **Healthy**: delete any DNS record for
+
+   Plaid bills you for each linked bank, so new links stop at a limit:
+   `PLAID_LINKS_PER_PERSON` (default 10) and `PLAID_MAX_LINKS` for the whole
+   Cheddar (default 25 here, `0` for none). Signing in to a bank again never
+   counts as a new link. When a limit is hit, PocketBase's log says
+   `[bank_links] … limit of N reached`.
+   ```sh
+   gh variable set PLAID_MAX_LINKS --body 40 -R garyvalley/cheddar
+   ```
+7. 👤 **Who can sign up.** Production is invite-only: only addresses on the
+   `SIGNUP_ALLOW` list can make an account, so strangers who find the site
+   can't create billable bank links. List whole addresses or `@domain` for
+   everyone at a domain, comma separated. It's a secret, since it names
+   people, and anyone who already has an account keeps it.
+   ```sh
+   gh secret set SIGNUP_ALLOW --env production -R garyvalley/cheddar   # then paste: you@example.com, @family.example
+   gh variable set SIGNUP --body invite -R garyvalley/cheddar          # or open (anyone) or closed (nobody new)
+   ```
+   Deploy again after a change. Refused sign-ups log `[signup] refused a new account`.
+   A superuser can still make an account for anyone in the admin UI.
+8. 👤 **Route,** once the tunnel shows **Healthy**: delete any DNS record for
    the host, then add the tunnel's public hostname
    `cheddar.poweredbycheese.com` → `http://nginx.cheddar.svc.cluster.local:80`.
    Cloudflare creates the DNS record. Until the pods are up and the tunnel

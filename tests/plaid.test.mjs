@@ -25,6 +25,32 @@ describe('config', () => {
   })
 })
 
+describe('link limits', () => {
+  test('ten per person and none for the whole Cheddar unless set', () => {
+    const cfg = plaid.config(env({}))
+    assert.equal(cfg.perPerson, 10)
+    assert.equal(cfg.maxLinks, 0)
+    assert.equal(plaid.linkLimit(cfg, 9, 5000), null)
+    assert.equal(plaid.linkLimit(cfg, 10, 10).who, 'person')
+    assert.match(plaid.linkLimit(cfg, 10, 10).message, /\(10\)/)
+  })
+
+  test('the whole Cheddar\'s limit comes first, and unreadable settings fall back', () => {
+    const cfg = plaid.config(env({ PLAID_LINKS_PER_PERSON: '3', PLAID_MAX_LINKS: '20' }))
+    assert.equal(plaid.linkLimit(cfg, 2, 19), null)
+    assert.equal(plaid.linkLimit(cfg, 0, 20).who, 'instance')
+    assert.equal(plaid.linkLimit(cfg, 3, 20).who, 'instance')
+    assert.equal(plaid.linkLimit(cfg, 3, 5).who, 'person')
+    const odd = plaid.config(env({ PLAID_LINKS_PER_PERSON: 'lots', PLAID_MAX_LINKS: '-1' }))
+    assert.equal(odd.perPerson, 10)
+    assert.equal(odd.maxLinks, 0)
+  })
+
+  test('0 per person stops every new link', () => {
+    assert.equal(plaid.linkLimit(plaid.config(env({ PLAID_LINKS_PER_PERSON: '0' })), 0, 0).who, 'person')
+  })
+})
+
 describe('requests', () => {
   test('carry the keys in the JSON body', () => {
     const r = plaid.request(plaid.config(env({ PLAID_CLIENT_ID: 'id', PLAID_SECRET: 'sec' })), '/accounts/get', { access_token: 'access-sandbox-x' })

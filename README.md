@@ -70,7 +70,10 @@ tunnel, repository secrets) and day-to-day operations.
 ## Usage
 
 - **Create an account.** Passwords need at least 12 characters, and the
-  100,000 most common passwords are refused.
+  100,000 most common passwords are refused. Whoever runs Cheddar chooses
+  who may sign up with `SIGNUP`: `open` (anyone; the default locally),
+  `invite` (only the addresses and `@domains` in `SIGNUP_ALLOW`; the
+  default in production) or `closed` (k8s/README.md, "First deploy").
 - **Turn on two-step sign-in.** Every account must, before anything else:
   scan the QR code with an authenticator app (Passwords on iPhone, Google
   Authenticator, 1Password…), and save the ten recovery codes. It can't be
@@ -217,6 +220,11 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
     `transactions` file imports use; `external_id` (`plaid:…`) makes a
     re-sync update rather than duplicate.
   - The CSP allows Plaid Link's script and frame (`cdn.plaid.com`).
+  - Plaid bills whoever runs Cheddar per linked bank, so new links stop at
+    `PLAID_LINKS_PER_PERSON` (default 10) and `PLAID_MAX_LINKS` for the
+    whole instance (0, no limit, unless set; 25 in production). Settings
+    says so before anyone signs in to their bank, and the log notes each
+    refusal.
 - **Schema:** `migrations/` holds the schema, which `scripts/migrate.mjs`
   applies as an init container before each new version serves
   ([migrations/README.md](migrations/README.md)).

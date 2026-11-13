@@ -230,7 +230,9 @@ function when(pb: string) {
             Sign in to your bank or card issuer, and Cheddar keeps your balances and transactions up to date.
             Your bank password goes to your bank, never to Cheddar.
           </p>
-          <div class="btn-row">
+          <!-- At a limit: say so before the person signs in to their bank, not after. -->
+          <p v-if="data.full" class="footnote">{{ data.full }}</p>
+          <div v-else class="btn-row">
             <button class="btn btn-primary" :disabled="add.busy.value" @click="link">
               <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
             </button>

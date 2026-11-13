@@ -68,9 +68,32 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal((await c.call('POST', '/api/bank-links', { public_token: mock.publicToken().token })).status, 403)
   })
 
+  test('a person\'s links stop at PLAID_LINKS_PER_PERSON (10 by default), said before they open Plaid Link', async () => {
+    const c = await person()
+    // One real link, to sign in to again below; the other nine only need to be counted.
+    const { link: real } = await link(c)
+    const me = (await c.call('GET', '/api/auth/me')).json.me
+    const su = await superuser()
+    for (let i = 0; i < 9; i++) {
+      const r = await pb('POST', '/api/collections/bank_links/records', su, { owner: me.id, provider: 'plaid', access: 'not-a-token', item_id: `cap-${i}`, status: 'ok' })
+      assert.equal(r.status, 200, JSON.stringify(r.json))
+    }
+    const list = (await c.call('GET', '/api/bank-links')).json
+    assert.equal(list.links.length, 10)
+    assert.match(list.full, /as many linked banks as one person can have here \(10\)/)
+    const t = await c.call('POST', '/api/bank-links/link-token', {})
+    assert.equal(t.status, 400)
+    assert.equal(t.json.message, list.full)
+    const add = await c.call('POST', '/api/bank-links', { public_token: mock.publicToken().token })
+    assert.equal(add.status, 400)
+    // Signing in to one of them again is not a new link.
+    const again = await c.call('POST', '/api/bank-links/link-token', { link: real.id })
+    assert.equal(again.status, 200, JSON.stringify(again.json))
+  })
+
   test('signing in to a bank links its accounts and syncs balances and every page of transactions', async () => {
     const c = await person()
-    assert.deepEqual((await c.call('GET', '/api/bank-links')).json, { enabled: true, links: [] })
+    assert.deepEqual((await c.call('GET', '/api/bank-links')).json, { enabled: true, links: [], full: null })
 
     const r = await link(c)
     assert.deepEqual(r.sync, { ok: true, added: 4, updated: 0, removed: 0 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SignUpMode } from '~~/shared/sign-up'
 definePageMeta({ layout: 'auth', guestOnly: true })
 useHead({ title: 'Sign in' })
 
@@ -36,6 +37,9 @@ async function sendCode() {
   const r = await run(() => $fetch('/api/auth/code', { method: 'POST', body: { mfaId: mfaId.value, code: code.value } }))
   if (r) await finish(r.me, r.recoveryCodesLeft)
 }
+
+// A Cheddar that takes no new accounts doesn't offer to make one.
+const { data: signUp } = await useFetch<{ mode: SignUpMode }>('/api/auth/sign-up', { key: 'sign-up', default: () => ({ mode: 'open' as SignUpMode }) })
 </script>
 
 <template>
@@ -57,8 +61,8 @@ async function sendCode() {
         <span v-if="busy" class="spinner" aria-hidden="true" /> Sign in
       </button>
       <p class="center footnote">
-        <NuxtLink to="/forgot-password">Forgot password?</NuxtLink> ·
-        <NuxtLink to="/register">Create an account</NuxtLink>
+        <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
+        <template v-if="signUp.mode !== 'closed'"> · <NuxtLink to="/register">Create an account</NuxtLink></template>
       </p>
     </form>
 
