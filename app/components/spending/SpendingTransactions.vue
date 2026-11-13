@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { formatCents, type Transaction } from '~~/shared/accounts'
 import { categoryOf, type Category } from '~~/shared/categories'
+import { leftOver } from '~~/shared/splits'
 import { DESCRIPTION_MAX, NOTE_MAX, PAYEE_MAX, checkEdit, shownName, type Direction } from '~~/shared/transactions'
 
 // A list of transactions on Spending (a category's, every one, or a
 // search's). Each can move to another category (the rest of that merchant's
 // follow), and can be opened to give it a name of the person's own, a note,
-// or to leave it out of the totals. One added by hand can change entirely,
-// or be deleted.
+// or to leave it out of the totals, or split across categories
+// (SpendingSplit.vue). One added by hand can change entirely, or be deleted.
 
 const props = defineProps<{
   items: Transaction[]
@@ -64,6 +65,7 @@ const editing = ref('')
 const deleting = ref(false)
 const form = reactive({ payee: '', note: '', excluded: false, posted: '', amount: '', direction: 'out' as Direction, description: '' })
 function open(t: Transaction) {
+  splitting.value = ''
   edit.error.value = ''
   deleting.value = false
   Object.assign(form, {
@@ -88,12 +90,28 @@ async function save(t: Transaction) {
     ? `${name} is left out of spending and taxes now. It stays listed here.`
     : !form.excluded && t.excluded ? `${name} counts again.` : `Saved ${name}.`)
 }
+// Splitting one across categories: in place of the form, from it or from the row's chip.
+const splitting = ref('')
+function split(t: Transaction) {
+  editing.value = ''
+  splitting.value = splitting.value === t.id ? '' : t.id
+}
+function splitSaved(message: string) {
+  splitting.value = ''
+  emit('changed', message)
+}
+const partsText = (t: Transaction) => t.splits.map(p => `${label(p.category)} ${formatCents(p.amount_cents)}`).join(' · ')
+
 async function remove(t: Transaction) {
   if (!await edit.succeed(() => $fetch(`/api/transactions/${t.id}`, { method: 'DELETE' }))) return
   editing.value = ''
   emit('changed', `Deleted ${shownName(t)}.`)
 }
-watch(() => props.items, () => { naming.value = ''; if (!props.items.some(t => t.id === editing.value)) editing.value = '' })
+watch(() => props.items, () => {
+  naming.value = ''
+  if (!props.items.some(t => t.id === editing.value)) editing.value = ''
+  if (!props.items.some(t => t.id === splitting.value)) splitting.value = ''
+})
 </script>
 
 <template>
@@ -106,12 +124,21 @@ watch(() => props.items, () => { naming.value = ''; if (!props.items.some(t => t
             <span class="block desc">{{ shownName(t) }}</span>
             <span v-if="t.payee && t.description && t.payee !== t.description" class="footnote block desc">{{ t.description }}</span>
             <span class="footnote">{{ day(t.posted) }}<template v-if="showAccount"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template><template v-if="origin(t)"> · {{ origin(t) }}</template></span>
+            <span v-if="t.splits.length" class="footnote block parts">{{ partsText(t) }}</span>
+            <span v-if="leftOver(t)" class="badge badge-warn">Split needs fixing</span>
             <span v-if="t.excluded" class="badge badge-off">Left out</span>
             <span v-if="t.note" class="footnote block note">{{ t.note }}</span>
           </button>
           <span class="tx-side">
             <span class="num amount" :class="moneyTone(t.amount_cents)">{{ formatCents(t.amount_cents) }}</span>
+            <button
+              v-if="t.splits.length" type="button" class="chip" :aria-expanded="splitting === t.id"
+              :aria-label="`Split of ${shownName(t)}: ${partsText(t)}. Change it`" @click="split(t)"
+            >
+              Split · {{ t.splits.length }}
+            </button>
             <select
+              v-else
               class="chip" :value="categoryOf(t.category, categories).id" :disabled="move.busy.value"
               :aria-label="`Category for ${shownName(t)}`"
               @change="picked(t, $event)"
@@ -135,6 +162,7 @@ watch(() => props.items, () => { naming.value = ''; if (!props.items.some(t => t
           <button class="btn btn-primary" :disabled="move.busy.value"><span v-if="move.busy.value" class="spinner" aria-hidden="true" /> Add</button>
           <button type="button" class="btn btn-plain" @click="naming = ''">Cancel</button>
         </form>
+        <SpendingSplit v-if="splitting === t.id" class="panel" :transaction="t" :categories="categories" @saved="splitSaved" @cancel="splitting = ''" />
         <form v-if="editing === t.id" class="panel edit" @submit.prevent="save(t)">
           <template v-if="t.source === 'manual'">
             <label class="field">
@@ -181,6 +209,7 @@ watch(() => props.items, () => { naming.value = ''; if (!props.items.some(t => t
           <div v-else class="btn-row">
             <button class="btn btn-primary" :disabled="edit.busy.value"><span v-if="edit.busy.value" class="spinner" aria-hidden="true" /> Save</button>
             <button type="button" class="btn btn-plain" @click="editing = ''">Cancel</button>
+            <button type="button" class="btn btn-plain" @click="split(t)">{{ t.splits.length ? 'Change the split…' : 'Split…' }}</button>
             <button v-if="t.source === 'manual'" type="button" class="btn btn-plain danger push" @click="deleting = true">Delete…</button>
           </div>
         </form>
@@ -202,6 +231,8 @@ watch(() => props.items, () => { naming.value = ''; if (!props.items.some(t => t
 }
 .opener:hover .desc:first-child { text-decoration: underline; }
 .opener .badge { margin-left: 0; margin-top: 0.25rem; display: inline-block; }
+.parts { color: var(--text-2); margin-top: 0.125rem; }
+.badge-warn { background: color-mix(in srgb, var(--warning) 16%, var(--surface)); color: var(--warning); }
 .note { color: var(--text-2); font-style: italic; white-space: pre-line; margin-top: 0.125rem; }
 .out .amount { opacity: 0.55; text-decoration: line-through; }
 .tx-side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }

@@ -197,6 +197,38 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.match(del.json.message, /come back/)
   })
 
+  test('a split outlasts the next sync, and a pending charge\'s split, name and note carry to it as it posts', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
+    const rows = await transactions(c, account.id)
+    const rent = rows.find(t => t.description === 'RENT')
+    const grocer = rows.find(t => t.description === 'GROCER')
+    assert.equal(grocer.pending, true)
+    const half = [{ category: 'housing', amount: '900' }, { category: 'utilities', amount: '900' }]
+    assert.equal((await c.call('PATCH', `/api/transactions/${rent.id}`, { splits: half })).status, 200)
+    const r = await c.call('PATCH', `/api/transactions/${grocer.id}`, { note: 'Party', splits: [{ category: 'groceries', amount: '30' }, { category: 'gifts', amount: '12.10' }] })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+
+    // Rent's name changes; the grocer's charge posts with a tip on top.
+    const pend = bank.events[2].t
+    bank.events.push(
+      { kind: 'modified', t: { ...bank.events[1].t, name: 'RENT NOVEMBER' } },
+      { kind: 'removed', t: pend },
+      { kind: 'added', t: { ...pend, transaction_id: `${pend.transaction_id}-posted`, pending_transaction_id: pend.transaction_id, amount: 45.1, pending: false } },
+    )
+    await allowSync(l.id)
+    assert.deepEqual((await c.call('POST', `/api/bank-links/${l.id}/sync`, {})).json.sync, { ok: true, added: 1, updated: 1, removed: 1 })
+    const after = await transactions(c, account.id)
+    assert.deepEqual(after.find(t => t.id === rent.id).splits, [{ category: 'housing', amount_cents: -90000 }, { category: 'utilities', amount_cents: -90000 }])
+    const posted = after.find(t => t.description === 'GROCER')
+    assert.notEqual(posted.id, grocer.id)
+    assert.deepEqual([posted.pending, posted.amount_cents, posted.note], [false, -4510, 'Party'])
+    assert.deepEqual(posted.splits, [{ category: 'groceries', amount_cents: -3000 }, { category: 'gifts', amount_cents: -1210 }], 'kept, to fix: the tip is left over')
+    const listed = (await c.call('GET', `/api/transactions?account=${account.id}`)).json.items.find(t => t.id === posted.id)
+    assert.equal(listed.amount_cents - listed.splits.reduce((n, p) => n + p.amount_cents, 0), -300)
+  })
+
   test('synced transactions are sorted by Plaid\'s category, and a person\'s choice outlasts the next sync', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)
