@@ -125,6 +125,13 @@ tunnel, repository secrets) and day-to-day operations.
   month or a year, for one account or all, against the period before. Tap a
   category for its transactions. Spending only shows what your accounts
   hold: to add more, go to Accounts.
+  - **Search** by words (in the description, a name you gave it, or its
+    note) and by amount, money in or out, on any date.
+  - **Add one by hand** (cash, or one a statement missed) to an account that
+    isn't linked. Open any transaction to give it a name of your own, add a
+    note, or **leave it out** of spending, Overview, Projections and Taxes
+    (a reimbursed work expense) while it stays listed. One added by hand can
+    be changed entirely or deleted.
   - Every transaction is sorted into a category on its own: by your rule for
     its merchant if you have one, else by the bank's category (linked
     accounts), else by what its description says ("WHOLE FOODS" is

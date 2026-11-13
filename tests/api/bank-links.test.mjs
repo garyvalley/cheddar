@@ -152,6 +152,28 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal((await c.call('GET', '/api/overview')).json.net_worth.total_cents, 200000 - 31055)
   })
 
+  test('a person\'s name, note and leaving one out outlast the next sync; nothing is added by hand or deleted in a linked account', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
+    const rent = (await transactions(c, account.id)).find(t => t.description === 'RENT')
+    const r = await c.call('PATCH', `/api/transactions/${rent.id}`, { payee: 'Landlord', note: 'Split with Sam', excluded: true })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+
+    bank.events.push({ kind: 'modified', t: { ...bank.events[1].t, name: 'RENT NOVEMBER' } })
+    await allowSync(l.id)
+    assert.equal((await c.call('POST', `/api/bank-links/${l.id}/sync`, {})).json.sync.updated, 1)
+    const after = (await transactions(c, account.id)).find(t => t.id === rent.id)
+    assert.deepEqual([after.description, after.payee, after.note, after.excluded], ['RENT NOVEMBER', 'Landlord', 'Split with Sam', true])
+
+    const add = await c.call('POST', '/api/transactions', { account: account.id, posted: daysAgo(1), amount: '5', direction: 'out', description: 'Cash' })
+    assert.equal(add.status, 400)
+    assert.match(add.json.message, /bank brings/)
+    const del = await c.call('DELETE', `/api/transactions/${rent.id}`)
+    assert.equal(del.status, 400)
+    assert.match(del.json.message, /come back/)
+  })
+
   test('synced transactions are sorted by Plaid\'s category, and a person\'s choice outlasts the next sync', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)
