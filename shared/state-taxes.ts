@@ -171,6 +171,18 @@ export const STATE_TAX: Record<string, StateTax> = {
   },
 }
 
+/**
+ * State figures by tax year; add next year's beside shared/taxes.ts's
+ * FEDERAL. A year without its own uses the newest year before it.
+ */
+export const STATE_TAXES: Record<number, Record<string, StateTax>> = { 2026: STATE_TAX }
+
+/** The year whose state figures `year` uses. */
+export function stateTableYear(year: number): number {
+  const years = Object.keys(STATE_TAXES).map(Number).sort((a, b) => b - a)
+  return years.find(y => y <= year) ?? years.at(-1)!
+}
+
 const isJoint = (s: FilingStatus) => s === 'married_joint' || s === 'qualifying_surviving_spouse'
 
 export interface StateEstimate {
@@ -191,10 +203,12 @@ export interface StateEstimate {
 /**
  * State income tax on a year's income, or null for a state with no income
  * tax on wages (or no state). `federalTaxCents` is the federal estimate, for
- * a state that lets it be deducted.
+ * a state that lets it be deducted. `year` picks the figures (the newest
+ * year's when left out).
  */
-export function stateEstimate(code: string | undefined, incomeCents: number, status: FilingStatus, federalTaxCents = 0): StateEstimate | null {
-  const t = code ? STATE_TAX[code] : undefined
+export function stateEstimate(code: string | undefined, incomeCents: number, status: FilingStatus, federalTaxCents = 0, year?: number): StateEstimate | null {
+  const table = year === undefined ? STATE_TAX : STATE_TAXES[stateTableYear(year)]!
+  const t = code ? table[code] : undefined
   if (!t) return null
   const j = isJoint(status) ? 1 : 0
   const income = Math.max(0, Math.round(incomeCents))

@@ -17,9 +17,15 @@ The finance features arrive in this order:
   category rules, review new transactions, and get spending reports.
 3. **Planning.** Savings rate, investment growth, debt payoff, savings goals,
   and a cash-flow forecast from planned items and detected regular charges.
-4. **Taxes.** Federal and state income tax estimates (every state, and DC), contribution room, holding
-   periods, tax-loss harvesting with wash-sale warnings, and which account
-   suits which asset. Cheddar's ideas are educational, not tax advice.
+4. **Taxes.** Federal and state income tax estimates (every state, and DC)
+   for this year or last (last year's first until April 15, while it's being
+   filed), contribution room, and ideas from your own figures. Cheddar's
+   ideas are educational, not tax advice.
+
+Not planned until Cheddar knows what each account holds (positions and the
+lots they were bought in, from Plaid's investments API or a brokerage
+export): holding periods, tax-loss harvesting with wash-sale warnings, and
+which account suits which asset. Accounts hold only a balance today.
 
 | Desktop | Phone (dark mode) |
 | --- | --- |

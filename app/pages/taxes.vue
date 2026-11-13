@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { formatCents, parseBalance, type Account } from '~~/shared/accounts'
 import { FILING_STATUSES, isFilingStatus } from '~~/shared/filing-status'
-import { stateEstimate } from '~~/shared/state-taxes'
+import { stateEstimate, stateTableYear } from '~~/shared/state-taxes'
 import { stateByCode } from '~~/shared/states'
-import { LIMITS, TAX_YEAR, estimate, ideas, type TaxYear } from '~~/shared/taxes'
+import { estimate, federalFor, ideas, type TaxYear } from '~~/shared/taxes'
 
 // Taxes only reads what the accounts hold (set up on Accounts): this year's
 // income and tax payments from their categorized transactions, and money
@@ -13,7 +13,19 @@ import { LIMITS, TAX_YEAR, estimate, ideas, type TaxYear } from '~~/shared/taxes
 
 const { me } = useAuth()
 const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
-const { data: ty, error } = await useFetch<TaxYear>('/api/taxes')
+// The year shown: the server's pick (last year until April 15) until the person picks one.
+const route = useRoute()
+const router = useRouter()
+const picked = computed(() => (typeof route.query.year === 'string' && /^\d{4}$/.test(route.query.year) ? route.query.year : undefined))
+const { data: ty, error } = await useFetch<TaxYear & { years: number[] }>('/api/taxes', { query: { year: picked } })
+const year = computed(() => ty.value?.year ?? new Date().getUTCFullYear())
+const pickYear = (y: number) => router.push({ query: { ...route.query, year: String(y) } })
+// The figures used: the year's own, or the newest year's before it, said plainly.
+const table = computed(() => federalFor(year.value))
+const LIMITS = computed(() => table.value.limits)
+const stateYear = computed(() => stateTableYear(year.value))
+// A past year is over: its whole income is in, and only an IRA can still take money for it, until April 15.
+const past = computed(() => !!ty.value && ty.value.to === `${ty.value.year}-12-31`)
 
 const status = computed(() => (isFilingStatus(me.value?.filing_status) ? me.value.filing_status : 'single'))
 const statusLabel = computed(() => FILING_STATUSES.find(s => s.value === status.value)!.label.toLowerCase())
@@ -32,8 +44,8 @@ const typedCents = computed(() => {
   return 'ok' in p && p.ok >= 0 ? p.ok : undefined
 })
 const income = computed(() => typedCents.value ?? pace.value)
-const est = computed(() => estimate(income.value, status.value))
-const stateEst = computed(() => stateEstimate(state.value?.code, income.value, status.value, est.value.tax_cents))
+const est = computed(() => estimate(income.value, status.value, year.value))
+const stateEst = computed(() => stateEstimate(state.value?.code, income.value, status.value, est.value.tax_cents, year.value))
 const shownIdeas = computed(() => (ty.value ? ideas(est.value, ty.value, state.value?.name ?? '', stateEst.value?.marginal ?? 0) : []))
 
 // Each bracket's bar fills with the share of it the income uses; the top one, unbounded, is drawn as long as the one before.
@@ -42,7 +54,7 @@ const bars = computed(() => est.value.brackets.map((b, i, all) => {
   return { ...b, fill: Math.min(1, b.taxed_cents / span), current: b.rate === est.value.marginal }
 }))
 
-const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirement_in_cents ?? 0)))
+const iraLeft = computed(() => Math.max(0, LIMITS.value.ira * 100 - (ty.value?.retirement_in_cents ?? 0)))
 </script>
 
 <template>
@@ -57,7 +69,15 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
     </p>
 
     <section class="group" aria-labelledby="year-title">
-      <h2 id="year-title" class="group-title">{{ TAX_YEAR }} so far</h2>
+      <div class="year-head">
+        <h2 id="year-title" class="group-title">{{ past ? year : `${year} so far` }}</h2>
+        <div v-if="ty?.years" class="segmented" role="group" aria-label="Tax year">
+          <button v-for="y in [...ty.years].reverse()" :key="y" class="seg" :aria-pressed="y === year" @click="pickYear(y)">{{ y }}</button>
+        </div>
+      </div>
+      <p v-if="table.table_year !== year" class="notice notice-info" role="status" data-test="table-year">
+        Cheddar doesn't have {{ year }}'s tax figures yet, so this uses {{ table.table_year }}'s brackets, deductions and limits.
+      </p>
       <div v-if="ty && list.accounts.length" class="card">
         <div class="row">
           <span class="row-label">
@@ -105,6 +125,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
               <span id="income-hint" class="footnote">
                 <template v-if="typedCents === undefined">Enter an amount, like 85,000.</template>
                 <template v-else-if="typedCents !== null">Your own figure, for this page only. <button class="link" type="button" @click="typed = ''">Use your accounts' instead</button></template>
+                <template v-else-if="past">Your income for {{ year }}, from your accounts.</template>
                 <template v-else-if="ty?.projected_income_cents">Your income so far, at the same pace through December.</template>
                 <template v-else>Your income so far. It's projected to December once Cheddar has a month of it.</template>
               </span>
@@ -191,13 +212,13 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
             <p class="footnote">{{ state.name }} has no state income tax on wages, so federal is the whole bill.</p>
           </div>
           <p v-if="stateEst" class="group-footer">
-            From {{ state.name }}'s {{ TAX_YEAR }} brackets, standard deduction and personal exemption{{ status === 'head_of_household' || status === 'married_separate' ? ', on the single schedule' : '' }}.
+            From {{ state.name }}'s {{ stateYear }} brackets, standard deduction and personal exemption{{ status === 'head_of_household' || status === 'married_separate' ? ', on the single schedule' : '' }}.
             Local income taxes, phase-outs at high incomes, dependents and credits aren't counted.
           </p>
         </section>
 
         <section class="group" aria-labelledby="room-title">
-          <h2 id="room-title" class="group-title">Tax-advantaged savings in {{ TAX_YEAR }}</h2>
+          <h2 id="room-title" class="group-title">Tax-advantaged savings in {{ year }}</h2>
           <div class="card">
             <div class="row">
               <span class="row-label">
@@ -224,7 +245,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
             </div>
           </div>
           <p class="group-footer">
-            401(k) contributions come out of your pay before it reaches the bank, so they don't show in your accounts. IRA money for {{ TAX_YEAR }} can go in until April 15, {{ TAX_YEAR + 1 }}.
+            401(k) contributions come out of your pay before it reaches the bank, so they don't show in your accounts. IRA money for {{ year }} can go in until April 15, {{ year + 1 }}.
           </p>
         </section>
 
@@ -268,4 +289,6 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
 .idea + .idea { border-top: var(--border); }
 .idea .headline { margin: 0 0 0.25rem; }
 .idea .footnote { margin: 0; }
+.year-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.year-head .group-title { margin-bottom: 0; }
 </style>
