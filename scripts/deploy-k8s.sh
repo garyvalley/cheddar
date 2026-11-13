@@ -60,6 +60,9 @@ apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfi
   echo "PLAID_MAX_LINKS=${PLAID_MAX_LINKS:-25}"
   # Production is invite-only unless the repository variable SIGNUP says otherwise:
   # only the addresses and @domains in the secret SIGNUP_ALLOW can make an account.
+  # Healthchecks.io pings (pb_hooks/security_events.pb.js): off when empty.
+  echo "HEALTHCHECK_URL=${HEALTHCHECK_URL:-}"
+  echo "HEALTHCHECK_SYNC_URL=${HEALTHCHECK_SYNC_URL:-}"
   echo "SIGNUP=${SIGNUP:-invite}"
   echo "SIGNUP_ALLOW=${SIGNUP_ALLOW:-}"
 } > "$tmp/pocketbase.env"

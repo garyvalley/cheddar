@@ -327,6 +327,7 @@ least 7 days old.
 
 - No backups yet. Litestream to the NAS has to come before real financial
   data does.
-- No staging namespace and no uptime alerts.
+- No staging namespace. Uptime alerts are off until `HEALTHCHECK_URL` and
+  `HEALTHCHECK_SYNC_URL` are set (k8s/README.md, "First deploy" step 10).
 - PocketBase's SQLite file isn't encrypted at rest. It relies on the SSD on
   `primary` and the cluster's access controls.

@@ -103,6 +103,16 @@ function create(app, owner, publicToken, institutionName, today) {
 }
 
 /** The link as the app shows it. */
+/** The link's banks by name, "Chase, Amex", for Recent activity. */
+function namesOf(link) {
+  try {
+    var list = JSON.parse(link.getString("institutions") || "[]");
+    return Array.isArray(list) ? list.join(", ") : "";
+  } catch (_) {
+    return "";
+  }
+}
+
 function summary(app, link) {
   var accounts = app.findRecordsByFilter(
     "accounts",
@@ -436,6 +446,7 @@ function remove(app, link) {
 module.exports = {
   ProviderError: ProviderError,
   isEnabled: isEnabled,
+  namesOf: namesOf,
   minSyncGap: function (link) {
     return providers.of(link.getString("provider")).MIN_SYNC_GAP_MS;
   },

@@ -18,6 +18,7 @@ routerAdd("POST", "/api/export", (e) => {
     throw new BadRequestError("That password is not right.")
   }
   var rules = e.app.findRecordsByFilter("category_rules", "owner = {:owner}", "merchant", 0, 0, { owner: e.auth.id })
+  require(`${__hooks}/glue/events.js`).record(e.app, e.auth.id, "export", e)
   return e.json(200, {
     category_rules: rules.map(function (r) { return { merchant: r.getString("merchant"), category: r.getString("category") } }),
   })

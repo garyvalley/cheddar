@@ -249,6 +249,8 @@ jobs:
       PLAID_LINKS_PER_PERSON: ${{ vars.PLAID_LINKS_PER_PERSON }}
       PLAID_MAX_LINKS: ${{ vars.PLAID_MAX_LINKS }}
       SIGNUP: ${{ vars.SIGNUP }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+      HEALTHCHECK_SYNC_URL: ${{ vars.HEALTHCHECK_SYNC_URL }}
       SIGNUP_ALLOW: ${{ secrets.SIGNUP_ALLOW }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

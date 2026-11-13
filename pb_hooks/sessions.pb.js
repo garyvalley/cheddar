@@ -29,6 +29,7 @@ onRecordAuthRequest((e) => {
   var full = e.authMethod === "app" || (e.authMethod === "password" && !e.record.getBool("mfa_enabled"))
   if (full) {
     var sid = require(`${__hooks}/glue/sessions.js`).start(e.app, e.record, e.requestInfo().headers)
+    require(`${__hooks}/glue/events.js`).record(e.app, e.record.id, "sign_in", e)
     var meta = {}
     if (e.meta) for (var k in e.meta) meta[k] = e.meta[k]
     meta.session = sid
@@ -94,6 +95,7 @@ routerAdd("POST", "/api/sessions/confirm", (e) => {
 // remedy for a lost phone or a shared computer -- and the rows go too.
 routerAdd("POST", "/api/sign-out-everywhere", (e) => {
   var user = e.app.findRecordById("users", e.auth.id)
+  require(`${__hooks}/glue/events.js`).record(e.app, user.id, "signed_out_everywhere", e)
   user.refreshTokenKey()
   e.app.save(user)
   require(`${__hooks}/glue/sessions.js`).endAll(e.app, user.id, "")

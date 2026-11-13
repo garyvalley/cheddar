@@ -11,6 +11,7 @@
       <div>
         <SettingsTwoStep />
         <SettingsDevices />
+        <SettingsActivity />
         <SettingsExport />
         <SettingsAccount />
       </div>
