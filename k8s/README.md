@@ -122,6 +122,16 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```
    Without `DATA_KEYS` or `BANK_LINK_KEY`, two-step secrets stay unencrypted
    and bank linking is off.
+10. 👤 **Uptime alerts** (optional). Make two checks at
+    [healthchecks.io](https://healthchecks.io), each emailing you when pings
+    stop: one with a 5-minute period (PocketBase pings it every 5 minutes, so
+    a crashed or stuck PocketBase alerts), and one with a 1-day period for the
+    daily bank sync (it pings `/fail`, with how many links failed, when any
+    do). Then deploy again.
+    ```sh
+    gh variable set HEALTHCHECK_URL --body https://hc-ping.com/<uuid> -R garyvalley/cheddar
+    gh variable set HEALTHCHECK_SYNC_URL --body https://hc-ping.com/<other uuid> -R garyvalley/cheddar
+    ```
 
 The zone settings Homefile needed (Bot Fight Mode, Email Address
 Obfuscation and Rocket Loader off) are zone-wide, so they cover Cheddar too
@@ -176,4 +186,4 @@ stop at Cloudflare's edge.
   Litestream to the NAS as Homefile's `pb-replica` does, plus a restore drill.
 - **Staging.** Homefile deploys to a staging namespace first; Cheddar
   deploys straight to production for now.
-- **Uptime alerts.** No Healthchecks.io heartbeat yet.
+- **Uptime alerts** are wired (step 10) but off until the two URLs are set.

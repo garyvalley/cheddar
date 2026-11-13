@@ -1,6 +1,7 @@
 import type { Account, Import, Transaction } from "./accounts.ts";
 import type { Goal } from "./goals.ts";
 import type { Budget } from "./budgets.ts";
+import type { ActivityEvent } from "./activity.ts";
 import type { CashflowItem } from "./cashflow.ts";
 import { kindLabel } from "./accounts.ts";
 import { categoryLabel, type Category } from "./categories.ts";
@@ -53,6 +54,8 @@ export interface ExportData {
     last_synced: string;
     accounts: string[];
   }[];
+  /** Recent activity: the last 90 days of sign-ins and security changes. */
+  activity: ActivityEvent[];
 }
 
 /** A cell a spreadsheet could take for a formula (=, +, -, @, or a tab or return first). */

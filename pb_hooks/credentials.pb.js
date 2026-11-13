@@ -36,6 +36,7 @@ routerAdd("POST", "/api/change-password", (e) => {
   var sessions = require(`${__hooks}/glue/sessions.js`)
   var mine = sessions.current(e)
   sessions.endAll(e.app, user.id, mine ? mine.id : "")
+  require(`${__hooks}/glue/events.js`).record(e.app, user.id, "password_changed", e)
   return e.json(200, { token: user.newAuthToken() })
 }, $apis.requireAuth("users"))
 
@@ -74,6 +75,7 @@ onRecordConfirmEmailChangeRequest((e) => {
   e.next()
   // The confirm signs every device out: their session rows go too.
   require(`${__hooks}/glue/sessions.js`).endAll(e.app, e.record.id, "")
+  require(`${__hooks}/glue/events.js`).record(e.app, e.record.id, "email_changed", e)
   // The change is made; a notice that fails to send must not undo it.
   try {
     var notice = require(`${__hooks}/lib/notices.js`).emailChanged(e.newEmail)

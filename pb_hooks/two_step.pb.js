@@ -105,6 +105,7 @@ routerAdd("POST", "/api/two-step/app/confirm", (e) => {
     txApp.save(user)
   })
   if (replacing) twoStep.notify(user, "appChanged")
+  require(`${__hooks}/glue/events.js`).record(e.app, user.id, "two_step_changed", e)
   return e.json(200, { recovery_codes: codes })
 }, $apis.requireAuth("users"))
 
@@ -121,6 +122,7 @@ routerAdd("POST", "/api/two-step/recovery-codes", (e) => {
   var codes = twoStep.newRecoveryCodes(row)
   e.app.save(row)
   twoStep.notify(user, "recoveryCodesNew")
+  require(`${__hooks}/glue/events.js`).record(e.app, user.id, "recovery_codes_new", e)
   return e.json(200, { recovery_codes: codes })
 }, $apis.requireAuth("users"))
 
@@ -140,10 +142,15 @@ routerAdd("POST", "/api/collections/users/auth-with-app-code", (e) => {
 
   var kind = twoStep.acceptCode(row, body.code)
   if (!kind) {
-    // Locked after a right password: whoever it is has the password, so the
-    // person hears about it.
+    // A wrong code after a right password: whoever it is has the password, so
+    // it goes in the person's activity, and a lock emails them too.
+    var events = require(`${__hooks}/glue/events.js`)
+    events.record(e.app, user.id, "code_wrong", e)
     lockout.strike(row, "That code is wrong. Check it's the Cheddar entry in your app, or use a recovery code.", "codes",
-      function (minutes) { twoStep.notify(user, "codesLocked", require(`${__hooks}/lib/lockout.js`).duration(minutes)) })
+      function (minutes) {
+        events.record(e.app, user.id, "codes_locked", e)
+        twoStep.notify(user, "codesLocked", require(`${__hooks}/lib/lockout.js`).duration(minutes))
+      })
   }
   lockout.clear(row)
   e.app.save(row)

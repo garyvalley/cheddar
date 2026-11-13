@@ -82,6 +82,9 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal((await c.call('POST', '/api/bank-links/link-token', {})).status, 200)
 
     const l = (await link(c)).link
+    const activity = (await c.call('GET', '/api/auth/activity')).json.activity
+    assert.equal(activity[0].kind, 'bank_linked')
+    assert.match(activity[0].detail, /\w/)
     await pb('PATCH', `/api/collections/sessions/records/${row.id}`, su, { verified: Date.now() - 16 * 60 * 1000 })
     assert.equal((await c.call('POST', `/api/bank-links/${l.id}/remove`)).status, 403)
     // Signing in to a bank again, for a link already made, never asks.

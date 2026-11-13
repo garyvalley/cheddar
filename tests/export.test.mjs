@@ -80,7 +80,7 @@ describe('the zip', () => {
     cheddar_export: 1, exported: '2026-11-13T00:00:00.000Z',
     profile: { name: 'Zoë', email: 'z@example.com', state: 'CA', filing_status: 'single', theme: 'violet', appearance: 'auto', time_zone: 'America/Los_Angeles' },
     accounts, transactions: [tx({})], imports: [], balance_history: [], categories: BUILT_IN,
-    category_rules: [{ merchant: 'coffee', category: 'dining' }], bank_links: [],
+    category_rules: [{ merchant: 'coffee', category: 'dining' }], bank_links: [], activity: [],
   }
 
   test('holds the three spreadsheets and cheddar.json, which reads back as the export', () => {

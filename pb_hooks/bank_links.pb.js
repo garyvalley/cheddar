@@ -105,6 +105,7 @@ routerAdd("POST", "/api/bank-links", (e) => {
     if (err instanceof glue.ProviderError) throw new BadRequestError(err.failure.message)
     throw err
   }
+  require(`${__hooks}/glue/events.js`).record(e.app, e.auth.id, "bank_linked", e, glue.namesOf(made.link))
   return e.json(200, { link: glue.summary(e.app, made.link), sync: made.sync })
 }, $apis.requireAuth("users"))
 
@@ -131,7 +132,9 @@ routerAdd("POST", "/api/bank-links/{id}/remove", (e) => {
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
   var link = glue.ownLink(e.app, e.auth, e.request.pathValue("id"))
   require(`${__hooks}/glue/sessions.js`).requireFreshPassword(e)
+  var names = glue.namesOf(link)
   glue.remove(e.app, link)
+  require(`${__hooks}/glue/events.js`).record(e.app, e.auth.id, "bank_unlinked", e, names)
   return e.noContent(204)
 }, $apis.requireAuth("users"))
 
@@ -142,13 +145,30 @@ cronAdd("bank_links_sync", "17 11 * * *", () => {
   var glue = require(`${__hooks}/glue/bank_links.js`)
   if (!glue.isEnabled()) return
   var links = $app.findRecordsByFilter("bank_links", "status != 'reconnect'", "", 0, 0)
+  var failed = 0
   links.forEach(function (link) {
     try {
       var r = glue.sync($app, link)
-      if (!r.ok) console.log("[bank_links] sync failed for " + link.id + ": " + r.problem)
+      if (!r.ok) {
+        failed++
+        console.log("[bank_links] sync failed for " + link.id + ": " + r.problem)
+      }
     }
     catch (err) {
+      failed++
       console.log("[bank_links] sync threw for " + link.id + ": " + err)
     }
   })
+  // With HEALTHCHECK_SYNC_URL set (security_events.pb.js), the day's sync
+  // pings it: a ping that doesn't come, or a /fail one with how many failed,
+  // alerts whoever runs Cheddar.
+  var hc = String($os.getenv("HEALTHCHECK_SYNC_URL") || "").trim().replace(/\/+$/, "")
+  if (hc) {
+    try {
+      $http.send({ url: failed ? hc + "/fail" : hc, method: "POST", body: failed + " of " + links.length + " links failed to sync", timeout: 10 })
+    }
+    catch (err) {
+      console.log("[bank_links] sync ping failed: " + err)
+    }
+  }
 })
