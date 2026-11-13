@@ -135,8 +135,8 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
     <p v-if="error" class="notice notice-error group" role="alert">{{ errorMessage(error) }}</p>
 
     <div class="dash">
-      <!-- Left: every account by kind, adding up to net worth. -->
-      <section class="card side" aria-labelledby="worth-title">
+      <!-- Three cards of one height: net worth, investments, savings rate. Under them the 12-month bars, with the month's categories to their right. -->
+      <section class="card side worth-area" aria-labelledby="worth-title">
         <div class="panel-head">
           <h2 id="worth-title" class="panel-title">Net worth</h2>
           <NuxtLink to="/accounts" class="panel-link">Accounts</NuxtLink>
@@ -150,21 +150,19 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
             </p>
             <p v-else class="footnote">As of {{ day(worth.as_of, true) }}</p>
           </div>
-          <div v-for="g in byGroup" :key="g.id" class="kind">
-            <h3 class="kind-head">
+          <!-- Each kind's total; open one to see the accounts in it. -->
+          <details v-for="g in byGroup" :key="g.id" class="kind">
+            <summary class="kind-head">
               <span>{{ g.label }}</span>
               <span class="num" :class="moneyTone(g.total_cents)">{{ formatCents(g.total_cents) }}</span>
-            </h3>
+            </summary>
             <ul class="kind-list">
               <li v-for="a in g.accounts" :key="a.id">
-                <span class="acct">
-                  <span class="acct-name">{{ a.name }}</span>
-                  <span v-if="a.institution" class="caption">{{ a.institution }}</span>
-                </span>
+                <span class="acct-name">{{ a.name }}</span>
                 <span class="num acct-bal">{{ formatCents(a.balance_cents!) }}</span>
               </li>
             </ul>
-          </div>
+          </details>
           <p v-if="worth.missing.length" class="footnote side-note">
             Left out until it has a balance: {{ worth.missing.map(m => m.name).join(', ') }}. Enter it on <NuxtLink to="/accounts">Accounts</NuxtLink>.
           </p>
@@ -176,10 +174,9 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
         </div>
       </section>
 
-      <div class="content">
         <!-- Two figures side by side. -->
-        <div class="tiles">
-          <section class="card tile" aria-labelledby="growth-title">
+        <div class="tiles tiles-area">
+          <section class="card tile growth-area" aria-labelledby="growth-title">
             <div class="tile-head">
               <h2 id="growth-title" class="tile-label">Investments</h2>
               <template v-if="ov?.has_investments">
@@ -201,7 +198,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
             <p v-else class="footnote">Add a brokerage or retirement account on <NuxtLink to="/accounts">Accounts</NuxtLink> to see how your investments grow.</p>
           </section>
 
-          <section class="card tile" aria-labelledby="kept-title">
+          <section class="card tile kept-area" aria-labelledby="kept-title">
             <div class="tile-head">
               <h2 id="kept-title" class="tile-label">Savings rate</h2>
               <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
@@ -218,7 +215,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
           </section>
         </div>
 
-        <section class="card panel" aria-labelledby="flow-title">
+        <section class="card panel chart-area" aria-labelledby="flow-title">
           <div class="panel-head">
             <h2 id="flow-title" class="panel-title">Income and spending</h2>
             <template v-if="hasMonths && shown">
@@ -277,7 +274,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
           </div>
         </section>
 
-        <section class="card panel" aria-labelledby="cats-title">
+        <section class="card panel pie-area" aria-labelledby="cats-title">
           <div class="panel-head">
             <h2 id="cats-title" class="panel-title">Spending by category{{ shown ? `, ${monthName(shown.month).split(' ')[0]}` : '' }}</h2>
             <NuxtLink v-if="shown" :to="{ path: '/spending', query: { at: shown.month } }" class="panel-link">See all</NuxtLink>
@@ -306,7 +303,6 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
             <p class="footnote">Nothing spent{{ shown ? ` in ${monthName(shown.month)}` : '' }} yet.</p>
           </div>
         </section>
-      </div>
     </div>
   </div>
 </template>
@@ -323,26 +319,47 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
 
 .change { font-weight: 600; }
 
-/* The dashboard: accounts down the left, the figures and charts beside them. */
+/*
+ * The dashboard: net worth with the two figures beside it, then the
+ * 12-month bars right under net worth and the month's categories beside
+ * them. One column on a phone, in that order.
+ */
 .dash { display: grid; gap: 1.5rem; align-items: start; }
+.dash > * { min-width: 0; }
 @media (min-width: 900px) {
-  .dash { grid-template-columns: minmax(17rem, 21rem) 1fr; }
-  .side { position: sticky; top: calc(var(--topbar-h) + 1.5rem); }
+  .dash {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-areas: "worth growth kept" "chart chart pie";
+    align-items: stretch;
+  }
+  .dash .tiles-area { display: contents; }
+  .worth-area { grid-area: worth; }
+  .growth-area { grid-area: growth; }
+  .kept-area { grid-area: kept; }
+  .chart-area { grid-area: chart; }
+  .pie-area { grid-area: pie; }
+  .pie-area .pie-wrap { flex-direction: column; }
+  .pie-area .pie-legend { width: 100%; min-width: 0; }
 }
-.content { display: grid; gap: 1.5rem; min-width: 0; }
 
-.worth { padding: 1.125rem 1.25rem 1.25rem; }
+.worth { padding: 1rem 1.25rem 0.75rem; }
 .worth p { margin: 0; }
 .worth-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.15; margin-bottom: 0.25rem !important; }
 .kind { border-top: var(--border); }
 .kind-head {
-  display: flex; justify-content: space-between; gap: 0.75rem; margin: 0;
-  padding: 0.75rem 1.25rem 0.25rem; font-size: 0.9375rem; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; min-height: 2.5rem;
+  padding: 0.375rem 1.25rem; font-size: 0.9375rem; font-weight: 500; cursor: pointer; list-style: none;
 }
-.kind-list { list-style: none; margin: 0; padding: 0 0 0.625rem; }
-.kind-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.3125rem 1.25rem; font-size: 0.875rem; }
-.acct { min-width: 0; display: flex; flex-direction: column; }
-.acct-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.kind-head::-webkit-details-marker { display: none; }
+.kind-head > span:first-child::before {
+  content: ''; display: inline-block; width: 0.4rem; height: 0.4rem; margin: 0 0.5rem 0.1rem 0;
+  border: solid var(--text-3); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 0.15s;
+}
+.kind[open] .kind-head > span:first-child::before { transform: rotate(45deg); }
+.kind-head:hover { background: var(--surface-2); }
+.kind-list { list-style: none; margin: 0; padding: 0 0 0.5rem; }
+.kind-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.25rem 1.25rem 0.25rem 2.15rem; font-size: 0.875rem; }
+.acct-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .acct-bal { color: var(--text-2); }
 .side-note { margin: 0; padding: 0.75rem 1.25rem 1rem; border-top: var(--border); }
 
