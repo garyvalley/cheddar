@@ -197,6 +197,8 @@ try {
     { name: 'one.csv', mimeType: 'text/csv', buffer: Buffer.from(`Date,Description,Amount\n${mm}/06/${yyyy},LIBRARY FINE,-2.00\n`) },
     { name: 'two.csv', mimeType: 'text/csv', buffer: Buffer.from(`Date,Description,Amount\n${mm}/07/${yyyy},BOOKSHOP,-15.00\n${mm}/08/${yyyy},REFUND,5.00\n`) },
   ])
+  // The files are read in the browser before the preview shows: wait for it, then count.
+  await page.getByRole('button', { name: 'Import 3 transactions from 2 files' }).waitFor()
   assert.equal(await page.locator('table.preview tbody tr').count(), 3)
   await page.getByRole('button', { name: 'Import 3 transactions from 2 files' }).click()
   await page.getByText('Imported 3 transactions into Everyday checking from 2 files.').waitFor()
@@ -239,7 +241,7 @@ try {
   watch(p)
   await p.goto(`${APP}/`)
   await p.getByRole('link', { name: 'Spending' }).last().click()
-  await p.getByRole('heading', { name: 'Spending' }).waitFor()
+  await p.getByRole('heading', { name: 'Spending', exact: true }).waitFor()
   await p.getByRole('link', { name: 'Settings' }).click()
   await p.getByRole('heading', { name: 'Settings' }).waitFor()
 
