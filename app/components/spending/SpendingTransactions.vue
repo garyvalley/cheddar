@@ -191,7 +191,7 @@ watch(() => props.items, () => { naming.value = ''; if (!props.items.some(t => t
 
 <style scoped>
 .list { list-style: none; margin: 0; padding: 0; }
-.list > li + li { border-top: 0.5px solid var(--separator); }
+.list > li + li { border-top: var(--border); }
 .gap { margin-bottom: 0.75rem; }
 .desc { overflow-wrap: anywhere; }
 .amount { white-space: nowrap; }

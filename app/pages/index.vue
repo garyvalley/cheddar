@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCents, type Account } from '~~/shared/accounts'
 import type { SpendingSummary } from '~~/shared/categories'
-import { GROWTH_PERIODS, type GrowthPeriodId, type Overview } from '~~/shared/overview'
+import { GROWTH_PERIODS, groupOf, type GrowthPeriodId, type Overview } from '~~/shared/overview'
 
 // Overview only reads what the accounts hold (set up on Accounts): net worth
 // from their balances, income and spending from their transactions, and the
@@ -95,19 +95,36 @@ const kept = computed(() => {
   if (six.length < 6 || income <= 0) return null
   return { rate: (income - spent) / income, cents: income - spent, per_month: Math.round((income - spent) / 6) }
 })
+
+// The accounts panel: each kind's total (as net worth counts it), with the
+// open accounts that make it up beneath. Closed and left-out ones count for
+// nothing, so they aren't listed.
+const today = useToday()
+const byGroup = computed(() => {
+  const open = list.value.accounts.filter(a => !a.excluded && !(a.closed_on && a.closed_on <= today) && a.balance_cents !== null)
+  return (worth.value?.groups ?? []).map(g => ({
+    ...g,
+    accounts: open.filter(a => groupOf(a.kind) === g.id).sort((a, b) => Math.abs(b.balance_cents!) - Math.abs(a.balance_cents!)),
+  }))
+})
+const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }))
 </script>
 
 <template>
   <div>
-    <AppHeader :title="greeting" />
+    <AppHeader :title="greeting" :sub="todayLabel" />
 
+    <!-- Getting started: only what's left, on one slim card. -->
     <section v-if="left" class="group" aria-labelledby="setup">
-      <h2 id="setup" class="group-title">Set up · {{ left }} left</h2>
       <div class="card">
-        <NuxtLink v-for="s in steps" :key="s.label" :to="s.to" class="row step">
-          <span class="tick" :class="{ on: s.done }" aria-hidden="true"><AppIcon v-if="s.done" name="check" /></span>
+        <div class="panel-head">
+          <h2 id="setup" class="panel-title">Set up · {{ left }} left</h2>
+          <div class="progress" aria-hidden="true"><i :style="{ width: `${((steps.length - left) / steps.length) * 100}%` }" /></div>
+        </div>
+        <NuxtLink v-for="s in steps.filter(x => !x.done)" :key="s.label" :to="s.to" class="row step">
+          <span class="tick" aria-hidden="true" />
           <span class="row-label">
-            <span class="step-label">{{ s.label }}</span><span class="visually-hidden">{{ s.done ? ', done' : '' }}</span>
+            <span class="step-label">{{ s.label }}</span>
             <span class="footnote">{{ s.hint }}</span>
           </span>
           <AppIcon name="chevron" class="chev" />
@@ -117,133 +134,154 @@ const kept = computed(() => {
 
     <p v-if="error" class="notice notice-error group" role="alert">{{ errorMessage(error) }}</p>
 
-    <!-- Three figures across the top, then the two charts. -->
-    <div class="tiles group">
-      <section class="card tile" aria-labelledby="worth-title">
-        <h2 id="worth-title" class="tile-label">Net worth</h2>
+    <div class="dash">
+      <!-- Left: every account by kind, adding up to net worth. -->
+      <section class="card side" aria-labelledby="worth-title">
+        <div class="panel-head">
+          <h2 id="worth-title" class="panel-title">Net worth</h2>
+          <NuxtLink to="/accounts" class="panel-link">Accounts</NuxtLink>
+        </div>
         <template v-if="worth && hasBalances">
-          <p class="num tile-value" :class="moneyTone(worth.total_cents)" data-test="net-worth">{{ formatCents(worth.total_cents) }}</p>
-          <p v-if="ov?.change" class="footnote">
-            <span class="num change" :class="moneyTone(ov.change.change_cents)">{{ signed(ov.change.change_cents) }}</span>
-            since {{ day(ov.change.since) }}
-          </p>
-          <p v-else class="footnote">As of {{ day(worth.as_of, true) }}</p>
-          <details class="more">
-            <summary>What it's made of</summary>
-            <div v-for="g in worth.groups" :key="g.id" class="part">
-              <span>{{ g.label }} <span class="footnote">· {{ g.count }}</span></span>
-              <span class="num" :class="moneyTone(g.total_cents)">{{ formatCents(g.total_cents) }}</span>
-            </div>
-            <p v-if="worth.missing.length" class="footnote">
-              Left out until it has a balance: {{ worth.missing.map(m => m.name).join(', ') }}. Enter it on <NuxtLink to="/accounts">Accounts</NuxtLink>.
+          <div class="worth">
+            <p class="num worth-value" :class="moneyTone(worth.total_cents)" data-test="net-worth">{{ formatCents(worth.total_cents) }}</p>
+            <p v-if="ov?.change" class="footnote">
+              <span class="num change" :class="moneyTone(ov.change.change_cents)">{{ signed(ov.change.change_cents) }}</span>
+              since {{ day(ov.change.since) }}
             </p>
-          </details>
+            <p v-else class="footnote">As of {{ day(worth.as_of, true) }}</p>
+          </div>
+          <div v-for="g in byGroup" :key="g.id" class="kind">
+            <h3 class="kind-head">
+              <span>{{ g.label }}</span>
+              <span class="num" :class="moneyTone(g.total_cents)">{{ formatCents(g.total_cents) }}</span>
+            </h3>
+            <ul class="kind-list">
+              <li v-for="a in g.accounts" :key="a.id">
+                <span class="acct">
+                  <span class="acct-name">{{ a.name }}</span>
+                  <span v-if="a.institution" class="caption">{{ a.institution }}</span>
+                </span>
+                <span class="num acct-bal">{{ formatCents(a.balance_cents!) }}</span>
+              </li>
+            </ul>
+          </div>
+          <p v-if="worth.missing.length" class="footnote side-note">
+            Left out until it has a balance: {{ worth.missing.map(m => m.name).join(', ') }}. Enter it on <NuxtLink to="/accounts">Accounts</NuxtLink>.
+          </p>
         </template>
-        <template v-else>
-          <p class="num tile-value muted">—</p>
+        <div v-else class="worth">
+          <p class="num worth-value muted">—</p>
           <p v-if="!list.accounts.length" class="footnote">Connect your accounts on <NuxtLink to="/accounts">Accounts</NuxtLink>, and their balances add up to your net worth here.</p>
           <p v-else class="footnote">None of your accounts has a balance yet. Link them to their bank, or enter what each holds, on <NuxtLink to="/accounts">Accounts</NuxtLink>.</p>
-        </template>
-      </section>
-
-      <section class="card tile" aria-labelledby="growth-title">
-        <div class="tile-head">
-          <h2 id="growth-title" class="tile-label">Investments</h2>
-          <template v-if="ov?.has_investments">
-            <label class="visually-hidden" for="growth-period">Over</label>
-            <select id="growth-period" v-model="period" class="select tile-pick">
-              <option v-for="p in GROWTH_PERIODS" :key="p.id" :value="p.id">{{ p.label }}</option>
-            </select>
-          </template>
         </div>
-        <template v-if="ov?.has_investments">
-          <template v-if="grown && grown.rate !== null">
-            <p class="num tile-value" :class="moneyTone(grown.gain_cents)" data-test="growth">{{ percent(grown.rate) }}</p>
-            <p class="footnote">
-              <span class="num change" :class="moneyTone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span> over {{ periodName }}
-            </p>
-            <p class="footnote muted wide-only">Less money you moved in or out</p>
-          </template>
-          <p v-else class="footnote">Growth shows once Cheddar has seen your investment accounts' balances on more than one day. Bring the others up to date on <NuxtLink to="/accounts">Accounts</NuxtLink> now and then.</p>
-        </template>
-        <p v-else class="footnote">Add a brokerage or retirement account on <NuxtLink to="/accounts">Accounts</NuxtLink> to see how your investments grow.</p>
       </section>
 
-      <section class="card tile" aria-labelledby="kept-title">
-        <h2 id="kept-title" class="tile-label">Savings rate</h2>
-        <template v-if="kept">
-          <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>
-          <div class="meter" aria-hidden="true"><i :style="{ width: `${Math.max(0, Math.min(100, kept.rate * 100))}%` }" /></div>
-          <p class="footnote">
-            <span class="num change" :class="moneyTone(kept.per_month)">{{ formatCents(Math.abs(kept.per_month)) }}</span>
-            a month {{ kept.per_month >= 0 ? 'kept' : 'over' }} over the last 6 months
-          </p>
-        </template>
-        <p v-else class="footnote">Shows once your accounts have six whole months of income and spending.</p>
-      </section>
-    </div>
+      <div class="content">
+        <!-- Two figures side by side. -->
+        <div class="tiles">
+          <section class="card tile" aria-labelledby="growth-title">
+            <div class="tile-head">
+              <h2 id="growth-title" class="tile-label">Investments</h2>
+              <template v-if="ov?.has_investments">
+                <label class="visually-hidden" for="growth-period">Over</label>
+                <select id="growth-period" v-model="period" class="select tile-pick">
+                  <option v-for="p in GROWTH_PERIODS" :key="p.id" :value="p.id">{{ p.label }}</option>
+                </select>
+              </template>
+            </div>
+            <template v-if="ov?.has_investments">
+              <template v-if="grown && grown.rate !== null">
+                <p class="num tile-value" :class="moneyTone(grown.gain_cents)" data-test="growth">{{ percent(grown.rate) }}</p>
+                <p class="footnote">
+                  <span class="num change" :class="moneyTone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span> over {{ periodName }}, less money moved in or out
+                </p>
+              </template>
+              <p v-else class="footnote">Growth shows once Cheddar has seen your investment accounts' balances on more than one day. Bring the others up to date on <NuxtLink to="/accounts">Accounts</NuxtLink> now and then.</p>
+            </template>
+            <p v-else class="footnote">Add a brokerage or retirement account on <NuxtLink to="/accounts">Accounts</NuxtLink> to see how your investments grow.</p>
+          </section>
 
-    <div class="charts">
-      <section class="group" aria-labelledby="flow-title">
-        <h2 id="flow-title" class="group-title">Income and spending</h2>
-        <div v-if="hasMonths && shown" class="card card-pad">
-          <div class="chart-head">
+          <section class="card tile" aria-labelledby="kept-title">
+            <div class="tile-head">
+              <h2 id="kept-title" class="tile-label">Savings rate</h2>
+              <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
+            </div>
+            <template v-if="kept">
+              <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>
+              <div class="meter" aria-hidden="true"><i :style="{ width: `${Math.max(0, Math.min(100, kept.rate * 100))}%` }" /></div>
+              <p class="footnote">
+                <span class="num change" :class="moneyTone(kept.per_month)">{{ formatCents(Math.abs(kept.per_month)) }}</span>
+                a month {{ kept.per_month >= 0 ? 'kept' : 'over' }}, last 6 months
+              </p>
+            </template>
+            <p v-else class="footnote">Shows once your accounts have six whole months of income and spending.</p>
+          </section>
+        </div>
+
+        <section class="card panel" aria-labelledby="flow-title">
+          <div class="panel-head">
+            <h2 id="flow-title" class="panel-title">Income and spending</h2>
+            <template v-if="hasMonths && shown">
+              <label class="visually-hidden" for="month-pick">Month</label>
+              <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">
+                <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
+              </select>
+            </template>
+          </div>
+          <div v-if="hasMonths && shown" class="card-pad">
             <div class="legend" aria-hidden="true">
               <span><i class="key income" /> Income</span>
               <span><i class="key spent" /> Spending</span>
             </div>
-            <label class="visually-hidden" for="month-pick">Month</label>
-            <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">
-              <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
-            </select>
-          </div>
-          <div class="chart" aria-hidden="true">
-            <div class="axis">
-              <span>{{ compact(top) }}</span>
-              <span>{{ compact(top / 2) }}</span>
-              <span>$0</span>
+            <div class="chart" aria-hidden="true">
+              <div class="axis">
+                <span>{{ compact(top) }}</span>
+                <span>{{ compact(top / 2) }}</span>
+                <span>$0</span>
+              </div>
+              <div class="plot">
+                <div class="grid"><i /><i /><i /></div>
+                <button
+                  v-for="m in months" :key="m.month" class="month" :class="{ on: shown.month === m.month }" tabindex="-1"
+                  @click="selected = m.month" @mouseenter="selected = m.month"
+                >
+                  <span class="bars">
+                    <span class="bar income" :style="{ height: height(m.income_cents) }" />
+                    <span class="bar spent" :style="{ height: height(m.spent_cents) }" />
+                  </span>
+                  <span class="tick-label">{{ m.label.slice(0, 1) }}<span class="wide">{{ m.label.slice(1) }}</span></span>
+                </button>
+              </div>
             </div>
-            <div class="plot">
-              <div class="grid"><i /><i /><i /></div>
-              <button
-                v-for="m in months" :key="m.month" class="month" :class="{ on: shown.month === m.month }" tabindex="-1"
-                @click="selected = m.month" @mouseenter="selected = m.month"
-              >
-                <span class="bars">
-                  <span class="bar income" :style="{ height: height(m.income_cents) }" />
-                  <span class="bar spent" :style="{ height: height(m.spent_cents) }" />
-                </span>
-                <span class="tick-label">{{ m.label.slice(0, 1) }}<span class="wide">{{ m.label.slice(1) }}</span></span>
-              </button>
+            <dl class="figures" aria-live="polite">
+              <div><dt>Income</dt><dd class="num" :class="moneyTone(shown.income_cents)">{{ formatCents(shown.income_cents) }}</dd></div>
+              <div><dt>Spending</dt><dd class="num" :class="spendTone(shown.spent_cents)">{{ formatCents(shown.spent_cents) }}</dd></div>
+              <div>
+                <dt>{{ shown.income_cents >= shown.spent_cents ? 'Kept' : 'Over' }}</dt>
+                <dd class="num" :class="moneyTone(shown.income_cents - shown.spent_cents)">{{ formatCents(Math.abs(shown.income_cents - shown.spent_cents)) }}</dd>
+              </div>
+            </dl>
+            <div class="visually-hidden">
+              <table>
+                <caption>Income and spending by month</caption>
+                <thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead>
+                <tbody>
+                  <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td></tr>
+                </tbody>
+              </table>
             </div>
+            <p class="caption">Moving money between your own accounts counts as neither.</p>
           </div>
-          <dl class="figures" aria-live="polite">
-            <div><dt>Income</dt><dd class="num" :class="moneyTone(shown.income_cents)">{{ formatCents(shown.income_cents) }}</dd></div>
-            <div><dt>Spending</dt><dd class="num" :class="spendTone(shown.spent_cents)">{{ formatCents(shown.spent_cents) }}</dd></div>
-            <div>
-              <dt>{{ shown.income_cents >= shown.spent_cents ? 'Kept' : 'Over' }}</dt>
-              <dd class="num" :class="moneyTone(shown.income_cents - shown.spent_cents)">{{ formatCents(Math.abs(shown.income_cents - shown.spent_cents)) }}</dd>
-            </div>
-          </dl>
-          <div class="visually-hidden">
-            <table>
-              <caption>Income and spending by month</caption>
-              <thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead>
-              <tbody>
-                <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td></tr>
-              </tbody>
-            </table>
+          <div v-else class="card-pad">
+            <p class="footnote">Each month's income and spending shows here once your accounts have transactions from the last year.</p>
           </div>
-          <p class="footnote muted">Moving money between your own accounts counts as neither.</p>
-        </div>
-        <div v-else class="card card-pad">
-          <p class="footnote">Each month's income and spending shows here once your accounts have transactions from the last year.</p>
-        </div>
-      </section>
+        </section>
 
-      <section class="group" aria-labelledby="cats-title">
-        <h2 id="cats-title" class="group-title">Spending by category{{ shown ? `, ${monthName(shown.month).split(' ')[0]}` : '' }}</h2>
-        <div class="card">
+        <section class="card panel" aria-labelledby="cats-title">
+          <div class="panel-head">
+            <h2 id="cats-title" class="panel-title">Spending by category{{ shown ? `, ${monthName(shown.month).split(' ')[0]}` : '' }}</h2>
+            <NuxtLink v-if="shown" :to="{ path: '/spending', query: { at: shown.month } }" class="panel-link">See all</NuxtLink>
+          </div>
           <div v-if="slices.length" class="card-pad pie-wrap">
             <svg class="pie" viewBox="0 0 42 42" role="img" :aria-label="`Spending by category: ${slices.map(c => `${c.label} ${formatCents(c.cents)}`).join(', ')}`">
               <circle class="pie-track" cx="21" cy="21" r="15.9155" />
@@ -267,58 +305,57 @@ const kept = computed(() => {
           <div v-else class="card-pad">
             <p class="footnote">Nothing spent{{ shown ? ` in ${monthName(shown.month)}` : '' }} yet.</p>
           </div>
-          <NuxtLink v-if="shown" :to="{ path: '/spending', query: { at: shown.month } }" class="row link-row">
-            <span class="row-label">See every category</span>
-            <AppIcon name="chevron" class="chev" />
-          </NuxtLink>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Getting started */
 .step { color: var(--text); }
 .step:hover { text-decoration: none; background: var(--surface-2); }
 .step-label { display: block; }
-.tick {
-  flex: none; display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%;
-  border: 1.5px solid var(--separator);
-}
-.tick.on { background: var(--success); border-color: var(--success); color: var(--surface); }
-.tick :deep(.icon) { width: 1rem; height: 1rem; }
+.tick { flex: none; width: 1.375rem; height: 1.375rem; border-radius: 50%; border: 1.5px solid var(--text-3); }
 .chev { color: var(--text-3); width: 1rem; height: 1rem; }
+.progress { width: 8rem; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 
 .change { font-weight: 600; }
 
-/* The figures across the top: three tiles on a wide screen, stacked on a phone. */
-.tiles { display: grid; gap: 0.75rem; grid-template-columns: 1fr 1fr; align-items: start; }
-.tiles > :first-child { grid-column: 1 / -1; }
+/* The dashboard: accounts down the left, the figures and charts beside them. */
+.dash { display: grid; gap: 1.5rem; align-items: start; }
 @media (min-width: 900px) {
-  .tiles { grid-template-columns: repeat(3, 1fr); }
-  .tiles > :first-child { grid-column: auto; }
+  .dash { grid-template-columns: minmax(17rem, 21rem) 1fr; }
+  .side { position: sticky; top: calc(var(--topbar-h) + 1.5rem); }
 }
-.tile { min-width: 0; padding: 0.875rem 1rem 1rem; display: grid; gap: 0.25rem; align-content: start; }
+.content { display: grid; gap: 1.5rem; min-width: 0; }
+
+.worth { padding: 1.125rem 1.25rem 1.25rem; }
+.worth p { margin: 0; }
+.worth-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.15; margin-bottom: 0.25rem !important; }
+.kind { border-top: var(--border); }
+.kind-head {
+  display: flex; justify-content: space-between; gap: 0.75rem; margin: 0;
+  padding: 0.75rem 1.25rem 0.25rem; font-size: 0.9375rem; font-weight: 600;
+}
+.kind-list { list-style: none; margin: 0; padding: 0 0 0.625rem; }
+.kind-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.3125rem 1.25rem; font-size: 0.875rem; }
+.acct { min-width: 0; display: flex; flex-direction: column; }
+.acct-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.acct-bal { color: var(--text-2); }
+.side-note { margin: 0; padding: 0.75rem 1.25rem 1rem; border-top: var(--border); }
+
+/* Two figures */
+.tiles { display: grid; gap: 1.5rem; grid-template-columns: 1fr 1fr; align-items: stretch; }
+.tile { min-width: 0; padding: 1rem 1.25rem 1.25rem; display: grid; gap: 0.375rem; align-content: start; }
 .tile > p { margin: 0; }
-.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 1.5rem; }
-.tile-label { margin: 0; font-size: 0.9375rem; font-weight: 500; color: var(--text-2); }
-.tile-value { font-size: clamp(1.5rem, 6vw, 1.75rem); font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
+.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 1.75rem; }
+.tile-label { margin: 0; font-size: 1rem; font-weight: 600; }
+.tile-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
 .tile-pick { width: auto; min-height: 1.75rem; padding: 0.125rem 0.5rem; font-size: 0.8125rem; }
-.meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 0.25rem 0; }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 0.125rem 0; }
 .meter i { display: block; height: 100%; border-radius: 3px; background: var(--gain); }
-
-.more { margin-top: 0.375rem; }
-.more summary { font-size: 0.875rem; color: var(--accent); cursor: pointer; }
-.more[open] summary { margin-bottom: 0.375rem; }
-.part { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.375rem 0; border-top: 0.5px solid var(--separator); font-size: 0.9375rem; }
-.more .footnote { margin: 0.375rem 0 0; }
-
-/* The two charts: side by side on a wide screen. */
-@media (min-width: 900px) {
-  .charts { display: grid; grid-template-columns: 3fr 2fr; gap: 0 1.25rem; align-items: start; }
-}
-.link-row { color: var(--text); font-size: 0.9375rem; border-top: 0.5px solid var(--separator); }
-.link-row:hover { text-decoration: none; background: var(--surface-2); }
 
 /*
  * Category slices: categorical hues in a fixed order, checked for colour
@@ -328,14 +365,14 @@ const kept = computed(() => {
 .pie-wrap {
   --slice-1: light-dark(#2a78d6, #3987e5); --slice-2: light-dark(#eb6834, #d95926); --slice-3: light-dark(#6250d6, #9085e9);
   --slice-4: light-dark(#eda100, #c98500); --slice-5: light-dark(#e87ba4, #d55181); --slice-other: var(--text-3);
-  display: flex; align-items: center; justify-content: center; gap: 1.25rem; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: center; gap: 2rem; flex-wrap: wrap;
 }
-.pie { width: 9.5rem; height: 9.5rem; flex: none; }
+.pie { width: 10rem; height: 10rem; flex: none; }
 .pie-track { fill: none; stroke: var(--surface-2); stroke-width: 6; }
 .pie-slice { fill: none; stroke-width: 6; transition: opacity 0.15s; cursor: default; }
 .pie-total { font-size: 5px; font-weight: 700; text-anchor: middle; fill: var(--text); font-variant-numeric: tabular-nums; }
 .pie-sub { font-size: 3px; text-anchor: middle; fill: var(--text-2); }
-.pie-legend { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 12rem; display: grid; gap: 0.375rem; }
+.pie-legend { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 12rem; max-width: 26rem; display: grid; gap: 0.5rem; }
 .pie-legend li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; transition: opacity 0.15s; }
 .pie-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pie-share { width: 2.75rem; text-align: right; color: var(--text-2); font-size: 0.8125rem; }
@@ -344,12 +381,11 @@ const kept = computed(() => {
 
 /* The chart's two series are money's colours, whatever the theme: income green, spending red. */
 .chart, .legend { --income: var(--gain); --spent: var(--loss); }
-.chart-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
 .legend { display: flex; gap: 1rem; font-size: 0.8125rem; color: var(--text-2); }
 .key { display: inline-block; width: 0.625rem; height: 0.625rem; border-radius: 3px; margin-right: 0.25rem; vertical-align: -0.05rem; }
 .key.income { background: var(--income); }
 .key.spent { background: var(--spent); }
-.chart { display: flex; gap: 0.5rem; height: 11rem; margin-top: 0.75rem; }
+.chart { display: flex; gap: 0.5rem; height: 12rem; margin-top: 0.75rem; }
 .axis {
   display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 1.375rem;
   font-size: 0.6875rem; color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums;
@@ -357,7 +393,7 @@ const kept = computed(() => {
 .axis span { line-height: 0; }
 .plot { position: relative; flex: 1; display: flex; min-width: 0; }
 .grid { position: absolute; inset: 0 0 1.375rem; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
-.grid i { border-top: 0.5px solid var(--separator); }
+.grid i { border-top: var(--border); }
 .grid i:last-child { border-top-color: var(--text-3); }
 .month {
   position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch;
@@ -366,19 +402,24 @@ const kept = computed(() => {
 .month.on { color: var(--text); }
 .month.on .bars { background: var(--surface-2); }
 .bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 2px; border-radius: 4px 4px 0 0; padding: 0 2px; }
-.bar { width: min(0.625rem, 40%); border-radius: 4px 4px 0 0; min-height: 0; }
+.bar { width: min(0.625rem, 40%); border-radius: 3px 3px 0 0; min-height: 0; }
 .bar.income { background: var(--income); }
 .bar.spent { background: var(--spent); }
 .tick-label { height: 1.375rem; display: flex; align-items: center; justify-content: center; font-size: 0.6875rem; }
 .month.on .tick-label { font-weight: 600; }
 .month-pick { width: auto; min-height: 2.25rem; font-size: 0.875rem; }
-.figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0.75rem 0 0.5rem; padding-top: 0.75rem; border-top: 0.5px solid var(--separator); }
+.figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 1rem 0 0.75rem; padding-top: 1rem; border-top: var(--border); }
 .figures dt { font-size: 0.8125rem; color: var(--text-2); }
-.figures dd { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.figures dd { margin: 0; font-size: 1.125rem; font-weight: 600; }
+.caption { margin: 0; }
 
 @media (max-width: 560px) {
   .wide { display: none; }
-  .wide-only { display: none; }
-  .tile-label { font-size: 0.875rem; }
+  .tiles { gap: 0.75rem; }
+  .tile { padding: 0.875rem 1rem 1rem; }
+  .tile-value { font-size: 1.5rem; }
+  .tile-head { flex-wrap: wrap; }
+  .tile-head .panel-link { display: none; }
+  .progress { width: 4.5rem; }
 }
 </style>

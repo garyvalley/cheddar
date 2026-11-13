@@ -85,165 +85,175 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
       </div>
     </section>
 
-    <section class="group" aria-labelledby="est-title">
-      <h2 id="est-title" class="group-title">Federal estimate</h2>
-      <div class="card">
-        <div class="card-pad hero">
-          <p class="num large-title" :class="moneyTone(-est.tax_cents)" data-test="federal-tax">{{ whole(est.tax_cents) }}</p>
-          <p class="footnote">
-            {{ pct(est.effective) }} of your income overall, and {{ est.marginal }}% on your next dollar, filing {{ statusLabel }}.
+    <div class="cols">
+      <div>
+        <section class="group" aria-labelledby="est-title">
+          <h2 id="est-title" class="group-title">Federal estimate</h2>
+          <div class="card">
+            <div class="card-pad hero">
+              <p class="num large-title" :class="moneyTone(-est.tax_cents)" data-test="federal-tax">{{ whole(est.tax_cents) }}</p>
+              <p class="footnote">
+                {{ pct(est.effective) }} of your income overall, and {{ est.marginal }}% on your next dollar, filing {{ statusLabel }}.
+              </p>
+            </div>
+            <label class="field">
+              <span class="field-label">Yearly income before tax</span>
+              <input
+                v-model="typed" class="input num" inputmode="decimal" :placeholder="whole(pace)"
+                :aria-invalid="typedCents === undefined" aria-describedby="income-hint" data-test="income"
+              >
+              <span id="income-hint" class="footnote">
+                <template v-if="typedCents === undefined">Enter an amount, like 85,000.</template>
+                <template v-else-if="typedCents !== null">Your own figure, for this page only. <button class="link" type="button" @click="typed = ''">Use your accounts' instead</button></template>
+                <template v-else-if="ty?.projected_income_cents">Your income so far, at the same pace through December.</template>
+                <template v-else>Your income so far. It's projected to December once Cheddar has a month of it.</template>
+              </span>
+            </label>
+            <div class="row">
+              <span class="row-label">Income</span>
+              <span class="num" :class="moneyTone(est.income_cents)">{{ whole(est.income_cents) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label">Standard deduction</span>
+              <span class="num gain">−{{ whole(est.deduction_cents) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label">Taxable income</span>
+              <span class="num">{{ whole(est.taxable_cents) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label"><strong>Federal income tax</strong></span>
+              <span class="num loss"><strong>{{ whole(est.tax_cents) }}</strong></span>
+            </div>
+          </div>
+          <p class="group-footer">
+            Deposits are take-home pay, after payroll withholding and pre-tax savings, so your income before tax is likely higher: enter it from a pay stub for a closer estimate.
+            Payroll taxes, credits and itemized deductions aren't counted.
           </p>
-        </div>
-        <label class="field">
-          <span class="field-label">Yearly income before tax</span>
-          <input
-            v-model="typed" class="input num" inputmode="decimal" :placeholder="whole(pace)"
-            :aria-invalid="typedCents === undefined" aria-describedby="income-hint" data-test="income"
-          >
-          <span id="income-hint" class="footnote">
-            <template v-if="typedCents === undefined">Enter an amount, like 85,000.</template>
-            <template v-else-if="typedCents !== null">Your own figure, for this page only. <button class="link" type="button" @click="typed = ''">Use your accounts' instead</button></template>
-            <template v-else-if="ty?.projected_income_cents">Your income so far, at the same pace through December.</template>
-            <template v-else>Your income so far. It's projected to December once Cheddar has a month of it.</template>
-          </span>
-        </label>
-        <div class="row">
-          <span class="row-label">Income</span>
-          <span class="num" :class="moneyTone(est.income_cents)">{{ whole(est.income_cents) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">Standard deduction</span>
-          <span class="num gain">−{{ whole(est.deduction_cents) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">Taxable income</span>
-          <span class="num">{{ whole(est.taxable_cents) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label"><strong>Federal income tax</strong></span>
-          <span class="num loss"><strong>{{ whole(est.tax_cents) }}</strong></span>
-        </div>
-      </div>
-      <p class="group-footer">
-        Deposits are take-home pay, after payroll withholding and pre-tax savings, so your income before tax is likely higher: enter it from a pay stub for a closer estimate.
-        Payroll taxes, credits and itemized deductions aren't counted.
-      </p>
-    </section>
+        </section>
 
-    <section class="group" aria-labelledby="brackets-title">
-      <h2 id="brackets-title" class="group-title">Your brackets</h2>
-      <div class="card">
-        <div v-for="b in bars" :key="b.rate" class="row bracket" :class="{ current: b.current }">
-          <span class="rate num">{{ b.rate }}%</span>
-          <span class="row-label">
-            <span class="track" aria-hidden="true"><span class="fill" :style="{ width: `${b.fill * 100}%` }" /></span>
-            <span class="footnote">
-              {{ b.to_cents === null ? `Over ${whole(b.from_cents)}` : `${whole(b.from_cents)} to ${whole(b.to_cents)}` }}
-              <template v-if="b.current && est.to_next_cents !== null"> · {{ whole(est.to_next_cents) }} until {{ bars[bars.indexOf(b) + 1]!.rate }}%</template>
-            </span>
-          </span>
-          <span class="num tax" :class="b.tax_cents ? 'loss' : 'muted'">{{ whole(b.tax_cents) }}</span>
-        </div>
-      </div>
-      <p class="group-footer">
-        Taxable income, filing {{ statusLabel }}. Each rate applies only to the part of your income inside its bracket.
-      </p>
-    </section>
-
-    <section v-if="state" class="group" aria-labelledby="state-title">
-      <h2 id="state-title" class="group-title">{{ state.name }} estimate</h2>
-      <div v-if="stateEst" class="card">
-        <div class="card-pad hero">
-          <p class="num large-title" :class="moneyTone(-stateEst.tax_cents)" data-test="state-tax">{{ whole(stateEst.tax_cents) }}</p>
-          <p class="footnote">
-            {{ pct(stateEst.effective) }} of your income overall, and {{ stateEst.marginal }}% on your next dollar.
+        <section class="group" aria-labelledby="brackets-title">
+          <h2 id="brackets-title" class="group-title">Your brackets</h2>
+          <div class="card">
+            <div v-for="b in bars" :key="b.rate" class="row bracket" :class="{ current: b.current }">
+              <span class="rate num">{{ b.rate }}%</span>
+              <span class="row-label">
+                <span class="track" aria-hidden="true"><span class="fill" :style="{ width: `${b.fill * 100}%` }" /></span>
+                <span class="footnote">
+                  {{ b.to_cents === null ? `Over ${whole(b.from_cents)}` : `${whole(b.from_cents)} to ${whole(b.to_cents)}` }}
+                  <template v-if="b.current && est.to_next_cents !== null"> · {{ whole(est.to_next_cents) }} until {{ bars[bars.indexOf(b) + 1]!.rate }}%</template>
+                </span>
+              </span>
+              <span class="num tax" :class="b.tax_cents ? 'loss' : 'muted'">{{ whole(b.tax_cents) }}</span>
+            </div>
+          </div>
+          <p class="group-footer">
+            Taxable income, filing {{ statusLabel }}. Each rate applies only to the part of your income inside its bracket.
           </p>
-        </div>
-        <div class="row">
-          <span class="row-label">Income</span>
-          <span class="num" :class="moneyTone(stateEst.income_cents)">{{ whole(stateEst.income_cents) }}</span>
-        </div>
-        <div v-if="stateEst.deduction_cents" class="row">
-          <span class="row-label">Deductions and exemptions</span>
-          <span class="num gain">−{{ whole(stateEst.deduction_cents) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">Taxable income</span>
-          <span class="num">{{ whole(stateEst.taxable_cents) }}</span>
-        </div>
-        <div v-if="stateEst.credit_cents" class="row">
-          <span class="row-label">Personal credits</span>
-          <span class="num gain">−{{ whole(stateEst.credit_cents) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label"><strong>{{ state.name }} income tax</strong></span>
-          <span class="num loss"><strong>{{ whole(stateEst.tax_cents) }}</strong></span>
-        </div>
-        <div class="row">
-          <span class="row-label"><strong>Federal and state together</strong></span>
-          <span class="num loss" data-test="total-tax"><strong>{{ whole(est.tax_cents + stateEst.tax_cents) }}</strong></span>
-        </div>
+        </section>
       </div>
-      <div v-else class="card card-pad">
-        <p class="footnote">{{ state.name }} has no state income tax on wages, so federal is the whole bill.</p>
-      </div>
-      <p v-if="stateEst" class="group-footer">
-        From {{ state.name }}'s {{ TAX_YEAR }} brackets, standard deduction and personal exemption{{ status === 'head_of_household' || status === 'married_separate' ? ', on the single schedule' : '' }}.
-        Local income taxes, phase-outs at high incomes, dependents and credits aren't counted.
-      </p>
-    </section>
+      <div>
+        <section v-if="state" class="group" aria-labelledby="state-title">
+          <h2 id="state-title" class="group-title">{{ state.name }} estimate</h2>
+          <div v-if="stateEst" class="card">
+            <div class="card-pad hero">
+              <p class="num large-title" :class="moneyTone(-stateEst.tax_cents)" data-test="state-tax">{{ whole(stateEst.tax_cents) }}</p>
+              <p class="footnote">
+                {{ pct(stateEst.effective) }} of your income overall, and {{ stateEst.marginal }}% on your next dollar.
+              </p>
+            </div>
+            <div class="row">
+              <span class="row-label">Income</span>
+              <span class="num" :class="moneyTone(stateEst.income_cents)">{{ whole(stateEst.income_cents) }}</span>
+            </div>
+            <div v-if="stateEst.deduction_cents" class="row">
+              <span class="row-label">Deductions and exemptions</span>
+              <span class="num gain">−{{ whole(stateEst.deduction_cents) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label">Taxable income</span>
+              <span class="num">{{ whole(stateEst.taxable_cents) }}</span>
+            </div>
+            <div v-if="stateEst.credit_cents" class="row">
+              <span class="row-label">Personal credits</span>
+              <span class="num gain">−{{ whole(stateEst.credit_cents) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label"><strong>{{ state.name }} income tax</strong></span>
+              <span class="num loss"><strong>{{ whole(stateEst.tax_cents) }}</strong></span>
+            </div>
+            <div class="row">
+              <span class="row-label"><strong>Federal and state together</strong></span>
+              <span class="num loss" data-test="total-tax"><strong>{{ whole(est.tax_cents + stateEst.tax_cents) }}</strong></span>
+            </div>
+          </div>
+          <div v-else class="card card-pad">
+            <p class="footnote">{{ state.name }} has no state income tax on wages, so federal is the whole bill.</p>
+          </div>
+          <p v-if="stateEst" class="group-footer">
+            From {{ state.name }}'s {{ TAX_YEAR }} brackets, standard deduction and personal exemption{{ status === 'head_of_household' || status === 'married_separate' ? ', on the single schedule' : '' }}.
+            Local income taxes, phase-outs at high incomes, dependents and credits aren't counted.
+          </p>
+        </section>
 
-    <section class="group" aria-labelledby="room-title">
-      <h2 id="room-title" class="group-title">Tax-advantaged savings in {{ TAX_YEAR }}</h2>
-      <div class="card">
-        <div class="row">
-          <span class="row-label">
-            <span class="block">401(k), 403(b) or 457</span>
-            <span class="footnote">{{ whole(LIMITS.k401_catch_up * 100) }} more at 50 and over; {{ whole(LIMITS.k401_catch_up_60_63 * 100) }} at 60 to 63</span>
-          </span>
-          <span class="num">{{ whole(LIMITS.k401 * 100) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">
-            <span class="block">IRA, traditional or Roth</span>
-            <span class="footnote">
-              {{ whole(LIMITS.ira_catch_up * 100) }} more at 50 and over<template v-if="ty?.retirement_in_cents">; {{ whole(iraLeft) }} left if what you moved in was IRA money</template>
-            </span>
-          </span>
-          <span class="num">{{ whole(LIMITS.ira * 100) }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">
-            <span class="block">HSA</span>
-            <span class="footnote">With a high-deductible health plan; {{ whole(LIMITS.hsa_family * 100) }} for family coverage</span>
-          </span>
-          <span class="num">{{ whole(LIMITS.hsa_self * 100) }}</span>
-        </div>
-      </div>
-      <p class="group-footer">
-        401(k) contributions come out of your pay before it reaches the bank, so they don't show in your accounts. IRA money for {{ TAX_YEAR }} can go in until April 15, {{ TAX_YEAR + 1 }}.
-      </p>
-    </section>
+        <section class="group" aria-labelledby="room-title">
+          <h2 id="room-title" class="group-title">Tax-advantaged savings in {{ TAX_YEAR }}</h2>
+          <div class="card">
+            <div class="row">
+              <span class="row-label">
+                <span class="block">401(k), 403(b) or 457</span>
+                <span class="footnote">{{ whole(LIMITS.k401_catch_up * 100) }} more at 50 and over; {{ whole(LIMITS.k401_catch_up_60_63 * 100) }} at 60 to 63</span>
+              </span>
+              <span class="num">{{ whole(LIMITS.k401 * 100) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label">
+                <span class="block">IRA, traditional or Roth</span>
+                <span class="footnote">
+                  {{ whole(LIMITS.ira_catch_up * 100) }} more at 50 and over<template v-if="ty?.retirement_in_cents">; {{ whole(iraLeft) }} left if what you moved in was IRA money</template>
+                </span>
+              </span>
+              <span class="num">{{ whole(LIMITS.ira * 100) }}</span>
+            </div>
+            <div class="row">
+              <span class="row-label">
+                <span class="block">HSA</span>
+                <span class="footnote">With a high-deductible health plan; {{ whole(LIMITS.hsa_family * 100) }} for family coverage</span>
+              </span>
+              <span class="num">{{ whole(LIMITS.hsa_self * 100) }}</span>
+            </div>
+          </div>
+          <p class="group-footer">
+            401(k) contributions come out of your pay before it reaches the bank, so they don't show in your accounts. IRA money for {{ TAX_YEAR }} can go in until April 15, {{ TAX_YEAR + 1 }}.
+          </p>
+        </section>
 
-    <section v-if="shownIdeas.length" class="group" aria-labelledby="ideas-title">
-      <h2 id="ideas-title" class="group-title">Ideas</h2>
-      <div class="card">
-        <div v-for="i in shownIdeas" :key="i.id" class="card-pad idea" :data-test="`idea-${i.id}`">
-          <p class="headline">{{ i.title }}</p>
-          <p class="footnote">{{ i.body }}</p>
-        </div>
+        <section v-if="shownIdeas.length" class="group" aria-labelledby="ideas-title">
+          <h2 id="ideas-title" class="group-title">Ideas</h2>
+          <div class="card">
+            <div v-for="i in shownIdeas" :key="i.id" class="card-pad idea" :data-test="`idea-${i.id}`">
+              <p class="headline">{{ i.title }}</p>
+              <p class="footnote">{{ i.body }}</p>
+            </div>
+          </div>
+          <p class="group-footer">
+            General ideas from your own figures, not tax advice.
+          </p>
+        </section>
       </div>
-      <p class="group-footer">
-        General ideas from your own figures, not tax advice.
-      </p>
-    </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.hero { border-bottom: 0.5px solid var(--separator); }
+/* Two columns side by side on a wide screen, one after the other on a phone. */
+@media (min-width: 900px) {
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5rem; align-items: start; }
+}
+
+.hero { border-bottom: var(--border); }
 .hero .large-title { margin: 0 0 0.25rem; }
-.field { border-bottom: 0.5px solid var(--separator); }
+.field { border-bottom: var(--border); }
 .field .input { max-width: 14rem; margin-bottom: 0.25rem; }
 .field .footnote { display: block; }
 .link { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
@@ -255,7 +265,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.ira * 100 - (ty.value?.retirem
 .track { display: block; height: 0.5rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-bottom: 0.375rem; }
 .fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 
-.idea + .idea { border-top: 0.5px solid var(--separator); }
+.idea + .idea { border-top: var(--border); }
 .idea .headline { margin: 0 0 0.25rem; }
 .idea .footnote { margin: 0; }
 </style>

@@ -163,17 +163,17 @@ function when(pb: string) {
     <h2 id="links-title" class="group-title">Linked banks and cards</h2>
 
     <!-- Off until the server has its keys: say so plainly, and how it's switched on. -->
-    <div v-if="!data.enabled" class="card card-pad stack off">
+    <div v-if="!data.enabled" class="card card-pad off">
       <p class="headline">Bank linking is off on this server</p>
-      <p class="subhead">
-        Linking lets you sign in to your bank so balances and transactions arrive on their own.
-        It needs this server's Plaid keys and bank-link key, which haven't been set yet.
-      </p>
-      <p class="footnote">
-        Whoever runs this Cheddar sets <code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code> and <code>BANK_LINK_KEY</code>
-        and deploys again (k8s/README.md, “First deploy”, step 6).
-        Until then, add accounts below and import the files your bank lets you download.
-      </p>
+      <p class="footnote">Until it's on, add accounts yourself and import the statements your bank lets you download.</p>
+      <details class="how">
+        <summary>How to turn it on</summary>
+        <p class="footnote">
+          Linking lets you sign in to your bank so balances and transactions arrive on their own.
+          Whoever runs this Cheddar sets <code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code> and <code>BANK_LINK_KEY</code>
+          and deploys again (k8s/README.md, “First deploy”, step 6).
+        </p>
+      </details>
     </div>
 
     <template v-else>
@@ -249,9 +249,14 @@ function when(pb: string) {
 </template>
 
 <style scoped>
+.off > p { margin: 0; }
+.off .footnote { margin-top: 0.25rem; }
+.how { margin-top: 0.5rem; }
+.how summary { font-size: 0.875rem; color: var(--accent); cursor: pointer; }
+
 .link { margin-bottom: 0.75rem; }
 .actions { display: flex; margin-right: -0.5rem; }
-.editing { border-top: 0.5px solid var(--separator); }
+.editing { border-top: var(--border); }
 .badge { margin-left: 0.375rem; }
 .warn { color: var(--warning); }
 .off code { font-size: 0.75rem; }

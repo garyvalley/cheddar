@@ -4,25 +4,26 @@ import { DESCRIPTION_MAX, NOTE_MAX, checkManual, type Direction } from '~~/share
 
 // Adding a transaction by hand on Spending: a cash purchase, or one a
 // statement missed. Only into an account no bank link keeps, since a link
-// brings its own and one typed in too would count twice.
+// brings its own and one typed in too would count twice. The page's own
+// "Add a transaction" button opens it (v-model:open).
 
 const props = defineProps<{ accounts: Account[], account: string }>()
 const emit = defineEmits<{ added: [message: string] }>()
+const adding = defineModel<boolean>('open', { default: false })
 
 const unlinked = computed(() => props.accounts.filter(a => !a.linked))
 const today = useToday()
-const adding = ref(false)
 const add = useAction()
 const blank = () => ({
   account: unlinked.value.some(a => a.id === props.account) ? props.account : unlinked.value[0]?.id ?? '',
   posted: today, amount: '', direction: 'out' as Direction, description: '', note: '',
 })
 const form = reactive(blank())
-function start() {
+watch(adding, (open) => {
+  if (!open) return
   Object.assign(form, blank())
   add.error.value = ''
-  adding.value = true
-}
+}, { immediate: true })
 
 async function save() {
   const checked = checkManual(form)
@@ -38,8 +39,11 @@ async function save() {
 </script>
 
 <template>
-  <section class="group" aria-label="Add a transaction">
-    <form v-if="adding" class="card" @submit.prevent="save">
+  <section v-if="adding" class="group" aria-labelledby="add-title">
+    <form class="card" @submit.prevent="save">
+      <div class="panel-head">
+        <h2 id="add-title" class="panel-title">Add a transaction</h2>
+      </div>
       <label class="field">
         <span class="field-label">Account</span>
         <select v-model="form.account" class="select" required>
@@ -48,7 +52,7 @@ async function save() {
       </label>
       <label class="field">
         <span class="field-label">What it was</span>
-        <input v-model="form.description" class="input" :maxlength="DESCRIPTION_MAX" placeholder="Farmers market" required>
+        <input v-model="form.description" v-focus class="input" :maxlength="DESCRIPTION_MAX" placeholder="Farmers market" required>
       </label>
       <div class="field pair">
         <label>
@@ -76,18 +80,11 @@ async function save() {
         <button type="button" class="btn btn-plain" @click="adding = false">Cancel</button>
       </div>
     </form>
-    <div v-else-if="unlinked.length" class="card">
-      <button class="row add-row" @click="start">Add a transaction by hand…</button>
-    </div>
-    <p class="group-footer">
-      <template v-if="unlinked.length">For cash, or something a statement missed. Cheddar sorts it into a category like any other.</template>
-      <template v-else>Your banks bring every account's transactions in. To add one by hand, add an account that isn't linked on Accounts.</template>
-    </p>
+    <p class="group-footer">For cash, or something a statement missed. Cheddar sorts it into a category like any other.</p>
   </section>
 </template>
 
 <style scoped>
-.add-row { width: 100%; border: 0; background: none; font: inherit; color: var(--accent); text-align: left; cursor: pointer; }
 .pair { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 .pair > label { flex: 1 1 9rem; min-width: 0; }
 .note-input { resize: vertical; min-height: 2.75rem; }

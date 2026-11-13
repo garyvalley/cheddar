@@ -104,6 +104,9 @@ const found = computed(() => {
 
 // Something changed (moved, edited, added, deleted): the totals follow, then it's said.
 const notice = ref('')
+// Adding by hand only goes into an account no bank link keeps.
+const canAdd = computed(() => list.value.accounts.some(a => !a.linked))
+const adding = ref(false)
 async function changed(message: string) {
   notice.value = ''
   await Promise.all([refreshSummary(), refreshTxs()])
@@ -145,7 +148,9 @@ async function confirmDelete() {
 
 <template>
   <div>
-    <AppHeader title="Spending" />
+    <AppHeader title="Spending">
+      <button v-if="canAdd && !adding" class="btn btn-tinted" @click="adding = true">Add a transaction</button>
+    </AppHeader>
 
     <section v-if="!list.accounts.length" class="group">
       <div class="card card-pad stack">
@@ -156,48 +161,40 @@ async function confirmDelete() {
     </section>
 
     <template v-else>
-      <section class="group" aria-label="Which spending">
-        <div class="card">
-          <div v-if="!searching" class="row period">
-            <div class="segmented" role="group" aria-label="Period">
-              <button class="seg" :aria-pressed="kind === 'month'" @click="go({ period: undefined, at: undefined })">Month</button>
-              <button class="seg" :aria-pressed="kind === 'year'" @click="go({ period: 'year', at: undefined })">Year</button>
-            </div>
-            <div class="stepper">
-              <button class="btn btn-plain" :aria-label="`Before ${period.label}`" @click="go({ at: period.prev })"><AppIcon name="chevron" class="back" /></button>
-              <span class="headline num when" aria-live="polite">{{ period.label }}</span>
-              <button class="btn btn-plain" :aria-label="`After ${period.label}`" @click="go({ at: period.next })"><AppIcon name="chevron" /></button>
-            </div>
+      <!-- One toolbar: when, which account, and a search. -->
+      <section class="group toolbar" aria-label="Which spending">
+        <div v-if="!searching" class="bar-row">
+          <div class="segmented" role="group" aria-label="Period">
+            <button class="seg" :aria-pressed="kind === 'month'" @click="go({ period: undefined, at: undefined })">Month</button>
+            <button class="seg" :aria-pressed="kind === 'year'" @click="go({ period: 'year', at: undefined })">Year</button>
           </div>
-          <label class="field">
-            <span class="field-label">Account</span>
+          <div class="stepper">
+            <button class="btn btn-plain" :aria-label="`Before ${period.label}`" @click="go({ at: period.prev })"><AppIcon name="chevron" class="back" /></button>
+            <span class="headline num when" aria-live="polite">{{ period.label }}</span>
+            <button class="btn btn-plain" :aria-label="`After ${period.label}`" @click="go({ at: period.next })"><AppIcon name="chevron" /></button>
+          </div>
+          <label class="pick">
+            <span class="visually-hidden">Account</span>
             <select class="select" :value="account" @change="go({ account: ($event.target as HTMLSelectElement).value || undefined })">
               <option value="">All accounts</option>
               <option v-for="a in list.accounts" :key="a.id" :value="a.id">{{ a.name }}{{ a.excluded ? ' (not counted)' : a.closed_on ? ' (closed)' : '' }}</option>
             </select>
           </label>
-          <form class="search" role="search" @submit.prevent="find">
-            <div class="search-row">
-              <label class="visually-hidden" for="search-q">Search transactions</label>
-              <input id="search-q" v-model="search.q" class="input" type="search" maxlength="100" placeholder="Search transactions" enterkeyhint="search">
-              <button class="btn btn-tinted">Search</button>
-            </div>
-            <div v-if="sizing" class="search-row sizes">
-              <label class="size"><span class="field-label">Amount from</span><input v-model="search.min" class="input num" inputmode="decimal" placeholder="$0"></label>
-              <label class="size"><span class="field-label">to</span><input v-model="search.max" class="input num" inputmode="decimal" placeholder="any"></label>
-            </div>
-            <p class="footnote search-help">
-              Finds words in what a transaction says, its name or its note, on any date<template v-if="!sizing">. <button type="button" class="link" @click="sizing = true">Search by amount too</button></template><template v-else>, money in or out by its size.</template>
-            </p>
-          </form>
-          <div class="row">
-            <span class="row-label footnote">Download {{ csvWhat }} as a spreadsheet.</span>
-            <a class="btn btn-tinted" :href="csvHref" download>Download CSV</a>
-          </div>
         </div>
+        <form class="bar-row search" role="search" @submit.prevent="find">
+          <label class="visually-hidden" for="search-q">Search transactions</label>
+          <input id="search-q" v-model="search.q" class="input" type="search" maxlength="100" placeholder="Search transactions" enterkeyhint="search">
+          <template v-if="sizing">
+            <label class="size"><span class="visually-hidden">Amount from</span><input v-model="search.min" class="input num" inputmode="decimal" placeholder="From $0"></label>
+            <label class="size"><span class="visually-hidden">to</span><input v-model="search.max" class="input num" inputmode="decimal" placeholder="To any"></label>
+          </template>
+          <button class="btn btn-tinted">Search</button>
+          <button v-if="!sizing" type="button" class="link" @click="sizing = true">By amount</button>
+          <a class="link csv" :href="csvHref" :title="`Download ${csvWhat} as a spreadsheet`" download>Download CSV</a>
+        </form>
       </section>
 
-      <SpendingAddTransaction :accounts="list.accounts" :account="account" @added="changed" />
+      <SpendingAddTransaction v-model:open="adding" :accounts="list.accounts" :account="account" @added="changed" />
       <p v-if="notice" class="notice notice-success group" role="status">{{ notice }}</p>
 
       <p v-if="summaryError" class="notice notice-error group" role="alert">{{ errorMessage(summaryError) }}</p>
@@ -275,77 +272,98 @@ async function confirmDelete() {
         </section>
       </template>
 
-      <!-- Every category for the period. -->
-      <template v-else>
-        <section class="group" aria-labelledby="spent-title">
-          <div class="card card-pad tight">
-            <h2 id="spent-title" class="footnote">Spent in {{ period.label }}</h2>
-            <p class="num large-title" :class="spendTone(summary.spent_cents)">{{ formatCents(summary.spent_cents) }}</p>
-            <p v-if="comparison" class="footnote">{{ comparison }}</p>
-          </div>
-        </section>
+      <!-- Every category for the period: spending on the left, the rest beside it. -->
+      <div v-else class="cols">
+        <div>
+          <section class="group" aria-labelledby="cats-title">
+            <div class="card">
+              <div class="spent">
+                <p class="footnote">Spent in {{ period.label }}</p>
+                <p class="num spent-value" :class="spendTone(summary.spent_cents)">{{ formatCents(summary.spent_cents) }}</p>
+                <p v-if="comparison" class="footnote">{{ comparison }}</p>
+              </div>
+              <div class="panel-head top-line">
+                <h2 id="cats-title" class="panel-title">Categories</h2>
+              </div>
+              <div v-if="!spending.length" class="card-pad stack">
+                <p class="muted">No spending in {{ period.label }}. Transactions arrive when a linked bank syncs, or when you import a statement on Accounts.</p>
+                <NuxtLink to="/accounts" class="btn btn-tinted">Go to Accounts</NuxtLink>
+              </div>
+              <ul v-else class="list">
+                <li v-for="c in spending" :key="c.id">
+                  <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
+                    <span class="row-label">
+                      <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="spendTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
+                      <span class="bar" aria-hidden="true"><span class="bar-fill" :style="{ width: share(c.total_cents) }" /></span>
+                      <span class="caption">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
+                    </span>
+                    <AppIcon name="chevron" class="chev" />
+                  </NuxtLink>
+                </li>
+              </ul>
+            </div>
+            <p class="group-footer">Something in the wrong place? Open it and pick another category; that merchant's other transactions follow.</p>
+          </section>
+        </div>
 
-        <section class="group" aria-labelledby="cats-title">
-          <h2 id="cats-title" class="group-title">Categories</h2>
-          <div v-if="!spending.length" class="card card-pad stack">
-            <p class="muted">No spending in {{ period.label }}. Transactions arrive when a linked bank syncs, or when you import a statement on Accounts.</p>
-            <NuxtLink to="/accounts" class="btn btn-tinted">Go to Accounts</NuxtLink>
-          </div>
-          <ul v-else class="card list">
-            <li v-for="c in spending" :key="c.id">
-              <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
+        <div>
+          <section v-if="count" class="group" aria-label="Every transaction">
+            <div class="card">
+              <NuxtLink :to="{ query: { ...route.query, category: 'all', page: undefined } }" class="row cat">
                 <span class="row-label">
-                  <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="spendTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
-                  <span class="bar" aria-hidden="true"><span class="bar-fill" :style="{ width: share(c.total_cents) }" /></span>
-                  <span class="footnote">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
+                  <span class="block">All transactions</span>
+                  <span class="footnote">{{ count.toLocaleString() }} in {{ period.label }}</span>
                 </span>
                 <AppIcon name="chevron" class="chev" />
               </NuxtLink>
-            </li>
-          </ul>
-        </section>
+            </div>
+          </section>
 
-        <section v-if="count" class="group" aria-label="Every transaction">
-          <div class="card">
-            <NuxtLink :to="{ query: { ...route.query, category: 'all', page: undefined } }" class="row cat">
-              <span class="row-label">
-                <span class="block">All transactions</span>
-                <span class="footnote">{{ count.toLocaleString() }} in {{ period.label }}</span>
-              </span>
-              <AppIcon name="chevron" class="chev" />
-            </NuxtLink>
-          </div>
-          <p class="group-footer">Something in the wrong place? Open it and pick another category, or make one of your own. Cheddar remembers, and that merchant's other transactions follow.</p>
-        </section>
+          <section v-if="notSpending.length" class="group" aria-labelledby="other-title">
+            <h2 id="other-title" class="group-title">Income and transfers</h2>
+            <ul class="card list">
+              <li v-for="c in notSpending" :key="c.id">
+                <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
+                  <span class="row-label">
+                    <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="moneyTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
+                    <span class="caption">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
+                  </span>
+                  <AppIcon name="chevron" class="chev" />
+                </NuxtLink>
+              </li>
+            </ul>
+            <p class="group-footer">Neither counts as spending, nor does paying off a card: its purchases already count.</p>
+          </section>
 
-        <SpendingRecurring :account="account" :names="names" />
-
-        <section v-if="notSpending.length" class="group" aria-labelledby="other-title">
-          <h2 id="other-title" class="group-title">Income and transfers</h2>
-          <ul class="card list">
-            <li v-for="c in notSpending" :key="c.id">
-              <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
-                <span class="row-label">
-                  <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="moneyTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
-                  <span class="footnote">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
-                </span>
-                <AppIcon name="chevron" class="chev" />
-              </NuxtLink>
-            </li>
-          </ul>
-          <p class="group-footer">Neither counts as spending. A payment to your card isn't either: the purchases on the card already count.</p>
-        </section>
-      </template>
+          <SpendingRecurring :account="account" :names="names" />
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 .list { list-style: none; margin: 0; padding: 0; }
-.list > li + li { border-top: 0.5px solid var(--separator); }
+.list > li + li { border-top: var(--border); }
 .pager { justify-content: space-between; align-items: center; margin-top: 0.5rem; }
 
-.period { justify-content: space-between; flex-wrap: wrap; }
+.toolbar { display: grid; gap: 0.75rem; }
+.bar-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.pick { margin-left: auto; }
+.pick .select { width: auto; min-width: 12rem; max-width: 100%; background: var(--surface); border-color: var(--separator); }
+.search .input { flex: 1 1 14rem; width: auto; min-width: 0; background: var(--surface); border-color: var(--separator); }
+.search .size { flex: 0 1 8rem; min-width: 0; }
+.search .size .input { width: 100%; }
+.csv { margin-left: auto; }
+.search .link { display: inline-flex; align-items: center; min-height: 2.75rem; font-size: 0.9375rem; }
+
+@media (min-width: 900px) {
+  .cols { display: grid; grid-template-columns: 3fr 2fr; gap: 1.5rem; align-items: start; }
+}
+.spent { padding: 1.125rem 1.25rem 1.25rem; }
+.spent p { margin: 0; }
+.spent-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+.top-line { border-top: var(--border); }
 .stepper { display: inline-flex; align-items: center; gap: 0.25rem; }
 .when { min-width: 9.5rem; text-align: center; }
 .back { transform: rotate(180deg); }
@@ -364,13 +382,6 @@ async function confirmDelete() {
 
 .inline-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
 .inline-form .input { flex: 1 1 12rem; width: auto; }
-.search { padding: 0.75rem 1rem 0.5rem; border-top: 0.5px solid var(--separator); }
-.search-row { display: flex; gap: 0.5rem; align-items: flex-end; }
-.search-row .input { flex: 1 1 auto; width: auto; min-width: 0; }
-.sizes { margin-top: 0.5rem; }
-.size { flex: 1 1 0; min-width: 0; }
-.size .input { width: 100%; }
-.search-help { margin: 0.375rem 0 0; }
 .link { padding: 0; border: 0; background: none; font: inherit; color: var(--accent); cursor: pointer; }
 .clear { margin-left: -0.75rem; }
 .grow { flex: 1 1 12rem; }

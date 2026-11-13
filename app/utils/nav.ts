@@ -1,4 +1,4 @@
-/** The app's sections, in the order the sidebar and the tab bar show them. */
+/** The app's sections, in the order the top bar and the phone's tab bar show them. */
 export const NAV = [
   { to: '/', label: 'Overview', icon: 'overview' },
   { to: '/accounts', label: 'Accounts', icon: 'accounts' },
