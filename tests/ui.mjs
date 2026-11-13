@@ -241,7 +241,7 @@ try {
   watch(p)
   await p.goto(`${APP}/`)
   await p.getByRole('link', { name: 'Spending' }).last().click()
-  await p.getByRole('heading', { name: 'Spending' }).waitFor()
+  await p.getByRole('heading', { name: 'Spending', exact: true }).waitFor()
   await p.getByRole('link', { name: 'Settings' }).click()
   await p.getByRole('heading', { name: 'Settings' }).waitFor()
 
