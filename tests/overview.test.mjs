@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseBalance } from '../shared/accounts.ts'
-import { balancesOn, growth, growthStart, lastMonths, monthly, netWorth, netWorthChange } from '../shared/overview.ts'
+import { asHeld, balancesOn, growth, growthStart, lastMonths, monthly, netWorth, netWorthChange } from '../shared/overview.ts'
 
 const acct = (id, kind, balance_cents, balance_date = '2026-11-09') => ({ id, name: id, kind, balance_cents, balance_date })
 
@@ -125,5 +125,37 @@ describe('parseBalance', () => {
 
   test('refuses what is not an amount', () => {
     for (const bad of ['', 'abc', '1.234', '12,34', '--5', '$', '1e5', null]) assert.ok('problem' in parseBalance(bad, 'checking'), String(bad))
+  })
+})
+
+describe('closed accounts', () => {
+  const history = [
+    { account: 'brk', date: '2026-01-01', balance_cents: 500_000 },
+    { account: 'brk', date: '2026-10-01', balance_cents: 600_000 },
+    { account: 'brk', date: '2026-11-05', balance_cents: 7 }, // a link that synced after it closed
+    { account: 'chk', date: '2026-01-01', balance_cents: 100_000 },
+  ]
+  const accounts = [
+    { ...acct('brk', 'brokerage', 7), closed_on: '2026-10-15' },
+    { ...acct('chk', 'checking', 700_000), closed_on: '' },
+  ]
+
+  test('leave net worth from the day they closed', () => {
+    const held = asHeld(accounts, history)
+    assert.deepEqual(held.open.map(a => a.id), ['chk'])
+    assert.equal(netWorth(held.open).total_cents, 700_000)
+    assert.equal(balancesOn(held.history, '2026-10-14').get('brk'), 600_000)
+    assert.equal(balancesOn(held.history, '2026-11-09').get('brk'), 0)
+    // Moving the money out to checking isn't a change in net worth.
+    assert.equal(netWorthChange(held.accounts, held.history, '2026-10-09').change_cents, 0 - 600_000 + 700_000 - 100_000)
+  })
+
+  test('grew only while they were open', () => {
+    const held = asHeld(accounts, history)
+    const moved = [{ account: 'brk', posted: '2026-10-15', amount_cents: -600_000 }]
+    const year = growth(held.accounts, held.history, moved, '1y', '2026-11-09')
+    assert.deepEqual([year.start_cents, year.end_cents, year.added_cents, year.gain_cents], [500_000, 0, -600_000, 100_000])
+    assert.equal(growth(held.accounts, held.history, moved, '1m', '2026-11-09').gain_cents, 0)
+    assert.deepEqual([growth(held.accounts, held.history, moved, '1m', '2026-12-20')].map(g => [g.since, g.rate]), [['', null]])
   })
 })

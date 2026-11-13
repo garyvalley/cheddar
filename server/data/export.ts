@@ -17,7 +17,7 @@ export async function exportData(s: Session, password: string, now = new Date())
   const [user, accounts, transactions, imports, history, categories, links] = await Promise.all([
     s.collection('users').getOne(callerId(s)),
     listAccounts(s),
-    allTransactions(s, {}),
+    allTransactions(s, { uncounted: true }),
     listImports(s),
     s.collection('balance_history').getFullList({ fields: 'account,date,balance_cents', sort: 'date' }) as Promise<unknown> as Promise<BalancePoint[]>,
     listCategories(s),

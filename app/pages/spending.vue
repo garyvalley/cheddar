@@ -161,7 +161,7 @@ const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(unde
             <span class="field-label">Account</span>
             <select class="select" :value="account" @change="go({ account: ($event.target as HTMLSelectElement).value || undefined })">
               <option value="">All accounts</option>
-              <option v-for="a in list.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+              <option v-for="a in list.accounts" :key="a.id" :value="a.id">{{ a.name }}{{ a.excluded ? ' (not counted)' : a.closed_on ? ' (closed)' : '' }}</option>
             </select>
           </label>
           <div class="row">

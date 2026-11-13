@@ -72,8 +72,8 @@ export function transactionsCsv(rows: Transaction[], accounts: Pick<Account, 'id
 
 export function accountsCsv(accounts: Account[]): string {
   return toCsv(
-    ['Name', 'Kind', 'Institution', 'Last 4', 'Balance', 'Balance date', 'Linked'],
-    accounts.map(a => [a.name, kindLabel(a.kind), a.institution, a.last4, a.balance_cents === null ? '' : dollars(a.balance_cents), a.balance_date, a.linked]),
+    ['Name', 'Kind', 'Institution', 'Last 4', 'Balance', 'Balance date', 'Linked', 'Closed on', 'Counted'],
+    accounts.map(a => [a.name, kindLabel(a.kind), a.institution, a.last4, a.balance_cents === null ? '' : dollars(a.balance_cents), a.balance_date, a.linked, a.closed_on, !a.excluded]),
   )
 }
 

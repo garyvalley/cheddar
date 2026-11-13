@@ -8,6 +8,10 @@ export interface LinkedAccount {
   /** Signed: what a card or loan owes is negative. Null until the bank gives one. */
   balance_cents: number | null
   balance_date: string
+  /** As Account's: the day it closed, or ''. */
+  closed_on: string
+  /** As Account's: left out of every page's numbers, though it keeps syncing. */
+  excluded: boolean
 }
 
 /** One linked bank: the accounts one sign-in to that bank reaches, through Plaid. */

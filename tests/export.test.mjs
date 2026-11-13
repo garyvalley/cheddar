@@ -14,8 +14,8 @@ import { unzip } from './unzip.mjs'
 
 const BOM = '\uFEFF'
 const accounts = [
-  { id: 'a1', name: 'Everyday', kind: 'checking', institution: 'Big Bank', last4: '1234', currency: 'USD', source: 'manual', balance_cents: 123456, balance_date: '2026-11-01', linked: false },
-  { id: 'a2', name: 'Visa', kind: 'credit_card', institution: '', last4: '', currency: 'USD', source: 'sync', balance_cents: null, balance_date: '', linked: true },
+  { id: 'a1', name: 'Everyday', kind: 'checking', institution: 'Big Bank', last4: '1234', currency: 'USD', source: 'manual', balance_cents: 123456, balance_date: '2026-11-01', linked: false, closed_on: '', excluded: false },
+  { id: 'a2', name: 'Visa', kind: 'credit_card', institution: '', last4: '', currency: 'USD', source: 'sync', balance_cents: null, balance_date: '', linked: true, closed_on: '2026-10-31', excluded: true },
 ]
 const tx = (over) => ({ id: 't', account: 'a1', posted: '2026-11-02', amount_cents: -450, description: 'COFFEE', payee: '', category: 'dining', category_by: 'match', pending: false, source: 'import', import: '', ...over })
 
@@ -56,8 +56,8 @@ describe('the spreadsheets', () => {
 
   test('accounts: a balance only once there is one', () => {
     const lines = accountsCsv(accounts).split('\r\n')
-    assert.equal(lines[1], 'Everyday,Checking,Big Bank,1234,1234.56,2026-11-01,no')
-    assert.equal(lines[2], 'Visa,Credit card,,,,,yes')
+    assert.equal(lines[1], 'Everyday,Checking,Big Bank,1234,1234.56,2026-11-01,no,,yes')
+    assert.equal(lines[2], 'Visa,Credit card,,,,,yes,2026-10-31,no')
   })
 
   test('balance history names each account', () => {

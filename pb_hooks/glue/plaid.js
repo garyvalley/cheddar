@@ -89,6 +89,8 @@ function summary(app, link) {
         last4: a.getString("last4"),
         balance_cents: a.get("balance_cents"),
         balance_date: a.getString("balance_date"),
+        closed_on: a.getString("closed_on"),
+        excluded: a.getBool("excluded"),
       }
     }),
   }
@@ -106,13 +108,13 @@ function accountFor(txApp, link, row) {
     account.set("owner", owner)
     account.set("external_id", row.external_id)
     account.set("source", "sync")
-    // Only the first time: after that the name and kind are the person's.
+    // Only the first time: after that these are the person's (Accounts' Edit).
     account.set("name", row.name)
     account.set("kind", row.kind)
     if (row.last4) account.set("last4", row.last4)
   }
   account.set("link", link.id)
-  if (row.institution) account.set("institution", row.institution)
+  if (row.institution && !account.getString("institution")) account.set("institution", row.institution)
   account.set("currency", row.currency)
   if (row.balance_cents !== null) {
     account.set("balance_cents", row.balance_cents)
