@@ -26,7 +26,7 @@ export interface CategoryRule {
 export interface ExportData {
   cheddar_export: typeof EXPORT_VERSION
   exported: string
-  profile: { name: string, email: string, state: string, filing_status: string, theme: string, appearance: string }
+  profile: { name: string, email: string, state: string, filing_status: string, theme: string, appearance: string, time_zone: string }
   accounts: Account[]
   transactions: (Transaction & { import: string })[]
   imports: Import[]

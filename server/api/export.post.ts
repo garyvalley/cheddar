@@ -1,5 +1,4 @@
 import { exportZip } from '~~/server/data/export'
-import { localToday } from '~~/shared/categories'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**
@@ -12,8 +11,8 @@ export default defineEventHandler(async (event) => {
   const { password } = await readFields<{ password: string }>(event, ['password'])
   const pass = required(password, 'Your password')
   const s = sessionFor(event)
-  const file = await attempt(() => exportZip(s, pass))
+  const { file, day } = await attempt(() => exportZip(s, pass))
   setResponseHeader(event, 'content-type', 'application/zip')
-  setResponseHeader(event, 'content-disposition', `attachment; filename="cheddar-export-${localToday()}.zip"`)
+  setResponseHeader(event, 'content-disposition', `attachment; filename="cheddar-export-${day}.zip"`)
   return file
 })

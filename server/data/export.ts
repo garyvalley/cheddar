@@ -2,6 +2,7 @@ import { EXPORT_VERSION, exportFiles, type BalancePoint, type CategoryRule, type
 import { listLinks } from './bank-links'
 import { allTransactions, listAccounts, listCategories, listImports } from './money'
 import { toMe } from './profile'
+import { todayIn } from '~~/shared/time-zone'
 import { zip } from './zip'
 import { callerId, type Session } from './session'
 
@@ -26,7 +27,7 @@ export async function exportData(s: Session, password: string, now = new Date())
   return {
     cheddar_export: EXPORT_VERSION,
     exported: now.toISOString(),
-    profile: { name: me.name, email: me.email, state: me.state, filing_status: me.filing_status, theme: me.theme, appearance: me.appearance },
+    profile: { name: me.name, email: me.email, state: me.state, filing_status: me.filing_status, theme: me.theme, appearance: me.appearance, time_zone: me.time_zone },
     accounts,
     transactions,
     imports,
@@ -37,7 +38,11 @@ export async function exportData(s: Session, password: string, now = new Date())
   }
 }
 
-/** The export as a zip: accounts.csv, transactions.csv, balance_history.csv and cheddar.json. */
-export async function exportZip(s: Session, password: string, now = new Date()): Promise<Buffer> {
-  return zip(exportFiles(await exportData(s, password, now)), now)
+/**
+ * The export as a zip (accounts.csv, transactions.csv, balance_history.csv
+ * and cheddar.json), and the person's own today, to name it by.
+ */
+export async function exportZip(s: Session, password: string, now = new Date()): Promise<{ file: Buffer, day: string }> {
+  const data = await exportData(s, password, now)
+  return { file: zip(exportFiles(data), now), day: todayIn(data.profile.time_zone, now) }
 }
