@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatCents, type Account } from '~~/shared/accounts'
+import { formatCents, isStale, type Account } from '~~/shared/accounts'
 import type { SpendingSummary } from '~~/shared/categories'
 import { GROWTH_PERIODS, groupOf, type GrowthPeriodId, type Overview } from '~~/shared/overview'
 
@@ -107,6 +107,8 @@ const byGroup = computed(() => {
     accounts: open.filter(a => groupOf(a.kind) === g.id).sort((a, b) => Math.abs(b.balance_cents!) - Math.abs(a.balance_cents!)),
   }))
 })
+// Typed-in balances past their age (shared/accounts.ts): net worth includes them.
+const stale = computed(() => list.value.accounts.filter(a => isStale(a, today)))
 const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }))
 </script>
 
@@ -132,7 +134,20 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
       </div>
     </section>
 
-    <!-- Worth a look: categories over this month's budget. -->
+    <!-- Worth a look: balances typed in long ago, and categories over this month's budget. -->
+    <section v-if="stale.length" class="group" aria-label="Out-of-date balances">
+      <div class="card">
+        <NuxtLink to="/accounts" class="row step">
+          <span class="row-label">
+            <span class="step-label">{{ stale.length === 1 ? '1 balance is out of date' : `${stale.length} balances are out of date` }}</span>
+            <span class="footnote">{{ stale.map(a => a.name).join(', ') }}: net worth, growth and Projections use {{ stale.length === 1 ? 'it' : 'them' }}. Bring {{ stale.length === 1 ? 'it' : 'them' }} up to date on Accounts.</span>
+          </span>
+          <AppIcon name="chevron" class="chev" />
+        </NuxtLink>
+      </div>
+    </section>
+
+    <!-- Categories over this month's budget. -->
     <section v-if="ov?.over_budget.length" class="group" aria-labelledby="budget-title">
       <div class="card">
         <div class="panel-head">

@@ -162,6 +162,24 @@ export function checkAccountChange(
 export const isLiability = (kind: string) =>
   kind === "credit_card" || kind === "loan";
 
+/** How many days a typed-in balance stays current: a home's value moves slowly, anything else monthly. */
+export const staleAfterDays = (kind: string) => (kind === "property" ? 180 : 30);
+
+/**
+ * A balance the person typed in (or imported) that's older than its kind
+ * allows, on an open, counted account of theirs that no bank link keeps up
+ * to date: it's in net worth, so it's worth a reminder.
+ */
+export function isStale(
+  a: Pick<Account, "kind" | "linked" | "closed_on" | "excluded" | "balance_cents" | "balance_date" | "owned">,
+  today: string,
+): boolean {
+  if (a.linked || a.closed_on || a.excluded || a.owned === false) return false;
+  if (a.balance_cents === null || !a.balance_date) return false;
+  const days = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${a.balance_date}T00:00:00Z`)) / 86_400_000;
+  return days > staleAfterDays(a.kind);
+}
+
 /** "$1,234.56" or "\u2212$1,234.56" from signed cents. */
 export function formatCents(cents: number, currency = "USD"): string {
   const text = new Intl.NumberFormat("en-US", {
