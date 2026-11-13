@@ -97,12 +97,21 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
 
 .tabbar { display: none; }
 
-@media (max-width: 899px) {
+@media (max-width: 1023px) {
   .topnav { gap: 0; }
   .topnav-link { padding: 0 0.625rem; }
   .topnav-link.on::after { left: 0.625rem; right: 0.625rem; }
   .topbar-in { gap: 1rem; padding: 0 1.25rem; }
+  /* Six sections leave room for Settings' icon only (its label is aria-label). */
+  .bar-link > .wide-only { display: none; }
+  .bar-link { white-space: nowrap; }
   .main { padding: 1.5rem 1.25rem 3rem; }
+}
+
+@media (max-width: 839px) {
+  .topnav-link { padding: 0 0.5rem; }
+  .topnav-link.on::after { left: 0.5rem; right: 0.5rem; }
+  .topbar-in { gap: 0.75rem; }
 }
 
 @media (max-width: 767px) {

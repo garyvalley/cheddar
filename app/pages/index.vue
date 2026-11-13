@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatCents, isStale, type Account } from '~~/shared/accounts'
 import type { SpendingSummary } from '~~/shared/categories'
+import type { Goal } from '~~/shared/goals'
 import { GROWTH_PERIODS, groupOf, type GrowthPeriodId, type Overview } from '~~/shared/overview'
 
 // Overview only reads what the accounts hold (set up on Accounts): net worth
@@ -55,6 +56,13 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
 const period = ref<GrowthPeriodId>('1y')
 const grown = computed(() => ov.value?.growth.find(g => g.period === period.value))
 const periodName = computed(() => GROWTH_PERIODS.find(p => p.id === period.value)?.name ?? '')
+// Savings goals (their own page, /goals): one line under the savings rate.
+const { data: goalList } = await useFetch<{ goals: Goal[] }>('/api/goals', { default: () => ({ goals: [] }) })
+const goals = computed(() => ({
+  count: goalList.value.goals.length,
+  saved: goalList.value.goals.reduce((n, g) => n + g.saved_cents, 0),
+  target: goalList.value.goals.reduce((n, g) => n + g.target_cents, 0),
+}))
 const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(rate * 100).toFixed(Math.abs(rate) < 0.1 ? 2 : 1)}%`
 
 // The shown month's spending by category: the five largest, the rest as "Other".
@@ -233,7 +241,6 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
             <div class="tile-head">
               <h2 id="kept-title" class="tile-label">Savings rate</h2>
               <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
-              <NuxtLink to="/goals" class="panel-link">Goals</NuxtLink>
             </div>
             <template v-if="kept">
               <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>
@@ -244,6 +251,14 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
               </p>
             </template>
             <p v-else class="footnote">Shows once your accounts have six whole months of income and spending.</p>
+            <NuxtLink to="/goals" class="goals-line" data-test="goals-summary">
+              <template v-if="goals.count">
+                <span>{{ goals.count === 1 ? '1 goal' : `${goals.count} goals` }}</span>
+                <span class="num" :title="`${formatCents(goals.saved)} of ${formatCents(goals.target)}`">{{ Math.floor(goals.saved / goals.target * 100) }}% saved</span>
+              </template>
+              <span v-else>Set a savings goal</span>
+              <AppIcon name="chevron" />
+            </NuxtLink>
           </section>
         </div>
 
@@ -399,6 +414,16 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
 .tiles { display: grid; gap: 1.5rem; grid-template-columns: 1fr 1fr; align-items: stretch; }
 .tile { min-width: 0; padding: 1rem 1.25rem 1.25rem; display: grid; gap: 0.375rem; align-content: start; }
 .tile > p { margin: 0; }
+/* The goals line sits at the foot of the savings-rate tile. */
+.goals-line {
+  display: flex; align-items: center; gap: 0.5rem; margin-top: auto; padding-top: 0.75rem;
+  border-top: 1px solid var(--separator); color: var(--text-2); font-size: 0.875rem;
+}
+.goals-line:hover { text-decoration: none; color: var(--text); }
+.goals-line > span { white-space: nowrap; }
+.goals-line .num { margin-left: auto; }
+.goals-line :deep(.icon) { width: 1rem; height: 1rem; color: var(--text-3); }
+.goals-line > span:only-of-type { margin-right: auto; }
 .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 1.75rem; }
 .tile-label { margin: 0; font-size: 1rem; font-weight: 600; }
 .tile-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
