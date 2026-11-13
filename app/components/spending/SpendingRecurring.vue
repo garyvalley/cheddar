@@ -73,7 +73,7 @@ const where = (r: Recurring) => (props.account ? '' : props.names.get(r.account)
 
 <style scoped>
 .list { list-style: none; margin: 0; padding: 0; }
-.card-pad + .list, .list > li + li { border-top: 0.5px solid var(--separator); }
+.card-pad + .list, .list > li + li { border-top: var(--border); }
 .tight > * { margin: 0; }
 .tight > * + * { margin-top: 0.25rem; }
 .item { align-items: flex-start; }

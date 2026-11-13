@@ -234,10 +234,14 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   | `k8s/`, `scripts/deploy-k8s.sh` | The cluster |
   | `tests/` | Unit, API and browser tests ([tests/README.md](tests/README.md)) |
 
-- **Design** follows Apple's Human Interface Guidelines:
-  - the system font and its text styles
-  - grouped inset lists
-  - a sidebar on desktop and a tab bar on phones
+- **Design** is a calm dashboard:
+  - one bar across the top in the theme's colour with the sections in it;
+    on phones the sections move to a tab bar at the bottom
+  - white cards with a hairline border on a soft grey ground, each a titled
+    panel (`.panel-head`), side by side in columns on a wide screen
+  - Overview lists every account by kind down the left, adding up to net
+    worth, with the figures and charts beside it
+  - the system font
   - 44pt tap targets
   - light and dark mode from one set of colour tokens (`app/assets/css/main.css`),
     each a `light-dark()` pair, with an override set per colour theme

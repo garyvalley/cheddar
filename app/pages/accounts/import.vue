@@ -386,7 +386,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 .scroll { overflow-x: auto; margin-inline: -1rem; padding-inline: 1rem; }
 .preview { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
 .preview th { text-align: left; font-weight: 400; font-size: 0.8125rem; color: var(--text-2); padding: 0 0.5rem 0.375rem 0; }
-.preview td { padding: 0.375rem 0.5rem 0.375rem 0; border-top: 0.5px solid var(--separator); vertical-align: top; }
+.preview td { padding: 0.375rem 0.5rem 0.375rem 0; border-top: var(--border); vertical-align: top; }
 .amt { text-align: right; white-space: nowrap; padding-right: 0 !important; }
 .nowrap { white-space: nowrap; }
 .name { overflow-wrap: anywhere; }

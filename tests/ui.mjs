@@ -152,7 +152,7 @@ try {
   assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
 
   // One added by hand, found by a search, given a note and left out of the totals.
-  await page.getByRole('button', { name: 'Add a transaction by hand…' }).click()
+  await page.getByRole('button', { name: 'Add a transaction', exact: true }).click()
   await page.getByLabel('What it was').fill('Farmers market')
   await page.getByLabel('Amount', { exact: true }).fill('12.40')
   await page.getByRole('button', { name: 'Add transaction' }).click()
