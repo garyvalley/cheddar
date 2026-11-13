@@ -32,7 +32,7 @@ const fileProblems = ref<string[]>([])
 // A PDF's text is read in the browser first, which takes a moment for a long one.
 const reading = ref(false)
 const pdfFlip = ref(false)
-interface Result { name: string, import?: Import, unreadable?: number, error?: string }
+interface Result { name: string, import?: Import, unreadable?: number, balance?: { cents: number, date: string } | null, error?: string }
 const results = ref<Result[]>([])
 const input = ref<HTMLInputElement>()
 
@@ -49,6 +49,8 @@ const problems = computed(() => readable.value.flatMap(x => x.read.problems.map(
 const anyPdf = computed(() => readable.value.some(x => x.read.format === 'pdf'))
 const flipNote = computed(() => files.value.some(f => f.flipNote))
 const range = computed(() => dateRange(rows.value))
+/** The newest balance the files print: what the account will hold once they're imported. */
+const closing = computed(() => readable.value.reduce<{ cents: number, date: string } | null>((best, x) => (x.read.closing && (!best || x.read.closing.date >= best.date) ? x.read.closing : best), null))
 const totals = computed(() => {
   let out = 0
   let into = 0
@@ -138,9 +140,11 @@ async function importFiles() {
   sending.value = true
   const done: Result[] = []
   try {
-    for (const { file: f, read: r } of readable.value) {
+    // Oldest first, so each statement's closing balance joins the account's history in turn.
+    const order = [...readable.value].sort((a, b) => (a.read.closing?.date ?? dateRange(a.read.rows)?.last ?? '').localeCompare(b.read.closing?.date ?? dateRange(b.read.rows)?.last ?? ''))
+    for (const { file: f, read: r } of order) {
       try {
-        const answer = await $fetch<{ import: Import, unreadable: number }>('/api/imports', {
+        const answer = await $fetch<{ import: Import, unreadable: number, balance: { cents: number, date: string } | null }>('/api/imports', {
           method: 'POST',
           body: {
             account: account.value.id, filename: f.name, text: f.text,
@@ -170,6 +174,7 @@ const added = computed(() => imported.value.reduce((n, r) => n + r.import!.added
 const skipped = computed(() => imported.value.reduce((n, r) => n + r.import!.skipped, 0))
 const unreadLines = computed(() => imported.value.reduce((n, r) => n + (r.unreadable ?? 0), 0))
 const failures = computed(() => results.value.filter(r => r.error))
+const newBalance = computed(() => imported.value.reduce<{ cents: number, date: string } | null>((best, r) => (r.balance && (!best || r.balance.date >= best.date) ? r.balance : best), null))
 
 const undo = useAction()
 const undoing = ref('')
@@ -233,6 +238,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
             <template v-if="skipped">{{ plural(skipped, 'was', 'were') }} already there.</template>
             <template v-if="unreadLines">{{ plural(unreadLines, 'line') }} couldn't be read.</template>
           </p>
+          <p v-if="newBalance">{{ account?.name }}'s balance is now <span class="num">{{ formatCents(newBalance.cents) }}</span>, as of {{ day(newBalance.date) }}.</p>
           <p class="btn-row">
             <NuxtLink :to="{ path: '/spending', query: { account: accountId } }" class="btn btn-tinted">See transactions</NuxtLink>
           </p>
@@ -318,6 +324,9 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
               <strong>{{ plural(rows.length, 'transaction') }}</strong>,
               {{ day(range.first) }} to {{ day(range.last) }}.
               <span class="muted">Out <span class="num">{{ formatCents(totals.out) }}</span>, in <span class="num">{{ formatCents(totals.into) }}</span>.</span>
+            </p>
+            <p v-if="closing" data-test="closing">
+              Closing balance <strong class="num">{{ formatCents(closing.cents) }}</strong> on {{ day(closing.date) }}<template v-if="account?.linked">, but the bank link keeps this account's balance</template><template v-else-if="account?.balance_date && account.balance_date > closing.date">, older than the balance it has</template><template v-else>: it becomes the account's balance</template>.
             </p>
             <p v-else>No transactions could be read. Check the columns above.</p>
             <div v-if="problems.length" class="notice notice-info">

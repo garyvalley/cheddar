@@ -1,4 +1,4 @@
-import { getAccount, importRows } from '~~/server/data/money'
+import { getAccount, importRows, setBalance } from '~~/server/data/money'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { isLiability } from '~~/shared/accounts'
 import { localToday } from '~~/shared/categories'
@@ -13,7 +13,13 @@ interface Body { account: string, filename: string, text: string, mapping: CsvMa
  * shared/pdf-statements.ts), and `flip` turns a PDF's signs round. The file
  * is read here again, whatever the browser's preview showed; rows already in
  * the account are skipped. Answers with the import and how many lines
- * couldn't be read.
+ * couldn't be read, and the balance the account was given from it.
+ *
+ * A statement that prints the balance it closed on gives the account that
+ * balance, as of its closing day, unless the account already has a newer one
+ * or a bank link keeps it up to date. Each balance set this way also lands
+ * in the account's history (pb_hooks/balances.pb.js), so importing a year of
+ * statements, oldest first, gives net worth and growth their past too.
  */
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
@@ -31,6 +37,11 @@ export default defineEventHandler(async (event) => {
   if (!statement.rows.length) throw createError({ statusCode: 400, statusMessage: 'No line of the file could be read as a transaction.' })
 
   const record = await attempt(() => importRows(s, account, { filename, format: statement.format, rows: statement.rows }))
+  const closing = statement.closing
+  const newer = !into.balance_date || (closing && closing.date >= into.balance_date)
+  const balance = closing && !into.linked && newer
+    ? await attempt(() => setBalance(s, account, closing.cents, closing.date)).then(a => ({ cents: a.balance_cents!, date: a.balance_date }))
+    : null
   setResponseStatus(event, 201)
-  return { import: record, unreadable: statement.problems.length }
+  return { import: record, unreadable: statement.problems.length, balance }
 })

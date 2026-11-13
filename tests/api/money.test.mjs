@@ -154,6 +154,31 @@ describe('importing a statement', () => {
     assert.match(letter.json.message, /No transactions could be found/)
   })
 
+  test('a statement\'s closing balance becomes the account\'s, unless the account has a newer one', async () => {
+    const { c } = await ready()
+    const card = await account(c, { name: 'Card', kind: 'credit_card' })
+    const statement = (period, owed, row) => `%cheddar-pdf-text 1\nStatement Period ${period}\nNew Balance  $${owed}\n${row}\n`
+
+    const october = await upload(c, card.id, statement('09/18/2026 to 10/18/2026', '1,200.00', '10/01  BOOKSHOP  42.10'), 'october.pdf')
+    assert.equal(october.status, 201, JSON.stringify(october.json))
+    assert.deepEqual(october.json.balance, { cents: -120000, date: '2026-10-18' })
+    const november = await upload(c, card.id, statement('10/19/2026 to 11/08/2026', '300.00', '11/01  CAFE  4.75'), 'november.pdf')
+    assert.deepEqual(november.json.balance, { cents: -30000, date: '2026-11-08' })
+    // An older statement imported afterwards leaves the newer balance alone.
+    const september = await upload(c, card.id, statement('08/18/2026 to 09/17/2026', '900.00', '09/01  TEA  3.00'), 'september.pdf')
+    assert.equal(september.status, 201)
+    assert.equal(september.json.balance, null)
+    const now = (await c.call('GET', '/api/accounts')).json.accounts.find(a => a.id === card.id)
+    assert.deepEqual([now.balance_cents, now.balance_date], [-30000, '2026-11-08'])
+    // Net worth counts it.
+    assert.equal((await c.call('GET', '/api/overview')).json.net_worth.total_cents, -30000)
+
+    // A file with no balance in it changes nothing.
+    const csv = await upload(c, card.id, 'Date,Description,Amount\n2026-11-20,Shop,-5.00\n')
+    assert.equal(csv.status, 201)
+    assert.equal(csv.json.balance, null)
+  })
+
   test('uses the columns the person chose, such as flipped signs for a card', async () => {
     const { c } = await ready()
     const a = await account(c, { name: 'Card', kind: 'credit_card' })
