@@ -17,7 +17,8 @@
     "test:unit": "node --test 'tests/*.test.mjs'",
     "test:api": "node --env-file-if-exists=.env --test 'tests/api/*.test.mjs'",
     "test:ui": "node --env-file-if-exists=.env tests/ui.mjs",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "gen:hooks": "node scripts/gen-hooks.mjs"
   },
   "dependencies": {
     "nuxt": "^4.6.0",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
     "@types/node": "^26.4.1",
+    "esbuild": "0.28.2",
     "eslint": "^10.8.0",
     "playwright-core": "^1.63.0",
     "typescript": "^6.0.3",

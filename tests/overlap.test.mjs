@@ -1,4 +1,5 @@
-// Unit tests for shared/overlap.ts and pb_hooks/lib/overlap.js: when a
+// Unit tests for shared/overlap.ts, and its build for the hooks
+// (pb_hooks/lib/gen/overlap.js, scripts/gen-hooks.mjs): when a
 // statement's row and a bank link's transaction are the same money.
 
 import { describe, test } from 'node:test'
@@ -6,7 +7,7 @@ import assert from 'node:assert/strict'
 import { loadHookModule } from './load-hook-module.mjs'
 import { MATCH_DAYS, alreadySynced, around, daysApart, nearest } from '../shared/overlap.ts'
 
-const hook = loadHookModule('pb_hooks/lib/overlap.js')
+const hook = loadHookModule('pb_hooks/lib/gen/overlap.js')
 const row = (posted, amount_cents) => ({ posted, amount_cents })
 
 describe('matching a statement row to a synced one', () => {
@@ -47,7 +48,7 @@ describe('the hooks\' copy', () => {
     const synced = [row('2026-10-01', -500), row('2026-10-03', -500), row('2026-10-09', -500), row('2026-10-03', -900)]
     for (const r of [row('2026-10-02', -500), row('2026-10-04', -500), row('2026-10-14', -500), row('2026-10-03', -900), row('2026-09-26', -500), row('2026-10-07', -100)]) {
       assert.equal(hook.nearest(r, synced), nearest(r, synced), JSON.stringify(r))
-      assert.equal(hook.nearest(r, synced, { 1: true }), nearest(r, synced, new Set([1])), JSON.stringify(r))
+      assert.equal(hook.nearest(r, synced, new Set([1])), nearest(r, synced, new Set([1])), JSON.stringify(r))
     }
     for (const [a, b] of [['2026-02-27', '2026-03-02'], ['2027-01-02', '2026-12-30']]) assert.equal(hook.daysApart(a, b), daysApart(a, b))
     assert.deepEqual(hook.around('2026-03-01'), around('2026-03-01'))

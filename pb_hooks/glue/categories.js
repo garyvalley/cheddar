@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 var cats = require(`${__hooks}/lib/categories.js`);
-var splits = require(`${__hooks}/lib/splits.js`);
+var splits = require(`${__hooks}/lib/gen/splits.js`);
 
 /** The person's custom category with this id ("c-..."), or null. */
 function customOf(app, owner, id) {

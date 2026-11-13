@@ -13,8 +13,9 @@ import { parseAmount } from './transactions.ts'
  * later (a bank sync, a tip that posts, an edit to one added by hand), what's
  * left over still counts in the transaction's own category, so every total
  * still adds up to the money that moved, and the page says the split needs
- * fixing (leftOver()). pb_hooks/lib/splits.js checks them the same way as
- * they're saved; a unit test keeps the two equal.
+ * fixing (leftOver()). pb_hooks/splits.pb.js checks every record-API write
+ * of them with checkStored(), from pb_hooks/lib/gen/splits.js: this file,
+ * built for the hooks by scripts/gen-hooks.mjs.
  */
 
 export interface SplitPart {
@@ -103,4 +104,53 @@ export function checkSplit(input: unknown, amount_cents: number, usable: (id: st
     return { problem: total < whole ? `The parts come to $${gap} less than the whole. Add it to a part.` : `The parts come to $${gap} more than the whole.` }
   }
   return { ok: [...by].map(([category, cents]) => ({ category, amount_cents: sign * cents })) }
+}
+
+/**
+ * A stored `splits` value as the record API is given it (pb_hooks/splits.pb.js):
+ * the parts to store, null when it isn't split, or a problem. However it was
+ * written, a stored split is two to MAX_PARTS parts, each in a category of
+ * its own the person may use, each going the same way as the transaction,
+ * together exactly its amount.
+ */
+export function checkStored(value: unknown, amount: number, usable: (id: string) => boolean): { parts: SplitPart[] | null } | { problem: string } {
+  if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) return { parts: null }
+  if (!Array.isArray(value)) return { problem: 'A split is a list of parts.' }
+  if (!amount) return { problem: 'A transaction of $0.00 can\'t be split.' }
+  if (value.length < MIN_PARTS || value.length > MAX_PARTS) return { problem: `A split has ${MIN_PARTS} to ${MAX_PARTS} parts.` }
+  const seen = new Set<string>()
+  let total = 0
+  const parts: SplitPart[] = []
+  for (const p of value) {
+    if (!p || typeof p !== 'object') return { problem: 'A split is a list of parts.' }
+    const { category, amount_cents } = p as Record<string, unknown>
+    if (typeof category !== 'string' || !category || category.length > 20 || !usable(category)) return { problem: 'Choose a category for each part.' }
+    if (seen.has(category)) return { problem: 'Each part needs a category of its own.' }
+    seen.add(category)
+    if (!isCents(amount_cents) || (amount_cents < 0) !== (amount < 0)) return { problem: 'Each part goes the same way as the whole.' }
+    total += amount_cents
+    parts.push({ category, amount_cents })
+  }
+  if (total !== amount) return { problem: 'The parts must add up to the whole.' }
+  return { parts }
+}
+
+/**
+ * What a split's parts in `from` become when that category goes: they move
+ * to `to`, joining a part already there. Null when fewer than two parts are
+ * left, as the split then says nothing the category doesn't.
+ */
+export function moveParts(parts: SplitPart[] | null | undefined, from: string, to: string): SplitPart[] | null {
+  const out: SplitPart[] = []
+  const at = new Map<string, number>()
+  for (const p of parts ?? []) {
+    const category = p.category === from ? to : p.category
+    const i = at.get(category)
+    if (i !== undefined) out[i]!.amount_cents += p.amount_cents
+    else {
+      at.set(category, out.length)
+      out.push({ category, amount_cents: p.amount_cents })
+    }
+  }
+  return out.length >= MIN_PARTS ? out : null
 }
