@@ -5,7 +5,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PB, ready, signedIn } from './helpers.mjs'
+import { asPb, PB, ready, signedIn } from './helpers.mjs'
 
 const today = new Date().toISOString().slice(0, 10)
 const month = today.slice(0, 7)
@@ -32,7 +32,7 @@ async function imported(c, accountId, text = CSV, filename = 'statement.csv') {
 }
 
 const byDescription = items => Object.fromEntries(items.map(t => [t.description, t]))
-const pbToken = c => decodeURIComponent(c.cookie.slice('pb_token='.length))
+const pbToken = c => asPb(c)
 
 describe('categories', () => {
   test('are chosen for each transaction as it is imported', async () => {
@@ -107,12 +107,12 @@ describe('categories', () => {
     assert.equal((await other.c.call('POST', `/api/transactions/${tx[0].id}/category`, { category: 'travel' })).status, 404)
     // Straight to PocketBase's route with the other person's token: the same answer.
     const direct = await fetch(`${PB}/api/transactions/${tx[0].id}/category`, {
-      method: 'POST', headers: { 'content-type': 'application/json', 'authorization': pbToken(other.c) }, body: JSON.stringify({ category: 'travel' }),
+      method: 'POST', headers: { 'content-type': 'application/json', ...pbToken(other.c) }, body: JSON.stringify({ category: 'travel' }),
     })
     assert.equal(direct.status, 404)
     const passwordOnly = await signedIn()
     const r = await fetch(`${PB}/api/transactions/${tx[0].id}/category`, {
-      method: 'POST', headers: { 'content-type': 'application/json', 'authorization': pbToken(passwordOnly.c) }, body: JSON.stringify({ category: 'travel' }),
+      method: 'POST', headers: { 'content-type': 'application/json', ...pbToken(passwordOnly.c) }, body: JSON.stringify({ category: 'travel' }),
     })
     assert.equal(r.status, 403)
     const after = (await owner.c.call('GET', '/api/transactions')).json.items.find(t => t.id === tx[0].id)
@@ -125,21 +125,21 @@ describe('categories', () => {
     const tx = byDescription(await imported(c, acct.id))
     const coffee = tx['STARBUCKS STORE #12 SEATTLE']
     const patch = await fetch(`${PB}/api/collections/transactions/records/${coffee.id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', 'authorization': pbToken(c) },
+      method: 'PATCH', headers: { 'content-type': 'application/json', ...pbToken(c) },
       body: JSON.stringify({ category: 'travel', category_by: 'person', description: 'STARBUCKS STORE #12 SEATTLE' }),
     })
     assert.equal(patch.status, 200)
     const after = (await patch.json())
     assert.deepEqual([after.category, after.category_by], ['dining', 'match'])
     const made = await fetch(`${PB}/api/collections/transactions/records`, {
-      method: 'POST', headers: { 'content-type': 'application/json', 'authorization': pbToken(c) },
+      method: 'POST', headers: { 'content-type': 'application/json', ...pbToken(c) },
       body: JSON.stringify({ owner: (await c.call('GET', '/api/auth/me')).json.me.id, account: acct.id, posted: today, amount_cents: -100, source: 'manual', description: 'NETFLIX', category: 'travel', category_by: 'person' }),
     })
     assert.equal(made.status, 200)
     const row = await made.json()
     assert.deepEqual([row.category, row.category_by], ['entertainment', 'match'])
     // The rules themselves are the hooks' alone.
-    const rules = await fetch(`${PB}/api/collections/category_rules/records`, { headers: { authorization: pbToken(c) } })
+    const rules = await fetch(`${PB}/api/collections/category_rules/records`, { headers: { ...pbToken(c) } })
     assert.equal(rules.status, 403)
   })
 
@@ -190,7 +190,7 @@ describe('categories', () => {
     assert.equal((await other.c.call('POST', `/api/transactions/${theirs[0].id}/category`, { category: mine.id })).status, 400)
     assert.equal((await other.c.call('POST', `/api/categories/${mine.id}/rename`, { name: 'Mine now' })).status, 404)
     assert.equal((await other.c.call('POST', `/api/categories/${mine.id}/remove`)).status, 404)
-    const direct = await fetch(`${PB}/api/collections/custom_categories/records`, { headers: { authorization: pbToken(other.c) } })
+    const direct = await fetch(`${PB}/api/collections/custom_categories/records`, { headers: { ...pbToken(other.c) } })
     assert.equal(direct.status, 403)
     const passwordOnly = await signedIn()
     assert.equal((await passwordOnly.c.call('POST', '/api/categories', { name: 'Nope' })).status, 403)

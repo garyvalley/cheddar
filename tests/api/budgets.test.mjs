@@ -4,7 +4,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PB, ready } from './helpers.mjs'
+import { asPb, PB, ready } from './helpers.mjs'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -71,11 +71,11 @@ describe('budgets', () => {
     const other = await ready()
     await owner.c.call('PUT', '/api/budgets/dining', { amount: '200' })
     assert.deepEqual((await other.c.call('GET', '/api/budgets')).json.budgets, [])
-    const token = other.c.cookie.slice('pb_token='.length)
-    const list = await fetch(`${PB}/api/collections/budgets/records`, { headers: { authorization: token } })
+    const token = asPb(other.c)
+    const list = await fetch(`${PB}/api/collections/budgets/records`, { headers: { ...token } })
     assert.equal((await list.json()).items.length, 0)
     const forged = await fetch(`${PB}/api/collections/budgets/records`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: token },
+      method: 'POST', headers: { 'content-type': 'application/json', ...token },
       body: JSON.stringify({ owner: owner.id, category: 'travel', amount_cents: 100 }),
     })
     assert.ok([400, 403].includes(forged.status), `forged: ${forged.status}`)

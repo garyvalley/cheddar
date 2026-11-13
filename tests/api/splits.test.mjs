@@ -8,7 +8,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PB, ready } from './helpers.mjs'
+import { asPb, PB, ready } from './helpers.mjs'
 
 const today = new Date().toISOString().slice(0, 10)
 const month = today.slice(0, 7)
@@ -31,7 +31,7 @@ const byDescription = async (c, description) => (await list(c, `q=${encodeURICom
 const spending = async c => (await c.call('GET', `/api/spending?at=${month}`)).json
 const totalOf = (summary, id) => summary.categories.find(x => x.id === id)?.total_cents ?? 0
 const split = (c, t, parts) => c.call('PATCH', `/api/transactions/${t.id}`, { splits: parts })
-const tokenOf = c => decodeURIComponent(c.cookie.slice('pb_token='.length))
+const tokenOf = c => asPb(c)
 
 describe('splitting a transaction', () => {
   test('counts its parts in their categories everywhere, and undoing it puts it back', async () => {
@@ -120,7 +120,7 @@ describe('splitting a transaction', () => {
     const t = await byDescription(c, 'COSTCO WHSE')
     const token = tokenOf(c)
     const patch = body => fetch(`${PB}/api/collections/transactions/records/${t.id}`, {
-      method: 'PATCH', headers: { 'authorization': token, 'content-type': 'application/json' }, body: JSON.stringify(body),
+      method: 'PATCH', headers: { ...token, 'content-type': 'application/json' }, body: JSON.stringify(body),
     })
     for (const splits of [
       [{ category: 'groceries', amount_cents: -6000 }, { category: 'shopping', amount_cents: -3000 }],
@@ -136,9 +136,9 @@ describe('splitting a transaction', () => {
     assert.equal(totalOf(await spending(c), 'shopping'), 4000)
 
     // A new one starts unsplit, whatever it's sent with.
-    const { owner } = await (await fetch(`${PB}/api/collections/transactions/records/${t.id}`, { headers: { authorization: token } })).json()
+    const { owner } = await (await fetch(`${PB}/api/collections/transactions/records/${t.id}`, { headers: { ...token } })).json()
     const created = await fetch(`${PB}/api/collections/transactions/records`, {
-      method: 'POST', headers: { 'authorization': token, 'content-type': 'application/json' },
+      method: 'POST', headers: { ...token, 'content-type': 'application/json' },
       body: JSON.stringify({
         owner, account: a.id, source: 'manual', posted: today, amount_cents: -1000, description: 'X',
         splits: [{ category: 'shopping', amount_cents: -999999 }, { category: 'groceries', amount_cents: 989999 }],

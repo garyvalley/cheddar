@@ -16,6 +16,9 @@
 //   POST /api/bank-links/{id}/sync         -> { link, sync }
 //   POST /api/bank-links/{id}/remove       -> 204; its accounts stay, unlinked
 //
+// A new link and an unlink want the password typed in the last 15 minutes
+// (POST /api/sessions/confirm), or answer 403 with data.password "required".
+//
 // Each needs a session with two-step sign-in on, like every collection that
 // holds financial data (migrations/README.md). Every link also syncs once a
 // day on its own.
@@ -73,6 +76,9 @@ routerAdd("POST", "/api/bank-links/link-token", (e) => {
   if (!glue.isEnabled()) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
   var id = String((e.requestInfo().body || {}).link || "")
   var link = id ? glue.ownLink(e.app, e.auth, id) : null
+  // A new link reads a bank's accounts from now on: it wants a password typed
+  // in the last 15 minutes, not only a session (sessions.pb.js).
+  if (!link) require(`${__hooks}/glue/sessions.js`).requireFreshPassword(e)
   if (!link) glue.checkLinkLimit(e.app, e.auth.id)
   try {
     return e.json(200, { link_token: glue.linkToken(e.auth.id, link) })
@@ -123,7 +129,9 @@ routerAdd("POST", "/api/bank-links/{id}/sync", (e) => {
 routerAdd("POST", "/api/bank-links/{id}/remove", (e) => {
   var glue = require(`${__hooks}/glue/bank_links.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
-  glue.remove(e.app, glue.ownLink(e.app, e.auth, e.request.pathValue("id")))
+  var link = glue.ownLink(e.app, e.auth, e.request.pathValue("id"))
+  require(`${__hooks}/glue/sessions.js`).requireFreshPassword(e)
+  glue.remove(e.app, link)
   return e.noContent(204)
 }, $apis.requireAuth("users"))
 

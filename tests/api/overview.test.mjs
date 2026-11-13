@@ -4,7 +4,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PB, ready, superuser } from './helpers.mjs'
+import { asPb, PB, ready, superuser } from './helpers.mjs'
 
 async function account(c, body) {
   const r = await c.call('POST', '/api/accounts', body)
@@ -19,7 +19,7 @@ const today = () => {
 
 const history = async (token, accountId) => (await (await fetch(
   `${PB}/api/collections/balance_history/records?filter=${encodeURIComponent(`account = '${accountId}'`)}`,
-  { headers: { authorization: token } },
+  { headers: typeof token === 'string' ? { authorization: token } : token },
 )).json()).items
 
 describe('balances', () => {
@@ -48,9 +48,9 @@ describe('balances', () => {
     const other = await ready()
     const a = await account(owner.c, { name: 'Checking', kind: 'checking' })
     await owner.c.call('PATCH', `/api/accounts/${a.id}`, { balance: '10' })
-    const token = c => c.cookie.slice('pb_token='.length)
+    const token = c => asPb(c)
     const forged = await fetch(`${PB}/api/collections/balance_history/records`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: token(owner.c) },
+      method: 'POST', headers: { 'content-type': 'application/json', ...token(owner.c) },
       body: JSON.stringify({ owner: owner.id, account: a.id, date: '2020-01-01', balance_cents: 1 }),
     })
     assert.ok([400, 403].includes(forged.status), `create: ${forged.status}`)

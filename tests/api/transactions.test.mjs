@@ -7,7 +7,7 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { PB, ready } from "./helpers.mjs";
+import { PB, asPb, ready } from "./helpers.mjs";
 
 const today = new Date().toISOString().slice(0, 10);
 const year = today.slice(0, 4);
@@ -430,10 +430,10 @@ describe("leaving a transaction out", () => {
       400,
     );
     // Straight to PocketBase with the person's own token, the rules still keep it to their row.
-    const token = decodeURIComponent(c.cookie.slice("pb_token=".length));
+    const token = asPb(c);
     const r = await fetch(
       `${PB}/api/collections/transactions/records/${t.id}`,
-      { headers: { authorization: token } },
+      { headers: { ...token } },
     );
     assert.equal((await r.json()).excluded, false);
   });

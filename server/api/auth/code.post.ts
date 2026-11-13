@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Enter your sign-in code' })
   }
   try {
-    const auth = await signInWithCode(mfaId, code.trim())
-    setAuthCookie(event, auth.token)
+    const auth = await signInWithCode(mfaId, code.trim(), deviceHeaders(event))
+    setAuthCookie(event, auth.token, auth.meta?.session)
     return { me: toMe(auth.record), recoveryCodesLeft: auth.meta?.recovery_codes_left }
   }
   catch (error) {

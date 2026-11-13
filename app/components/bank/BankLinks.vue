@@ -21,6 +21,40 @@ async function changed(saved: boolean) {
 
 const add = useAction()
 const work = useAction()
+
+// Linking a new bank and unlinking one want the password typed in the last
+// 15 minutes (pb_hooks/sessions.pb.js): the server says so, the card below
+// asks, and the step runs again once it's given.
+const confirm = useAction()
+const asking = ref<null | (() => void)>(null)
+const password = ref('')
+const wantsPassword = (e: unknown) => (e as { data?: { data?: { password?: string } } }).data?.data?.password === 'required'
+
+/** `step`, or null when the server wants the password first: then it asks, and `again` runs once it's given. */
+async function guarded<T>(step: () => Promise<T>, again: () => void): Promise<T | null> {
+  try {
+    return await step()
+  }
+  catch (e) {
+    if (!wantsPassword(e)) throw e
+    asking.value = again
+    return null
+  }
+}
+
+async function confirmPassword() {
+  if (!await confirm.succeed(() => $fetch('/api/auth/confirm-password', { method: 'POST', body: { password: password.value } }))) return
+  const again = asking.value
+  asking.value = null
+  password.value = ''
+  again?.()
+}
+
+function cancelPassword() {
+  asking.value = null
+  password.value = ''
+  confirm.error.value = ''
+}
 const busyId = ref('')
 const removingId = ref('')
 const notice = ref('')
@@ -98,8 +132,9 @@ async function signInToBank(token: string): Promise<{ publicToken: string, insti
 async function link() {
   notice.value = ''
   const r = await add.run(async () => {
-    const { link_token } = await $fetch('/api/bank-links/link-token', { method: 'POST', body: {} })
-    const done = await signInToBank(link_token)
+    const got = await guarded(() => $fetch('/api/bank-links/link-token', { method: 'POST', body: {} }), link)
+    if (!got) return null
+    const done = await signInToBank(got.link_token)
     if (!done) return null
     return await $fetch<LinkAnswer>('/api/bank-links', { method: 'POST', body: { public_token: done.publicToken, institution: done.institution } })
   })
@@ -138,10 +173,13 @@ async function sync(l: BankLink) {
 
 async function remove(l: BankLink) {
   busyId.value = l.id
-  const ok = await work.succeed(() => $fetch(`/api/bank-links/${l.id}/remove`, { method: 'POST' }))
+  let asked = false
+  const ok = await work.succeed(async () => {
+    asked = (await guarded(() => $fetch(`/api/bank-links/${l.id}/remove`, { method: 'POST' }).then(() => true), () => remove(l))) === null
+  })
   busyId.value = ''
   removingId.value = ''
-  if (!ok) return
+  if (!ok || asked) return
   notice.value = 'Unlinked. Its accounts and transactions stay in Cheddar, and no longer update.'
   await refresh()
   emit('changed')
@@ -170,8 +208,8 @@ function when(pb: string) {
         <summary>How to turn it on</summary>
         <p class="footnote">
           Linking lets you sign in to your bank so balances and transactions arrive on their own.
-          Whoever runs this Cheddar sets <code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code> and <code>BANK_LINK_KEY</code>
-          and deploys again (k8s/README.md, “First deploy”, step 6).
+          Whoever runs this Cheddar sets <code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code> and <code>DATA_KEYS</code>
+          and deploys again (k8s/README.md, “First deploy”, steps 6 and 9).
         </p>
       </details>
     </div>
@@ -240,6 +278,19 @@ function when(pb: string) {
         </div>
       </div>
     </template>
+
+    <form v-if="asking" class="card card-pad stack" @submit.prevent="confirmPassword">
+      <label class="headline" for="bank-password">Enter your password to continue</label>
+      <p class="footnote">Linking or unlinking a bank asks for it again once it's been more than 15 minutes since you last typed it.</p>
+      <input id="bank-password" v-model="password" class="input" type="password" autocomplete="current-password" required>
+      <p v-if="confirm.error.value" class="footnote warn" role="alert">{{ confirm.error.value }}</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="submit" :disabled="confirm.busy.value || !password">
+          <span v-if="confirm.busy.value" class="spinner" aria-hidden="true" /> Continue
+        </button>
+        <button class="btn btn-plain" type="button" @click="cancelPassword">Cancel</button>
+      </div>
+    </form>
 
     <p v-if="add.error.value || work.error.value" class="notice notice-error" role="alert">{{ add.error.value || work.error.value }}</p>
     <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
