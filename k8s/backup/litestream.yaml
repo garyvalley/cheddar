@@ -1,0 +1,94 @@
+# Backups (issue #22): Litestream, from the PocketBase image, streaming
+# pb_data/data.db to the NAS (k8s/backup/litestream.yml). Its own pod, not a
+# sidecar, so a replica that can't be reached never touches PocketBase. It
+# mounts the same volume on the same node, which SQLite's locks allow, and
+# keeps a read lock so nothing is checkpointed past what it has sent.
+#
+# scripts/deploy-k8s.sh applies this only once LITESTREAM_REPLICA_URL is set,
+# with the `pb-backup` Secret and the `litestream` ConfigMap beside it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pb-backup
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pb-backup
+  template:
+    metadata:
+      labels:
+        app: pb-backup
+      annotations:
+        cheddar/config: "${BACKUP_CONFIG}"
+    spec:
+      automountServiceAccountToken: false
+      # Where pb-data is (local-path, on primary's SSD).
+      nodeSelector:
+        kubernetes.io/hostname: primary
+      imagePullSecrets:
+        - name: ghcr
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: litestream
+          image: ${IMAGE_PREFIX}/pocketbase:${PB_TAG}
+          command: [litestream, replicate, -config, /etc/litestream/litestream.yml]
+          envFrom:
+            - secretRef:
+                name: pb-backup
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - { name: data, mountPath: /pb/pb_data }
+            - { name: config, mountPath: /etc/litestream, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pb-data
+        - name: config
+          configMap:
+            name: litestream
+        - name: tmp
+          emptyDir: {}
+---
+# It reaches only the replica: the NAS's address and port on the home
+# network (BACKUP_NAS_CIDR, BACKUP_NAS_PORT), or an S3 service over HTTPS on
+# the internet. Nothing reaches it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pb-backup
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: pb-backup
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: ${BACKUP_NAS_CIDR}
+      ports:
+        - { port: ${BACKUP_NAS_PORT}, protocol: TCP }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16]
+      ports:
+        - { port: 443, protocol: TCP }

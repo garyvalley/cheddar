@@ -37,6 +37,7 @@ Multi-user from day one: every user's data is theirs alone unless they share sel
 - Docker tmpfs mounts need `mode=1777` for the non-root nginx; the cluster's emptyDirs are already world-writable.
 - `server/data/` is not auto-imported: import `attempt`, `storeError`, `sessionFor` explicitly; `server/utils/` is. It's one module per concern (`accounts`, `transactions`, `imports`, `categories`, `budgets`, …) and one per page's read model in `server/data/reports/`; a new report reads through `transactionsBetween()` and `balanceHistory()` (`server/data/transactions.ts`).
 - `app/error.vue` replaces `app.vue`, so the title template in app.vue doesn't apply there.
+- Backups: Litestream (built from source in `Dockerfile.pocketbase`, the last age-encrypting release) runs as its own `pb-backup` pod on `pb-data` (`k8s/backup/`), applied only when `LITESTREAM_REPLICA_URL` is set. `scripts/restore-drill.sh` restores it (`--self-test` in CI); the age private key never goes to the cluster.
 - Images run as uid/gid 10001 with a read-only root filesystem; anything that writes goes to `/tmp` or `/pb/pb_data`.
 - pnpm's `trustPolicy: no-downgrade` refuses some old releases; add a reasoned entry under `trustPolicyExclude` in pnpm-workspace.yaml.
 - Stop a local server with `lsof -ti tcp:<port> -sTCP:LISTEN | xargs kill`: without `-sTCP:LISTEN` it also kills the browser connected to it, which loses its cookies and looks like a sign-out bug.

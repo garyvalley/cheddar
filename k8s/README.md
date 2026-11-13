@@ -42,6 +42,7 @@ browser ──https──▶ Cloudflare ──tunnel──▶ cloudflared ──
 | `app/nginx.yaml` | nginx: country block, rate limits, holding page. |
 | `app/cloudflared.yaml` | The tunnel. |
 | `app/network-policy.yaml` | Ingress and egress, closed except the request path. |
+| `backup/litestream.yaml`, `backup/litestream.yml` | Backups: Litestream to the NAS, encrypted. Applied once a replica is named (step 11). |
 
 ## First deploy
 
@@ -138,6 +139,28 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
     gh variable set HEALTHCHECK_URL --body https://hc-ping.com/<uuid> -R garyvalley/cheddar
     gh variable set HEALTHCHECK_SYNC_URL --body https://hc-ping.com/<other uuid> -R garyvalley/cheddar
     ```
+11. 👤 **Backups** (do this before real financial data goes in). See
+    "Backups" below for how they work. On the Mac, make the backup key with
+    the PocketBase image's `age-keygen` (or `brew install age`), and keep the
+    file in your password manager, never on the cluster:
+    ```sh
+    age-keygen -o ~/cheddar-backup.key   # prints "Public key: age1..."
+    ```
+    Then name the replica. For a bucket on the NAS's S3 (MinIO, Garage,
+    Synology's): `s3://<bucket>/cheddar`, with the endpoint and an access
+    key for that bucket only. For SFTP: `sftp://<user>:<password>@<nas>/<path>`.
+    ```sh
+    gh secret set LITESTREAM_REPLICA_URL --env production -R garyvalley/cheddar
+    gh variable set LITESTREAM_AGE_RECIPIENT --body age1... -R garyvalley/cheddar
+    gh variable set BACKUP_NAS_CIDR --body <nas ip>/32 -R garyvalley/cheddar
+    gh variable set BACKUP_NAS_PORT --body 9000 -R garyvalley/cheddar  # 22 for SFTP
+    # S3 only:
+    gh variable set LITESTREAM_ENDPOINT --body http://<nas ip>:9000 -R garyvalley/cheddar
+    gh secret set LITESTREAM_ACCESS_KEY_ID --env production -R garyvalley/cheddar
+    gh secret set LITESTREAM_SECRET_ACCESS_KEY --env production -R garyvalley/cheddar
+    ```
+    Deploy, then run the restore drill once (below) to see it work end to
+    end.
 
 The zone settings Homefile needed (Bot Fight Mode, Email Address
 Obfuscation and Rocket Loader off) are zone-wide, so they cover Cheddar too
@@ -183,13 +206,49 @@ stop at Cloudflare's edge.
   4. Drop the old key from `DATA_KEYS` (and unset `BANK_LINK_KEY` once v1 is
      retired) and deploy. `unreadable` counts values on a key that is gone:
      those bank links must be linked again.
+- **Backups** (step 11). The `pb-backup` pod (`backup/litestream.yaml`,
+  settings in `backup/litestream.yml`) runs Litestream from the PocketBase
+  image. It streams `data.db` to the replica within a second of each change,
+  encrypted with the age key, so the NAS's copy reads as noise without the
+  private key, which only you hold. It keeps a snapshot a day and 30 days of
+  changes, so the database can go back to any moment of the last month. It
+  is its own pod on the same volume, so a NAS that's down never stops
+  PocketBase. Check it with `… logs deploy/pb-backup`. The deploy refuses a
+  replica without an age recipient.
+  - **Restore drill** (monthly, and after changing the backup settings). On
+    the Mac, on the home network, with Docker:
+    ```sh
+    export LITESTREAM_REPLICA_URL=... LITESTREAM_ENDPOINT=... LITESTREAM_ACCESS_KEY_ID=... LITESTREAM_SECRET_ACCESS_KEY=...
+    AGE_IDENTITY_FILE=~/cheddar-backup.key scripts/restore-drill.sh            # the latest
+    AGE_IDENTITY_FILE=~/cheddar-backup.key scripts/restore-drill.sh --at 2026-11-13T04:00:00Z
+    ```
+    The drill restores into a private temp dir and starts a scratch
+    PocketBase on 127.0.0.1:8096 with no mail and no Plaid keys. It runs the
+    migrations against the copy and prints how many people, accounts,
+    transactions and balance-history rows it holds, then deletes the copy.
+    CI runs `scripts/restore-drill.sh --self-test` on every change: a
+    throwaway database through a replica in a temp dir, checked for plain
+    text and restored.
+  - **Restoring production** after a lost disk or a bad change:
+    1. Scale PocketBase to 0 (as admin:
+       `… scale deploy/pocketbase deploy/pb-backup --replicas=0`).
+    2. Run the drill's restore step into the `pb-data` volume: on `primary`,
+       restore to a file with the image's `litestream restore` (as the drill
+       does), and copy it over `pb_data/data.db`, deleting the `-wal` and
+       `-shm` files beside it.
+    3. Scale both back to 1.
+    Litestream starts a new generation from the restored file.
+  - **Turning backups off** is an admin step, since the deployer can't
+    delete: unset `LITESTREAM_REPLICA_URL`, then
+    `… delete deploy/pb-backup networkpolicy/pb-backup`.
 - Rotate the superuser: delete the `pocketbase-superuser` Secret (as admin)
   and deploy; PocketBase sets the new password on start.
 
 ## Not done yet
 
-- **Backups.** There are none yet. Before real financial data goes in, add
-  Litestream to the NAS as Homefile's `pb-replica` does, plus a restore drill.
+- **Backups are wired but off** until step 11's settings are in. Nothing
+  runs the drill on a schedule yet: it needs the key, which stays off the
+  cluster.
 - **Staging.** Homefile deploys to a staging namespace first; Cheddar
   deploys straight to production for now.
 - **Uptime alerts** are wired (step 10) but off until the two URLs are set.
