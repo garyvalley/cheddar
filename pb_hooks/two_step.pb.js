@@ -84,24 +84,26 @@ routerAdd("POST", "/api/two-step/app/confirm", (e) => {
 
   var row = twoStep.appRow(user.id)
   if (!row || !row.getString("pending_secret")) throw new BadRequestError("Start again: set up your authenticator app first.")
-  lockout.refuseIfLocked(row)
+  lockout.refuseIfLocked(row, "codes")
 
   var step = totp.matchStep(row.getString("pending_secret"), (e.requestInfo().body || {}).code, Date.now(), 0)
   if (step < 0) {
-    lockout.strike(row, "That code is wrong. Check it's the Cheddar entry in your app, and try the next one.",
-      "Too many wrong codes. Try again in 15 minutes.")
+    lockout.strike(row, "That code is wrong. Check it's the Cheddar entry in your app, and try the next one.", "codes")
   }
 
+  // Replacing an app that was already on is what a takeover would do: say so.
+  var replacing = !!row.getString("secret") && user.getBool("mfa_enabled")
   row.set("secret", row.getString("pending_secret"))
   row.set("pending_secret", "")
   row.set("last_step", step)
-  row.set("attempts", 0)
+  lockout.clear(row)
   var codes = twoStep.newRecoveryCodes(row)
   e.app.runInTransaction((txApp) => {
     txApp.save(row)
     user.set("mfa_enabled", true)
     txApp.save(user)
   })
+  if (replacing) twoStep.notify(user, "appChanged")
   return e.json(200, { recovery_codes: codes })
 }, $apis.requireAuth("users"))
 
@@ -117,6 +119,7 @@ routerAdd("POST", "/api/two-step/recovery-codes", (e) => {
   var row = twoStep.appRow(user.id)
   var codes = twoStep.newRecoveryCodes(row)
   e.app.save(row)
+  twoStep.notify(user, "recoveryCodesNew")
   return e.json(200, { recovery_codes: codes })
 }, $apis.requireAuth("users"))
 
@@ -132,14 +135,16 @@ routerAdd("POST", "/api/collections/users/auth-with-app-code", (e) => {
   var user = twoStep.passwordStepUser(body.mfaId)
   if (!user || twoStep.method(user) !== "app") throw new BadRequestError("Sign in with your password first.")
   var row = twoStep.appRow(user.id)
-  lockout.refuseIfLocked(row)
+  lockout.refuseIfLocked(row, "codes")
 
   var kind = twoStep.acceptCode(row, body.code)
   if (!kind) {
-    lockout.strike(row, "That code is wrong. Check it's the Cheddar entry in your app, or use a recovery code.",
-      "Too many wrong codes. Try again in 15 minutes.")
+    // Locked after a right password: whoever it is has the password, so the
+    // person hears about it.
+    lockout.strike(row, "That code is wrong. Check it's the Cheddar entry in your app, or use a recovery code.", "codes",
+      function (minutes) { twoStep.notify(user, "codesLocked", require(`${__hooks}/lib/lockout.js`).duration(minutes)) })
   }
-  row.set("attempts", 0)
+  lockout.clear(row)
   e.app.save(row)
 
   var meta = kind === "recovery" ? { recovery_codes_left: twoStep.recoveryHashes(row).length } : null

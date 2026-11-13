@@ -8,7 +8,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { APP, PB, PASSWORD, client, email, made, ready, signedIn, totp, withTwoStep } from './helpers.mjs'
+import { APP, PB, PASSWORD, client, email, made, ready, signedIn, superuser, totp, withTwoStep } from './helpers.mjs'
 
 describe('signing up', () => {
   test('says who may sign up, and never the list', async () => {
@@ -261,6 +261,45 @@ describe('two-step sign-in', () => {
       last = await b.call('POST', '/api/auth/code', { mfaId: s.json.twoStep.mfaId, code: '000000' })
     }
     assert.equal(last.status, 429)
+    assert.equal(last.json.message, 'Too many wrong codes. Try again in 15 minutes.')
+  })
+
+  test('each lockout lasts twice the one before, until a right code', async () => {
+    const { address, id, secret } = await ready()
+    const token = await superuser()
+    const row = async () => {
+      const r = await fetch(`${PB}/api/collections/user_totp/records?filter=${encodeURIComponent(`user='${id}'`)}`, { headers: { authorization: token } })
+      return (await r.json()).items[0]
+    }
+    // The lock ends early: a superuser clears it, as the wait would.
+    const unlock = async () => {
+      await fetch(`${PB}/api/collections/user_totp/records/${(await row()).id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', authorization: token }, body: JSON.stringify({ locked_until: '' }),
+      })
+    }
+    const fiveWrong = async () => {
+      let last
+      for (let i = 0; i < 5; i++) {
+        const b = client()
+        const s = await b.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
+        last = await b.call('POST', '/api/auth/code', { mfaId: s.json.twoStep.mfaId, code: '000000' })
+      }
+      return last.json.message
+    }
+    assert.match(await fiveWrong(), /15 minutes/)
+    await unlock()
+    assert.match(await fiveWrong(), /30 minutes/)
+    await unlock()
+    assert.match(await fiveWrong(), /1 hour/)
+    assert.equal((await row()).lockouts, 3)
+
+    // A right code starts again from 15 minutes.
+    await unlock()
+    const b = client()
+    const s = await b.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
+    const right = await b.call('POST', '/api/auth/code', { mfaId: s.json.twoStep.mfaId, code: totp.codeAt(secret, totp.stepAt(Date.now()) + 1) })
+    assert.equal(right.status, 200, JSON.stringify(right.json))
+    assert.equal((await row()).lockouts, 0)
   })
 
   test('once on, it cannot be switched off', async () => {
