@@ -8,6 +8,7 @@
  */
 import { isLiability } from './accounts.ts'
 import { summarize, type Category } from './categories.ts'
+import type { BudgetStatus } from './budgets.ts'
 
 /** An account with the balance it last showed; null when it has never had one. */
 export interface Holding {
@@ -256,4 +257,6 @@ export interface Overview {
   /** Whether any account is an investment account with a balance. */
   has_investments: boolean
   growth: Growth[]
+  /** This month's spending categories over their budget (shared/budgets.ts). */
+  over_budget: BudgetStatus[]
 }

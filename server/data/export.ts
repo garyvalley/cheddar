@@ -7,6 +7,7 @@ import {
 } from "~~/shared/export";
 import { listLinks } from "./bank-links";
 import { listGoals } from "./goals";
+import { listBudgets } from "./budgets";
 import { listCashflowItems } from "./cashflow";
 import {
   allTransactions,
@@ -43,6 +44,7 @@ export async function exportData(
     categories,
     links,
     goals,
+    budgets,
     cashflowItems,
   ] = await Promise.all([
     s.collection("users").getOne(callerId(s)),
@@ -57,6 +59,7 @@ export async function exportData(
     listCategories(s),
     listLinks(s),
     listGoals(s),
+    listBudgets(s),
     listCashflowItems(s),
   ]);
   const me = toMe(user);
@@ -81,6 +84,7 @@ export async function exportData(
       balance_cents: p.balance_cents,
     })),
     goals,
+    budgets,
     cashflow_items: cashflowItems,
     categories,
     category_rules,

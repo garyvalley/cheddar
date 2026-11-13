@@ -48,6 +48,8 @@ import {
   type StatementFormat,
   type StatementRow,
 } from "~~/shared/statements";
+import { budgetFor, overBudget } from "~~/shared/budgets";
+import { listBudgets } from "./budgets";
 import { callerId, type Session } from "./session";
 
 /**
@@ -338,15 +340,39 @@ export async function spendingSummary(
         splits: unknown;
       }[],
     );
-  const [now, before, list] = await Promise.all([
+  const [now, before, list, budgets] = await Promise.all([
     rows(q),
     rows(q.previous),
     listCategories(s),
+    listBudgets(s),
   ]);
+  const summary = summarize(now, list);
+  // Each budget scaled to the span shown; a budgeted category with nothing
+  // spent yet is listed too, at zero.
+  const budget = new Map(
+    budgets.map((b) => [b.category, budgetFor(b.amount_cents, q.from, q.to)]),
+  );
+  for (const c of summary.categories)
+    if (budget.has(c.id)) c.budget_cents = budget.get(c.id);
+  const listed = new Set(summary.categories.map((c) => c.id));
+  const unspent = list
+    .filter((c) => c.spending && budget.has(c.id) && !listed.has(c.id))
+    .map((c) => ({
+      id: c.id,
+      label: c.label,
+      spending: true,
+      custom: c.custom,
+      shared: c.shared,
+      total_cents: 0,
+      count: 0,
+      budget_cents: budget.get(c.id),
+    }));
+  const at = summary.categories.findIndex((c) => !c.spending);
+  summary.categories.splice(at === -1 ? summary.categories.length : at, 0, ...unspent);
   return {
     from: q.from,
     to: q.to,
-    ...summarize(now, list),
+    ...summary,
     previous_spent_cents: summarize(before, list).spent_cents,
   };
 }
@@ -631,7 +657,7 @@ export async function overview(
   today = localToday(),
 ): Promise<Overview> {
   const months = lastMonths(today, 12);
-  const [all, fetched, kept, list] = await Promise.all([
+  const [all, fetched, kept, list, budgets] = await Promise.all([
     counted(s),
     s.collection("transactions").getFullList({
       fields: "account,posted,amount_cents,category,excluded,splits",
@@ -645,9 +671,14 @@ export async function overview(
       sort: "date",
     }) as Promise<unknown> as Promise<BalancePoint[]>,
     listCategories(s),
+    listBudgets(s),
   ]);
   // Totals count a split one as its parts (shared/splits.ts).
   const rows = expandSplits(fetched);
+  const thisMonth = summarize(
+    rows.filter((r) => !r.excluded && r.posted.startsWith(today.slice(0, 7))),
+    list,
+  ).categories;
   const { open, accounts, history } = asHeld(all, kept);
   const invested = accounts.filter(
     (a) => isInvestment(a.kind) && a.balance_cents !== null,
@@ -685,6 +716,10 @@ export async function overview(
     ),
     growth: GROWTH_PERIODS.map((p) =>
       growth(accounts, history, transfers, p.id, today),
+    ),
+    over_budget: overBudget(
+      thisMonth,
+      budgets.map((b) => ({ category: b.category, budget_cents: b.amount_cents })),
     ),
   };
 }

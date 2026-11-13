@@ -132,6 +132,22 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
       </div>
     </section>
 
+    <!-- Worth a look: categories over this month's budget. -->
+    <section v-if="ov?.over_budget.length" class="group" aria-labelledby="budget-title">
+      <div class="card">
+        <div class="panel-head">
+          <h2 id="budget-title" class="panel-title">Over budget this month</h2>
+        </div>
+        <NuxtLink v-for="b in ov.over_budget" :key="b.id" :to="{ path: '/spending', query: { category: b.id } }" class="row step">
+          <span class="row-label">
+            <span class="step-label">{{ b.label }}</span>
+            <span class="footnote"><span class="loss">{{ formatCents(b.spent_cents - b.budget_cents) }} over</span> · {{ formatCents(b.spent_cents) }} of {{ formatCents(b.budget_cents) }}</span>
+          </span>
+          <AppIcon name="chevron" class="chev" />
+        </NuxtLink>
+      </div>
+    </section>
+
     <p v-if="error" class="notice notice-error group" role="alert">{{ errorMessage(error) }}</p>
 
     <div class="dash">
