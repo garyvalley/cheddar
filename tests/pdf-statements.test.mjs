@@ -64,6 +64,22 @@ describe('a checking statement', () => {
       ['2026-11-01', 'RENT PAYMENT', -180000],
     ])
     assert.deepEqual(read.problems, [])
+    // Its ending balance, on the last day of its period.
+    assert.deepEqual(read.closing, { cents: 339550, date: '2026-11-04' })
+  })
+
+  test('with no "Ending balance" line, closes on its last running balance', async () => {
+    const text = await textOf([rows(720, [
+      period, head,
+      [[50, '10/07'], [100, 'COFFEE SHOP #12'], [400, '4.50'], [500, '1,995.50']],
+      [[50, '10/15'], [100, 'PAYROLL'], [400, '3,200.00'], [500, '5,195.50']],
+    ])])
+    assert.deepEqual(readStatement('s.pdf', text).closing, { cents: 519550, date: '2026-11-04' })
+  })
+
+  test('with no balance anywhere, says none', async () => {
+    const text = await textOf([rows(720, [period, [[50, '10/07'], [100, 'COFFEE'], [400, '-4.50']]])])
+    assert.equal(readStatement('s.pdf', text).closing, undefined)
   })
 
   test('with no balance, takes the sign from the heading the line is under', async () => {
@@ -106,6 +122,8 @@ describe('a card statement', () => {
   test('charges are money out and payments money in, and December lands in the year before January', async () => {
     const text = await textOf([rows(720, [
       [[50, 'Opening/Closing Date 12/05/25 - 01/04/26']],
+      [[50, 'Previous Balance'], [400, '$1,000.00']],
+      [[50, 'New Balance'], [400, '$1,536.85']],
       [[50, 'Payment Due Date: 02/01/26'], [400, 'Minimum Payment Due: $35.00']],
       [[50, 'PAYMENTS AND OTHER CREDITS']],
       [[50, '12/12'], [100, 'PAYMENT THANK YOU'], [400, '-500.00']],
@@ -121,6 +139,8 @@ describe('a card statement', () => {
       ['2026-01-02', 'CAFE', -475],
       ['2026-01-03', 'RETURN BOOKSHOP', 1000],
     ])
+    // What a card owes is the account's negative balance, as of the closing date, not the due date.
+    assert.deepEqual(read.closing, { cents: -153685, date: '2026-01-04' })
   })
 
   test('unsigned, its sections say which way', async () => {
@@ -147,6 +167,7 @@ describe('a Wells Fargo card statement', () => {
     const text = await textOf([rows(740, [
       [[40, 'Statement Period 09/18/2026 to 10/18/2026']],
       [[40, 'Payment Due Date'], [200, '11/12/2026']],
+      [[40, '= New Balance'], [200, '$2,500.00'], [300, 'Available Credit'], [450, '$7,500.00']],
       [[40, '- Payments'], [200, '$500.00'], [300, 'Cash Advance Limit'], [450, '$5,000']],
       [[40, '+ Purchases, Balance Transfers &'], [200, '$1,390.12']],
       [[40, 'Card'], [80, 'Trans'], [115, 'Post'], [150, 'Reference Number'], [260, 'Description'], [460, 'Credits'], [520, 'Charges']],
@@ -177,6 +198,7 @@ describe('a Wells Fargo card statement', () => {
       ['2026-10-17', 'CORNER CAFE 555-0100 OR', -8987],
     ])
     assert.equal(read.rows.filter(r => r.amount_cents < 0).reduce((t, r) => t + r.amount_cents, 0), -139012)
+    assert.deepEqual(read.closing, { cents: -250000, date: '2026-10-18' })
   })
 })
 

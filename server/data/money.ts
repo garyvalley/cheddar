@@ -67,11 +67,12 @@ export async function createAccount(s: Session, a: NewAccount): Promise<Account>
 }
 
 /**
- * Sets the balance of an account no bank link keeps up to date, as of today;
- * pb_hooks/balances.pb.js adds it to the account's history.
+ * Sets the balance of an account no bank link keeps up to date, as of `date`
+ * (today for one entered by hand, a statement's closing day for one read from
+ * it); pb_hooks/balances.pb.js adds it to the account's history.
  */
-export async function setBalance(s: Session, id: string, cents: number, today: string): Promise<Account> {
-  return toAccount(await s.collection('accounts').update(id, { balance_cents: cents, balance_date: today }))
+export async function setBalance(s: Session, id: string, cents: number, date: string): Promise<Account> {
+  return toAccount(await s.collection('accounts').update(id, { balance_cents: cents, balance_date: date }))
 }
 
 /** Deletes the account with every transaction and import in it. */

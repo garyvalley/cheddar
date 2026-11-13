@@ -50,10 +50,21 @@ export interface AccountHint {
   kind?: 'checking' | 'savings' | 'credit_card'
 }
 
+/**
+ * What the statement says the account held at its end: signed as accounts
+ * keep it (what a card or loan owes is negative), on the day it closed.
+ */
+export interface ClosingBalance {
+  cents: number
+  date: string
+}
+
 export interface Statement {
   format: StatementFormat
   rows: StatementRow[]
   problems: RowProblem[]
+  /** PDF and OFX only, when the file prints one. */
+  closing?: ClosingBalance
   /** CSV only: the headings, and the columns this read used. */
   columns?: string[]
   mapping?: CsvMapping
@@ -320,7 +331,7 @@ function decodeEntities(s: string): string {
     ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'', nbsp: ' ' })[e]!)
 }
 
-export function readOfx(text: string): { rows: StatementRow[], problems: RowProblem[], account?: AccountHint } {
+export function readOfx(text: string): { rows: StatementRow[], problems: RowProblem[], account?: AccountHint, closing?: ClosingBalance } {
   const rows: StatementRow[] = []
   const problems: RowProblem[] = []
   const pattern = /<STMTTRN>([\s\S]*?)(?=<\/STMTTRN>|<STMTTRN>|<\/BANKTRANLIST>)/gi
@@ -348,7 +359,12 @@ export function readOfx(text: string): { rows: StatementRow[], problems: RowProb
     else if (type === 'SAVINGS') account.kind = 'savings'
     else if (type === 'CREDITLINE') account.kind = 'credit_card'
   }
-  return { rows, problems, ...(Object.keys(account).length ? { account } : {}) }
+  // The ledger balance, signed as OFX signs it (a card's debt is negative, as accounts keep it).
+  const ledger = /<LEDGERBAL>([\s\S]*?)(?=<\/LEDGERBAL>|<AVAILBAL>|$)/i.exec(text)?.[1] ?? ''
+  const balance = parseAmount(element(ledger, 'BALAMT').replace(/^([+-]?\d+),(\d{1,2})$/, '$1.$2'))
+  const asOf = parseDate(element(ledger, 'DTASOF').slice(0, 8)) ?? dateRange(rows)?.last
+  const closing = balance !== null && asOf ? { cents: balance, date: asOf } : undefined
+  return { rows, problems, ...(Object.keys(account).length ? { account } : {}), ...(closing ? { closing } : {}) }
 }
 
 /** The earliest and latest dates among `rows`. */

@@ -21,7 +21,7 @@
  * The person sees every row in the preview first, and can flip them all.
  */
 
-import { parseAmount, type RowProblem, type StatementRow } from './statements.ts'
+import { parseAmount, type ClosingBalance, type RowProblem, type StatementRow } from './statements.ts'
 
 /** The first line of the text the browser sends for a PDF, so a CSV is never read as one. */
 export const PDF_TEXT_MARK = '%cheddar-pdf-text 1'
@@ -126,6 +126,12 @@ const FULL_DATE = new RegExp(`\\b(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4}|\\d{2})\\b|
 
 /** Lines that hold a balance or a total, not a transaction, even when they start with a date. */
 const NOT_A_TRANSACTION = /\b(beginning|opening|starting|previous|prior|ending|closing|new|daily|average|available|statement)\s+balance\b|\bbalance\s+(forward|brought|carried)\b|\b(minimum\s+payment|payment\s+due|credit\s+limit|available\s+credit|credit\s+available)\b|^total\b|\btotals?\b.*\b(for|this)\s+(period|month|cycle)\b/i
+/** The balance the statement ends on: "Ending balance", "Closing balance", a card's "New Balance". */
+const CLOSING_LINE = /\b(ending|closing|new)\s+balance\b/i
+const PERIOD_DATE = `(?:\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|${MONTH} \\d{1,2},? \\d{4})`
+/** The statement's period ("10/05/2026 - 11/04/2026", "October 5, 2026 through November 4, 2026"), or the day it closed. */
+const PERIOD = new RegExp(`${PERIOD_DATE}\\s*(?:-|–|to|through|thru)\\s*(${PERIOD_DATE})`, 'i')
+const CLOSING_DATE = new RegExp(`\\bclosing\\s+date\\b\\D{0,20}?(${PERIOD_DATE})`, 'i')
 const BALANCE_LINE = /\b(beginning|opening|starting|previous|prior)\s+balance\b|\bbalance\s+(forward|brought)\b/i
 
 /** Headings that say the lines under them are money in, or money out. Checked against lines with no amount, or short ones. */
@@ -218,7 +224,7 @@ interface Candidate {
 }
 
 /** The statement's transactions, read from the text pdfText() made. */
-export function readPdfText(text: string, options: PdfOptions = {}): { rows: StatementRow[], problems: RowProblem[] } {
+export function readPdfText(text: string, options: PdfOptions = {}): { rows: StatementRow[], problems: RowProblem[], closing?: ClosingBalance } {
   const lines = text.replace(/\r/g, '').split('\n')
   const today = options.today ?? new Date().toISOString().slice(0, 10)
   const known = fullDates(lines)
@@ -291,5 +297,43 @@ export function readPdfText(text: string, options: PdfOptions = {}): { rows: Sta
     return { posted: c.posted, amount_cents: cents === 0 ? 0 : cents, description: c.description }
   })
   if (!rows.length && !problems.length) problems.push({ line: 1, problem: 'No line starts with a date and ends with an amount' })
-  return { rows, problems }
+  const closing = rows.length ? closingBalance(lines, found.some(c => c.balance !== null) ? balance : null, rows, known, today, options) : null
+  return { rows, problems, ...(closing ? { closing } : {}) }
+}
+
+/**
+ * The balance the statement closes on, and the day: the amount on its
+ * "Ending balance" or "New Balance" line, else the last running balance; on
+ * the last day of its period, else its closing date, else its last
+ * transaction's. A card's statement prints what's owed as positive, which an
+ * account keeps as negative.
+ */
+function closingBalance(lines: string[], running: number | null, rows: StatementRow[], known: string[], today: string, options: PdfOptions): ClosingBalance | null {
+  let cents: number | null = null
+  for (const raw of lines) {
+    const line = raw.replace(/\s+/g, ' ').trim()
+    const label = CLOSING_LINE.exec(line)
+    if (!label) continue
+    // The first amount after the words: a summary may print another figure further along the line.
+    const after = line.slice(label.index + label[0].length)
+    const first = new RegExp(`(?:^|\\s)(${AMOUNT})(?=\\s|$)`, 'i').exec(after)
+    const amount = first && printed(first[1]!)
+    if (!amount) continue
+    cents = options.liability ? (amount.marker === 'CR' ? Math.abs(amount.cents) : -amount.cents) : (amount.marker === 'DR' ? -Math.abs(amount.cents) : amount.cents)
+    break
+  }
+  if (cents === null) {
+    if (running === null) return null
+    cents = options.liability ? -running : running
+  }
+
+  let date: string | null = null
+  for (const raw of lines) {
+    const line = raw.replace(/\s+/g, ' ').trim()
+    const m = PERIOD.exec(line) ?? CLOSING_DATE.exec(line)
+    if (m && (date = placeDate(m[1]!.replace(/,/g, '').replace(/\s+/g, ' '), known, today))) break
+  }
+  date ??= rows.reduce((last, r) => (r.posted > last ? r.posted : last), '')
+  if (date > today) date = today
+  return { cents: cents === 0 ? 0 : cents, date }
 }

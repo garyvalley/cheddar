@@ -109,7 +109,8 @@ VERSION:102
 <BANKTRANLIST><DTSTART>20261001<DTEND>20261031
 <STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261003120000.000[-7:PDT]<TRNAMT>-42.17<FITID>2026100301<NAME>GROCERY &amp; CO<MEMO>POS PURCHASE
 <STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261015<TRNAMT>2500.00<FITID>2026101502<NAME>PAYROLL
-</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`
+</BANKTRANLIST><LEDGERBAL><BALAMT>3157.83<DTASOF>20261031</LEDGERBAL><AVAILBAL><BALAMT>3000.00<DTASOF>20261031</AVAILBAL>
+</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`
 
   test('reads OFX 1 (SGML, unclosed elements) with its ids and account', () => {
     assert.equal(detectFormat('download.qfx', ''), 'ofx')
@@ -121,16 +122,19 @@ VERSION:102
       { posted: '2026-10-15', amount_cents: 250000, description: 'PAYROLL', fitid: '2026101502' },
     ])
     assert.deepEqual(s.account, { last4: '6789', kind: 'checking' })
+    // The ledger balance, not the available one.
+    assert.deepEqual(s.closing, { cents: 315783, date: '2026-10-31' })
   })
 
   test('reads OFX 2 (XML) for a card', () => {
     const xml = `<?xml version="1.0"?><?OFX OFXHEADER="200"?><OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS>
 <CCACCTFROM><ACCTID>4111111111111111</ACCTID></CCACCTFROM><BANKTRANLIST>
 <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261101</DTPOSTED><TRNAMT>-9.99</TRNAMT><FITID>A1</FITID><NAME>STREAMING</NAME></STMTTRN>
-</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>`
+</BANKTRANLIST><LEDGERBAL><BALAMT>-421.50</BALAMT><DTASOF>20261104</DTASOF></LEDGERBAL></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>`
     const s = readStatement('card.ofx', xml)
     assert.deepEqual(s.rows, [{ posted: '2026-11-01', amount_cents: -999, description: 'STREAMING', fitid: 'A1' }])
     assert.deepEqual(s.account, { last4: '1111', kind: 'credit_card' })
+    assert.deepEqual(s.closing, { cents: -42150, date: '2026-11-04' })
   })
 
   test('says so when a file has no transactions', () => {
