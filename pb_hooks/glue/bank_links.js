@@ -1,9 +1,11 @@
 /// <reference path="../../pb_data/types.d.ts" />
 
 // ---------------------------------------------------------------------------
-// lib/plaid.js with the environment read, the requests sent and the records
-// written. Required inside a handler body, not at file scope: PocketBase's
-// JSVM pool does not share file-level declarations with hook callbacks.
+// Bank links' records: linking, syncing and removing a link through its
+// provider (glue/providers.js; Plaid is the only one so far), and writing
+// what it sends. Nothing here knows which provider it is. Required inside a
+// handler body, not at file scope: PocketBase's JSVM pool does not share
+// file-level declarations with hook callbacks.
 //
 // Writes go through the app, not the record API, so they bypass collection
 // rules: every account and transaction written here takes its owner from the
@@ -13,15 +15,24 @@
 var plaid = require(`${__hooks}/lib/plaid.js`);
 var dates = require(`${__hooks}/lib/dates.js`);
 var overlap = require(`${__hooks}/lib/gen/overlap.js`);
+var providers = require(`${__hooks}/glue/providers.js`);
 
-function cfg() {
-  return plaid.config($os.getenv);
+var ProviderError = providers.ProviderError;
+
+/** 32 characters that encrypt each link's access token (BANK_LINK_KEY). */
+function key() {
+  return String($os.getenv("BANK_LINK_KEY") || "");
 }
 
-/** Why `owner` can't make one more link (lib/plaid.js linkLimit), or null. */
+/** Linking is on with the key and the current provider's settings. */
+function isEnabled() {
+  return key().length === 32 && providers.current().enabled();
+}
+
+/** Why `owner` can't make one more link (lib/plaid.js linkLimit, on the provider's limits), or null. */
 function linkLimitFor(app, owner) {
   return plaid.linkLimit(
-    cfg(),
+    providers.current().limits(),
     app.countRecords("bank_links", $dbx.hashExp({ owner: owner })),
     app.countRecords("bank_links"),
   );
@@ -42,66 +53,56 @@ function checkLinkLimit(app, owner) {
   throw new BadRequestError(hit.message);
 }
 
-/** A failed Plaid call: `failure` is lib/plaid.js's { code, status, message }. */
-function PlaidError(failure) {
-  this.failure = failure;
-}
-
-/** One Plaid call: its JSON on success, or throws a PlaidError. */
-function call(path, body) {
-  var res;
-  try {
-    res = $http.send(plaid.request(cfg(), path, body));
-  } catch (_) {
-    throw new PlaidError(plaid.failure(0, null));
-  }
-  if (res.statusCode !== 200) {
-    var f = plaid.failure(res.statusCode, res.json);
-    console.log("[plaid] " + path + " failed: " + f.code);
-    throw new PlaidError(f);
-  }
-  return res.json;
-}
-
 function encrypt(text) {
-  return $security.encrypt(text, cfg().key);
+  return $security.encrypt(text, key());
 }
 
 /** The link's access token, or null if it can't be read (BANK_LINK_KEY changed). */
 function accessOf(link) {
   try {
-    return toString($security.decrypt(link.getString("access"), cfg().key));
+    return toString($security.decrypt(link.getString("access"), key()));
   } catch (_) {
     return null;
   }
 }
 
-/** A link_token for Plaid Link: a new link, or with `link`, signing in again to that one. */
+/** What the page opens the provider's sign-in with: a new link, or with `link`, signing in again to that one. */
 function linkToken(userId, link) {
   var access = null;
   if (link) {
     access = accessOf(link);
     if (!access)
-      throw new PlaidError({
+      throw new ProviderError({
         code: "UNREADABLE",
         status: "reconnect",
         message:
           "Cheddar can no longer read this link. Remove it and link the bank again.",
       });
   }
-  return String(
-    call("/link/token/create", plaid.linkTokenBody(userId, access))
-      .link_token || "",
-  );
+  return (link ? providers.of(link.getString("provider")) : providers.current()).linkToken(userId, access);
 }
 
-/** Swaps Link's public_token for an access token and Plaid's id for the link. */
-function exchange(publicToken) {
-  var out = call("/item/public_token/exchange", { public_token: publicToken });
-  return {
-    access: String(out.access_token || ""),
-    itemId: String(out.item_id || ""),
-  };
+/**
+ * Makes a link for `owner` from what the provider's sign-in handed the page,
+ * and syncs it for the first time. Answers { link, sync }.
+ */
+function create(app, owner, publicToken, institutionName, today) {
+  var provider = providers.current();
+  var token = provider.exchange(publicToken);
+  if (!token.access) throw new ProviderError({ code: "NO_ACCESS", status: "error", message: "The bank link didn't finish. Try again." });
+  var link = new Record(app.findCollectionByNameOrId("bank_links"));
+  link.set("owner", owner);
+  link.set("provider", provider.name);
+  link.set("access", encrypt(token.access));
+  link.set("item_id", token.itemId.slice(0, 200));
+  // The sign-in's own word for the bank, until the provider names it.
+  var institution = provider.clean(institutionName).slice(0, 100);
+  link.set("institutions", institution ? [institution] : []);
+  link.set("status", "ok");
+  app.save(link);
+  // The link is saved: a failed first sync is the link's status to show, not a failed request.
+  var result = sync(app, link, today);
+  return { link: app.findRecordById("bank_links", link.id), sync: result };
 }
 
 /** The link as the app shows it. */
@@ -287,22 +288,6 @@ function upsert(txApp, collection, account, t) {
   return outcome;
 }
 
-/** Fetches every page of what's changed since `cursor`. Answers { added, modified, removed, cursor }. */
-function fetchChanges(access, cursor) {
-  var all = { added: [], modified: [], removed: [], cursor: cursor };
-  for (var page = 0; page < plaid.MAX_PAGES; page++) {
-    var body = { access_token: access, count: 500 };
-    if (all.cursor) body.cursor = all.cursor;
-    var p = plaid.syncPage(call("/transactions/sync", body));
-    all.added = all.added.concat(p.added);
-    all.modified = all.modified.concat(p.modified);
-    all.removed = all.removed.concat(p.removed);
-    all.cursor = p.cursor || all.cursor;
-    if (!p.more) break;
-  }
-  return all;
-}
-
 /** Records a failed sync on the link; answers the sync result. */
 function failed(app, link, f, result) {
   link.set("status", f.status);
@@ -337,37 +322,23 @@ function sync(app, link, today) {
     );
   }
 
-  var accounts;
+  var found;
   var changes;
   try {
-    accounts = call("/accounts/get", { access_token: access });
-    try {
-      changes = fetchChanges(access, link.getString("cursor"));
-    } catch (err) {
-      // The bank's data changed between pages: start again from the saved cursor, once.
-      if (
-        !(err instanceof PlaidError) ||
-        err.failure.code !== "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
-      )
-        throw err;
-      changes = fetchChanges(access, link.getString("cursor"));
-    }
+    var provider = providers.of(link.getString("provider"));
+    found = provider.accounts(
+      access,
+      (link.get("institutions") || [])[0] || "",
+      dates.personToday(today, now),
+    );
+    changes = provider.changes(access, link.getString("cursor"));
   } catch (err) {
-    if (err instanceof PlaidError)
+    if (err instanceof ProviderError)
       return failed(app, link, err.failure, result);
     throw err;
   }
-
-  var item = accounts.item || {};
-  var institution =
-    plaid.clean(item.institution_name) ||
-    (link.get("institutions") || [])[0] ||
-    "";
-  var rows = plaid.accountRows(
-    accounts,
-    institution,
-    dates.personToday(today, now),
-  );
+  var institution = found.institution;
+  var rows = found.rows;
 
   app.runInTransaction(function (txApp) {
     var byPlaidId = {};
@@ -422,8 +393,8 @@ function ownLink(app, auth, id) {
 }
 
 /**
- * Tells Plaid to forget a link's access token, so no one is billed for it and
- * Plaid keeps no hold on the bank. Called by bank_links.pb.js once a link's
+ * Tells the provider to forget a link's access token, so no one is billed for
+ * it and the provider keeps no hold on the bank. Called by bank_links.pb.js once a link's
  * row is gone, however it went: unlinking, deleting the whole Cheddar account
  * (the row goes by cascade), or a superuser in the admin UI. Best effort, and
  * never throws: the row is already deleted, and with it the only copy of the
@@ -431,14 +402,15 @@ function ownLink(app, auth, id) {
  */
 function forget(link) {
   try {
-    if (!plaid.isEnabled(cfg())) return;
+    var provider = providers.of(link.getString("provider"));
+    if (!provider.enabled()) return;
     var access = accessOf(link);
     if (!access) return;
-    call("/item/remove", { access_token: access });
+    provider.remove(access);
   } catch (err) {
-    // Already gone at Plaid, or Plaid unreachable.
+    // Already gone at the provider, or it can't be reached.
     console.log(
-      "[plaid] /item/remove for " +
+      "[bank_links] remove at the provider for " +
         link.id +
         " failed: " +
         (err && err.failure ? err.failure.code : err),
@@ -465,13 +437,15 @@ function remove(app, link) {
 }
 
 module.exports = {
-  PlaidError: PlaidError,
-  cfg: cfg,
+  ProviderError: ProviderError,
+  isEnabled: isEnabled,
+  minSyncGap: function (link) {
+    return providers.of(link.getString("provider")).MIN_SYNC_GAP_MS;
+  },
   checkLinkLimit: checkLinkLimit,
   linkLimitFor: linkLimitFor,
-  encrypt: encrypt,
   linkToken: linkToken,
-  exchange: exchange,
+  create: create,
   summary: summary,
   sync: sync,
   ownLink: ownLink,

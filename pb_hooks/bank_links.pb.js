@@ -1,10 +1,11 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 // ---------------------------------------------------------------------------
-// Linking bank and card accounts through Plaid: the person signs in to their
-// bank in Plaid Link, and Cheddar keeps only the resulting access token,
-// encrypted -- never the bank password (lib/plaid.js says how it works).
-// Off unless BANK_LINK_KEY, PLAID_CLIENT_ID and PLAID_SECRET are all set.
+// Linking bank and card accounts through a provider (glue/providers.js; Plaid
+// today): the person signs in to their bank in the provider's window, and
+// Cheddar keeps only the resulting access token, encrypted -- never the bank
+// password (lib/plaid.js says how Plaid's works). Off unless BANK_LINK_KEY
+// and the provider's settings (PLAID_CLIENT_ID, PLAID_SECRET) are all set.
 //
 //   GET  /api/bank-links                   -> { enabled, links: [summary], full };
 //                                          full: why no new link can be made, or null
@@ -41,21 +42,20 @@ onRecordUpdateRequest((e) => {
 }, "accounts")
 
 // However a link's row goes -- unlinking, the cascade when its owner deletes
-// their account, or a superuser in the admin UI -- Plaid is told to forget it.
-// After the delete commits, so a cascade never waits on Plaid inside its
+// their account, or a superuser in the admin UI -- its provider is told to
+// forget it. After the delete commits, so a cascade never waits on it inside its
 // transaction, and a delete that fails leaves the link working.
 onRecordAfterDeleteSuccess((e) => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
+  var glue = require(`${__hooks}/glue/bank_links.js`)
   glue.forget(e.record)
   e.next()
 }, "bank_links")
 
 routerAdd("GET", "/api/bank-links", (e) => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
-  var plaid = require(`${__hooks}/lib/plaid.js`)
+  var glue = require(`${__hooks}/glue/bank_links.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
   var links = e.app.findRecordsByFilter("bank_links", "owner = {:owner}", "created", 0, 0, { owner: e.auth.id })
-  var enabled = plaid.isEnabled(glue.cfg())
+  var enabled = glue.isEnabled()
   var hit = enabled ? glue.linkLimitFor(e.app, e.auth.id) : null
   return e.json(200, {
     enabled: enabled,
@@ -65,10 +65,9 @@ routerAdd("GET", "/api/bank-links", (e) => {
 }, $apis.requireAuth("users"))
 
 routerAdd("POST", "/api/bank-links/link-token", (e) => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
-  var plaid = require(`${__hooks}/lib/plaid.js`)
+  var glue = require(`${__hooks}/glue/bank_links.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
-  if (!plaid.isEnabled(glue.cfg())) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
+  if (!glue.isEnabled()) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
   var id = String((e.requestInfo().body || {}).link || "")
   var link = id ? glue.ownLink(e.app, e.auth, id) : null
   if (!link) glue.checkLinkLimit(e.app, e.auth.id)
@@ -76,61 +75,42 @@ routerAdd("POST", "/api/bank-links/link-token", (e) => {
     return e.json(200, { link_token: glue.linkToken(e.auth.id, link) })
   }
   catch (err) {
-    if (err instanceof glue.PlaidError) throw new BadRequestError(err.failure.message)
+    if (err instanceof glue.ProviderError) throw new BadRequestError(err.failure.message)
     throw err
   }
 }, $apis.requireAuth("users"))
 
 routerAdd("POST", "/api/bank-links", (e) => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
-  var plaid = require(`${__hooks}/lib/plaid.js`)
+  var glue = require(`${__hooks}/glue/bank_links.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
-  if (!plaid.isEnabled(glue.cfg())) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
-
+  if (!glue.isEnabled()) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
   var body = e.requestInfo().body || {}
   var publicToken = String(body.public_token || "").trim()
-  if (!/^public-[a-z]+-[A-Za-z0-9-]{8,200}$/.test(publicToken)) throw new BadRequestError("Plaid didn't finish linking. Try again.")
+  if (!publicToken || publicToken.length > 300) throw new BadRequestError("The bank link didn't finish. Try again.")
   glue.checkLinkLimit(e.app, e.auth.id)
-
-  var token
+  var made
   try {
-    token = glue.exchange(publicToken)
+    made = glue.create(e.app, e.auth.id, publicToken, body.institution, body.today)
   }
   catch (err) {
-    if (err instanceof glue.PlaidError) throw new BadRequestError(err.failure.message)
+    if (err instanceof glue.ProviderError) throw new BadRequestError(err.failure.message)
     throw err
   }
-  if (!token.access) throw new BadRequestError("Plaid didn't finish linking. Try again.")
-
-  var link = new Record(e.app.findCollectionByNameOrId("bank_links"))
-  link.set("owner", e.auth.id)
-  link.set("provider", "plaid")
-  link.set("access", glue.encrypt(token.access))
-  link.set("item_id", token.itemId.slice(0, 200))
-  // Link's own word for the bank, until Plaid's /accounts/get names it.
-  var institution = plaid.clean(body.institution).slice(0, 100)
-  link.set("institutions", institution ? [institution] : [])
-  link.set("status", "ok")
-  e.app.save(link)
-
-  // The link is saved: a failed first sync is the link's status to show, not a failed request.
-  var result = glue.sync(e.app, link, (e.requestInfo().body || {}).today)
-  return e.json(200, { link: glue.summary(e.app, e.app.findRecordById("bank_links", link.id)), sync: result })
+  return e.json(200, { link: glue.summary(e.app, made.link), sync: made.sync })
 }, $apis.requireAuth("users"))
 
 routerAdd("POST", "/api/bank-links/{id}/sync", (e) => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
-  var plaid = require(`${__hooks}/lib/plaid.js`)
+  var glue = require(`${__hooks}/glue/bank_links.js`)
   var dates = require(`${__hooks}/lib/dates.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
-  if (!plaid.isEnabled(glue.cfg())) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
+  if (!glue.isEnabled()) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
   var link = glue.ownLink(e.app, e.auth, e.request.pathValue("id"))
 
   // A tap moments after the last sync answers that one, rather than asking
-  // Plaid again -- unless the person just signed in to the bank again.
+  // the provider again -- unless the person just signed in to the bank again.
   var fresh = !!(e.requestInfo().body || {}).reconnected
   var last = dates.parsePb(link.getString("last_attempt"))
-  if (!fresh && last && Date.now() - last.getTime() < plaid.MIN_SYNC_GAP_MS) {
+  if (!fresh && last && Date.now() - last.getTime() < glue.minSyncGap(link)) {
     return e.json(200, { link: glue.summary(e.app, link), sync: { ok: link.getString("status") === "ok", added: 0, updated: 0, removed: 0, recent: true } })
   }
   var result = glue.sync(e.app, link, (e.requestInfo().body || {}).today)
@@ -138,7 +118,7 @@ routerAdd("POST", "/api/bank-links/{id}/sync", (e) => {
 }, $apis.requireAuth("users"))
 
 routerAdd("POST", "/api/bank-links/{id}/remove", (e) => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
+  var glue = require(`${__hooks}/glue/bank_links.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
   glue.remove(e.app, glue.ownLink(e.app, e.auth, e.request.pathValue("id")))
   return e.noContent(204)
@@ -148,9 +128,8 @@ routerAdd("POST", "/api/bank-links/{id}/remove", (e) => {
 // it is that same date in every zone from UTC-11 to UTC+12, so the UTC day is
 // each person's own.
 cronAdd("bank_links_sync", "17 11 * * *", () => {
-  var glue = require(`${__hooks}/glue/plaid.js`)
-  var plaid = require(`${__hooks}/lib/plaid.js`)
-  if (!plaid.isEnabled(glue.cfg())) return
+  var glue = require(`${__hooks}/glue/bank_links.js`)
+  if (!glue.isEnabled()) return
   var links = $app.findRecordsByFilter("bank_links", "status != 'reconnect'", "", 0, 0)
   links.forEach(function (link) {
     try {

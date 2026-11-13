@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // lib/categories.js applied to records. Required inside a handler body, not
-// at file scope (glue/plaid.js says why).
+// at file scope (glue/bank_links.js says why).
 // ---------------------------------------------------------------------------
 
 var cats = require(`${__hooks}/lib/categories.js`);

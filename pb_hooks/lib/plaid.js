@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // Plaid (https://plaid.com/docs/): linking a bank or card account by signing
 // in to the bank itself, so balances and transactions arrive without a file.
-// Plain values in and out, so Node can run it; pb_hooks/glue/plaid.js sends
-// the requests and writes the records.
+// Plain values in and out, so Node can run it; pb_hooks/glue/providers/plaid.js sends
+// the requests, and pb_hooks/glue/bank_links.js writes the records.
 //
 // How linking works:
 //   1. Cheddar asks Plaid for a link_token (/link/token/create) and the page
@@ -218,7 +218,7 @@ function transactionRow(t) {
     payee: clean(t.merchant_name).slice(0, 200),
     pending: !!t.pending,
     bank_category: bankCategory(t.personal_finance_category),
-    // The pending charge this one posted from, whose person's changes carry over (glue/plaid.js).
+    // The pending charge this one posted from, whose person's changes carry over (glue/bank_links.js).
     pending_of: t.pending_transaction_id ? (PREFIX + t.pending_transaction_id).slice(0, 200) : "",
   }
 }
