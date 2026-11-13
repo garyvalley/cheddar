@@ -1,6 +1,7 @@
 // Splitting a transaction across categories: shared/splits.ts (the form's
 // check, reading the stored parts, totals counting the parts) and
-// pb_hooks/lib/splits.js (the check as they're saved), which must agree.
+// checkStored() (the check as they're saved, which the hooks run from its
+// build, pb_hooks/lib/gen/splits.js).
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -10,7 +11,7 @@ import { summarize } from '../shared/categories.ts'
 import { monthly } from '../shared/overview.ts'
 import { taxYear } from '../shared/taxes.ts'
 
-const hook = loadHookModule('pb_hooks/lib/splits.js')
+const hook = loadHookModule('pb_hooks/lib/gen/splits.js')
 const usable = id => ['groceries', 'shopping', 'dining', 'other', 'transfer', 'income', 'c-abcdefghijklmno'].includes(id)
 const problem = r => r.problem
 const part = (category, amount) => ({ category, amount })
@@ -114,14 +115,14 @@ describe('the hook checks what\'s saved the same way', () => {
       [[part('c-abcdefghijklmno', '0.01'), part('other', '0.02')], -3],
     ]) {
       const ok = checkSplit(input, amount, usable).ok
-      assert.deepEqual(hook.check(ok, amount, huse), { parts: ok }, JSON.stringify(input))
+      assert.deepEqual(hook.checkStored(ok, amount, huse), { parts: ok }, JSON.stringify(input))
       assert.deepEqual(partsOf(ok), ok)
     }
   })
 
   test('an empty list or null is no split', () => {
-    assert.deepEqual(hook.check([], -100, huse), { parts: null })
-    assert.deepEqual(hook.check(null, -100, huse), { parts: null })
+    assert.deepEqual(hook.checkStored([], -100, huse), { parts: null })
+    assert.deepEqual(hook.checkStored(null, -100, huse), { parts: null })
   })
 
   test('refuses what the form would never send', () => {
@@ -139,7 +140,7 @@ describe('the hook checks what\'s saved the same way', () => {
       [[g, { category: 'shopping', amount_cents: 0 }], -8000],
       [[{ category: 'groceries', amount_cents: 1 }, { category: 'shopping', amount_cents: -1 }], 0],
     ]) {
-      assert.ok(hook.check(value, amount, huse).problem, JSON.stringify(value))
+      assert.ok(hook.checkStored(value, amount, huse).problem, JSON.stringify(value))
     }
   })
 

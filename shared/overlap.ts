@@ -7,7 +7,8 @@
 // posted, a weekend and a holiday later). Each row stands for one other row
 // at most, so two identical coffees stay two.
 //
-// pb_hooks/lib/overlap.js does the same for a sync; a unit test keeps the two equal.
+// A sync uses the same rules (pb_hooks/glue/plaid.js), from pb_hooks/lib/gen/overlap.js:
+// this file, built for the hooks by scripts/gen-hooks.mjs.
 
 export const MATCH_DAYS = 4
 

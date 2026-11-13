@@ -2,7 +2,8 @@
 import withNuxt from './.nuxt/eslint.config.mjs'
 
 export default withNuxt(
-  { ignores: ['pb_data/**', '.output/**', 'public/**'] },
+  // pb_hooks/lib/gen/ is built from shared/ (scripts/gen-hooks.mjs); its source is linted.
+  { ignores: ['pb_data/**', '.output/**', 'public/**', 'pb_hooks/lib/gen/**'] },
   {
     // The browser never talks to PocketBase: it calls the app's own routes.
     files: ['app/**', 'shared/**'],

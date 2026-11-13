@@ -12,37 +12,19 @@
 //      is Other.
 //
 // Plain values in and out, so Node can run it; pb_hooks/categories.pb.js
-// applies it to every transaction as it's written. The list is the browser's
-// too (shared/categories.ts), and a unit test keeps the two the same.
+// applies it to every transaction as it's written. The list itself is the
+// browser's (shared/categories.ts).
 // ---------------------------------------------------------------------------
 
+// The list, and what a category id may be, are shared/categories.ts's, built
+// for the hooks into lib/gen/categories.js (scripts/gen-hooks.mjs).
+var shared = require(`${__hooks}/lib/gen/categories.js`)
+
 /** Every category, in the order Spending lists them. `spending: false` is money that isn't spent. */
-var CATEGORIES = [
-  { id: "housing", label: "Housing", spending: true },
-  { id: "utilities", label: "Utilities", spending: true },
-  { id: "groceries", label: "Groceries", spending: true },
-  { id: "dining", label: "Dining and drinks", spending: true },
-  { id: "transport", label: "Transportation", spending: true },
-  { id: "travel", label: "Travel", spending: true },
-  { id: "shopping", label: "Shopping", spending: true },
-  { id: "entertainment", label: "Entertainment", spending: true },
-  { id: "health", label: "Health", spending: true },
-  { id: "personal", label: "Personal care", spending: true },
-  { id: "insurance", label: "Insurance", spending: true },
-  { id: "education", label: "Education", spending: true },
-  { id: "gifts", label: "Gifts and donations", spending: true },
-  { id: "fees", label: "Fees and interest", spending: true },
-  { id: "taxes", label: "Taxes", spending: true },
-  { id: "loans", label: "Loan payments", spending: true },
-  { id: "other", label: "Other", spending: true },
-  { id: "income", label: "Income", spending: false },
-  { id: "transfer", label: "Transfers", spending: false },
-]
+var CATEGORIES = shared.CATEGORIES
 
 /** A category the person made: "c-" and its record id in custom_categories. Its name is theirs. */
-function isCustomId(id) {
-  return /^c-[a-z0-9]{15}$/.test(String(id || ""))
-}
+var isCustomId = shared.isCustomId
 
 /** A custom category's name, trimmed to one line, or "" if it can't be one. */
 function cleanName(name) {
@@ -51,10 +33,7 @@ function cleanName(name) {
   return n.length <= 40 ? n : ""
 }
 
-function isCategory(id) {
-  for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].id === id) return true
-  return false
-}
+var isCategory = shared.isCategory
 
 // Plaid's personal_finance_category: a few detailed ones first, then by primary.
 var PLAID_DETAILED = {

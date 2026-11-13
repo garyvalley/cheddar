@@ -12,7 +12,7 @@
 
 var plaid = require(`${__hooks}/lib/plaid.js`);
 var dates = require(`${__hooks}/lib/dates.js`);
-var overlap = require(`${__hooks}/lib/overlap.js`);
+var overlap = require(`${__hooks}/lib/gen/overlap.js`);
 
 function cfg() {
   return plaid.config($os.getenv);
@@ -171,7 +171,7 @@ function accountFor(txApp, link, row) {
 
 /**
  * The row a statement imported into `account` already holds for `t`, as
- * lib/overlap.js matches them, or null. Rows a sync took over are the
+ * shared/overlap.ts matches them (lib/gen/overlap.js), or null. Rows a sync took over are the
  * link's now, so each imported row stands for one transaction at most.
  */
 function imported(txApp, account, t) {
