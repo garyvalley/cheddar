@@ -7,7 +7,7 @@ Architecture, usage and deploy: README.md; tests: tests/README.md; schema: migra
 ## Stack
 Nuxt 4 (`app/`, `server/`) · PocketBase 0.40.6 (`pb_hooks/`, schema in `migrations/` applied by `scripts/migrate.mjs`) ·
 production on the home k3s Pi cluster, namespace `cheddar`, public via Cloudflare Tunnel.
-Multi-user from day one: every user's data is theirs alone; state and filing status are per-user settings (all 50 states + DC).
+Multi-user from day one: every user's data is theirs alone unless they share selected accounts with a household (see Gotchas); state and filing status are per-user settings (all 50 states + DC).
 
 ## Commands
 - `pnpm run setup` once (PocketBase in Docker on :8095, superuser in `.env` as PB_SU_EMAIL/PB_SU_PASS), then `pnpm dev` (:3005); `pnpm dev:stop` stops PocketBase.
