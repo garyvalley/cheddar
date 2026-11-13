@@ -104,7 +104,7 @@ server {
     # inside, so a 429 from the app (two-step codes locked, with how long)
     # passes through as it was written; @limited answers 429.
     limit_req_status 529;
-    error_page 529 @limited;
+    error_page 529 =429 @limited;
 
     location = /api/auth/login {
         limit_req zone=auth burst=5 nodelay;
