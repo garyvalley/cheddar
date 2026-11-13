@@ -12,15 +12,19 @@ import { anonymous, type Session } from './session'
  */
 
 export type SignIn =
-  | { token: string, record: RecordModel }
+  | { token: string, session: string, record: RecordModel }
   | { mfaId: string }
 
-/** A right password gives a token, or, with two-step sign-in on, an mfaId for the code step. Throws on a wrong one. */
-export async function signInWithPassword(email: string, password: string): Promise<SignIn> {
-  const pb = anonymous()
+/**
+ * A right password gives a token and its device session, or, with two-step
+ * sign-in on, an mfaId for the code step. Throws on a wrong one. `device`
+ * (deviceHeaders()) is what the devices list shows for it.
+ */
+export async function signInWithPassword(email: string, password: string, device: Record<string, string> = {}): Promise<SignIn> {
+  const pb = anonymous(device)
   try {
     const auth = await pb.collection('users').authWithPassword(email, password)
-    return { token: auth.token, record: auth.record }
+    return { token: auth.token, session: String(auth.meta?.session || ''), record: auth.record }
   }
   catch (error) {
     const mfaId = (error as { response?: { mfaId?: string } }).response?.mfaId
@@ -29,9 +33,9 @@ export async function signInWithPassword(email: string, password: string): Promi
   }
 }
 
-/** The code step: an authenticator code or a recovery code, after the password step's mfaId. */
-export function signInWithCode(mfaId: string, code: string) {
-  return anonymous().send<RecordAuthResponse & { meta?: { recovery_codes_left?: number } }>(
+/** The code step: an authenticator code or a recovery code, after the password step's mfaId. meta.session is the new device session. */
+export function signInWithCode(mfaId: string, code: string, device: Record<string, string> = {}) {
+  return anonymous(device).send<RecordAuthResponse & { meta?: { recovery_codes_left?: number, session?: string } }>(
     '/api/collections/users/auth-with-app-code', { method: 'POST', body: { mfaId, code } })
 }
 
@@ -106,6 +110,35 @@ export function newRecoveryCodes(s: Session, password: string): Promise<{ recove
 /** Ends every session the account has, this one included. */
 export async function signOutEverywhere(s: Session): Promise<void> {
   await s.send('/api/sign-out-everywhere', { method: 'POST' })
+}
+
+/** A signed-in device, for Settings (pb_hooks/sessions.pb.js). Times are ms since 1970. */
+export interface DeviceSession {
+  id: string
+  device: string
+  place: string
+  signed_in: number
+  last_used: number
+  current: boolean
+}
+
+export async function listSessions(s: Session): Promise<DeviceSession[]> {
+  return (await s.send<{ sessions: DeviceSession[] }>('/api/sessions', { method: 'GET' })).sessions
+}
+
+/** Signs this device out: its session row goes. */
+export async function endThisSession(s: Session): Promise<void> {
+  await s.send('/api/sessions/end', { method: 'POST' })
+}
+
+/** Signs one of the person's devices out. */
+export async function endSession(s: Session, id: string): Promise<void> {
+  await s.send(`/api/sessions/${encodeURIComponent(id)}/end`, { method: 'POST' })
+}
+
+/** The password, so linking or unlinking a bank works for the next 15 minutes. */
+export async function confirmPassword(s: Session, password: string): Promise<void> {
+  await s.send('/api/sessions/confirm', { method: 'POST', body: { password } })
 }
 
 export async function deleteAccount(s: Session, password: string): Promise<void> {

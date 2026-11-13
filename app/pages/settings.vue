@@ -10,6 +10,7 @@
       </div>
       <div>
         <SettingsTwoStep />
+        <SettingsDevices />
         <SettingsExport />
         <SettingsAccount />
       </div>

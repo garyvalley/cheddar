@@ -15,9 +15,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Email and password are required' })
   }
   try {
-    const result = await signInWithPassword(email, password)
+    const result = await signInWithPassword(email, password, deviceHeaders(event))
     if ('mfaId' in result) return { twoStep: { mfaId: result.mfaId } }
-    setAuthCookie(event, result.token)
+    setAuthCookie(event, result.token, result.session)
     return { me: toMe(result.record) }
   }
   catch (error) {

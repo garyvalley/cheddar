@@ -8,7 +8,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { APP, PB, PASSWORD, client, email, made, ready, signedIn, superuser, totp, withTwoStep } from './helpers.mjs'
+import { asPb, APP, PB, PASSWORD, client, email, made, ready, signedIn, superuser, totp, withTwoStep } from './helpers.mjs'
 
 describe('signing up', () => {
   test('says who may sign up, and never the list', async () => {
@@ -36,7 +36,7 @@ describe('signing in', () => {
     const { c, address } = await signedIn()
     assert.ok(c.cookie.startsWith('pb_token='))
     const r = await c.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
-    assert.ok(!JSON.stringify(r.json).includes(c.cookie.slice('pb_token='.length)), 'token in the body')
+    assert.ok(!JSON.stringify(r.json).includes(c.token), 'token in the body')
     const set = r.headers.getSetCookie().find(s => s.startsWith('pb_token='))
     assert.match(set, /HttpOnly/i)
     assert.match(set, /SameSite=Lax/i)
@@ -127,12 +127,12 @@ describe('guards', () => {
   test('one person cannot read another through PocketBase with their own token', async () => {
     const a = await signedIn()
     const b = await signedIn()
-    const token = b.c.cookie.slice('pb_token='.length)
-    const list = await (await fetch(`${PB}/api/collections/users/records`, { headers: { authorization: token } })).json()
+    const token = asPb(b.c)
+    const list = await (await fetch(`${PB}/api/collections/users/records`, { headers: { ...token } })).json()
     assert.deepEqual(list.items.map(u => u.id), [b.id])
-    const view = await fetch(`${PB}/api/collections/users/records/${a.id}`, { headers: { authorization: token } })
+    const view = await fetch(`${PB}/api/collections/users/records/${a.id}`, { headers: { ...token } })
     assert.equal(view.status, 404)
-    const del = await fetch(`${PB}/api/collections/users/records/${b.id}`, { method: 'DELETE', headers: { authorization: token } })
+    const del = await fetch(`${PB}/api/collections/users/records/${b.id}`, { method: 'DELETE', headers: { ...token } })
     assert.equal(del.status, 403, 'the record API cannot delete an account, not even one\'s own')
   })
 
@@ -337,9 +337,9 @@ describe('two-step sign-in', () => {
   test('once on, it cannot be switched off', async () => {
     const { c, id } = await ready()
     assert.equal((await c.call('POST', '/api/auth/two-step/off', { password: PASSWORD })).status, 404)
-    const token = c.cookie.slice('pb_token='.length)
+    const token = asPb(c)
     await fetch(`${PB}/api/collections/users/records/${id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', 'authorization': token }, body: JSON.stringify({ mfa_enabled: false }),
+      method: 'PATCH', headers: { 'content-type': 'application/json', ...token }, body: JSON.stringify({ mfa_enabled: false }),
     })
     assert.equal((await client().call('GET', '/api/auth/me', null, { cookie: c.cookie })).json.me.mfa_enabled, true)
   })
@@ -434,7 +434,7 @@ describe('changing the password and email', () => {
     const { c } = await ready()
     const r = await fetch(`${PB}/api/collections/users/request-email-change`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'authorization': c.cookie.slice('pb_token='.length) },
+      headers: { 'content-type': 'application/json', ...asPb(c) },
       body: JSON.stringify({ newEmail: email() }),
     })
     assert.equal(r.status, 400)
@@ -444,7 +444,7 @@ describe('changing the password and email', () => {
     const { c, id, address } = await ready()
     const r = await fetch(`${PB}/api/collections/users/records/${id}`, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json', 'authorization': c.cookie.slice('pb_token='.length) },
+      headers: { 'content-type': 'application/json', ...asPb(c) },
       body: JSON.stringify({ oldPassword: PASSWORD, password: 'password1234', passwordConfirm: 'password1234' }),
     })
     assert.equal(r.status, 400)

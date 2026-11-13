@@ -5,14 +5,15 @@ import { pocketBaseUnavailable, UNAVAILABLE } from '~~/shared/pocketbase-errors'
 
 /**
  * GET /api/auth/me: who the cookie belongs to, or null. It renews the token,
- * so a session in use never runs out and one left alone does.
+ * so a session in use runs out only 30 days after its sign-in
+ * (pb_hooks/sessions.pb.js), and one left alone after 3.
  */
 export default defineEventHandler(async (event) => {
   setResponseHeader(event, 'cache-control', 'no-store, private')
   const token = getAuthToken(event)
   if (!token) return { me: null }
   try {
-    const auth = await refresh(pocketBaseFor(token))
+    const auth = await refresh(pocketBaseFor(token, getSessionId(event)))
     setAuthCookie(event, auth.token)
     return { me: toMe(auth.record) }
   }

@@ -236,7 +236,12 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - Changing the password or email needs the current password
     (`pb_hooks/credentials.pb.js`); PocketBase's own email-change request,
     which doesn't, is refused.
-  - Sessions last 3 days and renew on use.
+  - Sessions last 3 days and renew on use, for at most 30 days after the
+    sign-in. Each sign-in is a device (`sessions`, `pb_hooks/sessions.pb.js`):
+    PocketBase honours a token only beside its device's id, which Nuxt keeps
+    in a second httpOnly cookie, so signing out ends the device for real and
+    Settings lists devices and signs any one out. Linking or unlinking a bank
+    wants the password typed in the last 15 minutes.
 - **nginx** (`nginx/nginx.conf.template`) sits between the tunnel and Nuxt:
   - It refuses visitors from China, Russia, India, North Korea, Iran and
     Belarus, by Cloudflare's `CF-IPCountry`.

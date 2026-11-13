@@ -4,7 +4,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PB, client, ready, signedIn } from './helpers.mjs'
+import { asPb, PB, client, ready, signedIn } from './helpers.mjs'
 
 const CSV = 'Transaction Date,Description,Amount\n'
   + '11/01/2026,COFFEE,-4.50\n'
@@ -71,9 +71,9 @@ describe('accounts', () => {
     const other = await ready()
     const mine = await account(owner.c)
     // PocketBase straight, with the other person's own token: the rules hold even without the app.
-    const token = other.c.cookie.slice('pb_token='.length)
+    const token = asPb(other.c)
     const post = (collection, body) => fetch(`${PB}/api/collections/${collection}/records`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: token }, body: JSON.stringify(body),
+      method: 'POST', headers: { 'content-type': 'application/json', ...token }, body: JSON.stringify(body),
     })
     const tx = await post('transactions', { owner: other.id, account: mine.id, posted: '2026-01-01', amount_cents: -100, source: 'manual' })
     assert.ok([400, 403].includes(tx.status), `transaction: ${tx.status}`)

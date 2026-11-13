@@ -9,18 +9,28 @@ import { pocketBaseUnavailable, UNAVAILABLE } from '~~/shared/pocketbase-errors'
  */
 export type Session = PocketBase
 
-/** A client with no one signed in, for sign-up, sign-in and reset links. */
-export function anonymous(): PocketBase {
+/** A client with no one signed in, for sign-up, sign-in and reset links; `headers` go with every request. */
+export function anonymous(headers: Record<string, string> = {}): PocketBase {
   const pb = new PocketBase(useRuntimeConfig().pocketbaseUrl)
   // Each request has its own client; cancelling a "duplicate" would only
   // ever cancel a real request.
   pb.autoCancellation(false)
+  if (Object.keys(headers).length) {
+    pb.beforeSend = (url, options) => {
+      options.headers = { ...(options.headers as Record<string, string>), ...headers }
+      return { url, options }
+    }
+  }
   return pb
 }
 
-/** A client acting as the holder of `token`. */
-export function pocketBaseFor(token: string): Session {
-  const pb = anonymous()
+/**
+ * A client acting as the holder of `token`, on the device session `sid`:
+ * PocketBase refuses a person's token without its session
+ * (pb_hooks/sessions.pb.js).
+ */
+export function pocketBaseFor(token: string, sid = ''): Session {
+  const pb = anonymous(sid ? { 'X-Cheddar-Session': sid } : {})
   pb.authStore.save(token, null)
   return pb
 }
@@ -33,7 +43,7 @@ export function sessionFor(event: H3Event): Session {
   const token = getAuthToken(event)
   if (!token) throw createError({ statusCode: 401, statusMessage: 'Sign in to continue' })
   setResponseHeader(event, 'cache-control', 'no-store, private')
-  return pocketBaseFor(token)
+  return pocketBaseFor(token, getSessionId(event))
 }
 
 /** The id of the person a session acts as. */
@@ -50,9 +60,14 @@ export function callerId(s: Session): string {
  */
 export function storeError(error: unknown, notFound = 'Not found'): Error {
   if (pocketBaseUnavailable(error)) return createError(UNAVAILABLE)
-  const { status, response } = error as { status?: number, response?: { message?: string } }
+  const { status, response } = error as { status?: number, response?: { message?: string, data?: { password?: unknown } } }
   if (status === 401) return createError({ statusCode: 401, statusMessage: 'Sign in to continue' })
   if (status === 404) return createError({ statusCode: 404, statusMessage: notFound })
+  // A step that wants the password typed again (pb_hooks/sessions.pb.js):
+  // the page asks for it (POST /api/auth/confirm-password) and tries again.
+  if (status === 403 && response?.data?.password) {
+    return createError({ statusCode: 403, message: response.message || 'Enter your password to continue.', data: { password: 'required' } })
+  }
   if (status === 400 || status === 403 || status === 429) {
     return createError({ statusCode: status, message: response?.message || 'The change was refused' })
   }

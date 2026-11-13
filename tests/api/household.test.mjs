@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { APP, PB, PASSWORD, ready, superuser } from "./helpers.mjs";
+import { APP, PB, PASSWORD, asPb, ready, superuser } from "./helpers.mjs";
 import { unzip } from "../unzip.mjs";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -132,11 +132,11 @@ describe("household sharing", () => {
         .json.items[0].note,
       "Shared shopping",
     );
-    const token = decodeURIComponent(member.c.cookie.slice("pb_token=".length));
+    const token = asPb(member.c);
     const directRead = await fetch(
       `${PB}/api/collections/transactions/records/${transaction.json.transaction.id}`,
       {
-        headers: { authorization: token },
+        headers: { ...token },
       },
     );
     assert.equal(
@@ -148,7 +148,7 @@ describe("household sharing", () => {
       `${PB}/api/collections/transactions/records/${transaction.json.transaction.id}`,
       {
         method: "PATCH",
-        headers: { authorization: token, "content-type": "application/json" },
+        headers: { ...token, "content-type": "application/json" },
         body: JSON.stringify({ amount_cents: -99999 }),
       },
     );

@@ -16,13 +16,28 @@ export const ip = () => `10.${[1, 2, 3].map(() => randomBytes(1)[0]).join('.')}`
 export const email = () => `t-${randomBytes(6).toString('hex')}@cheddar.test`
 
 /** A browser: keeps the session cookie and sends this site's Origin, from one address. */
+// The cookies a sign-in sets: the token, and the device session PocketBase
+// wants beside it (pb_hooks/sessions.pb.js).
+const COOKIES = ['pb_token', 'cheddar_sid']
+
 export function client(from = ip()) {
-  let cookie = ''
+  const jar = new Map()
   return {
     from,
-    get cookie() { return cookie },
-    set cookie(v) { cookie = v },
+    /** The Cookie header this browser sends: "pb_token=…; cheddar_sid=…", or "". */
+    get cookie() { return COOKIES.filter(n => jar.has(n)).map(n => `${n}=${jar.get(n)}`).join('; ') },
+    set cookie(v) {
+      jar.clear()
+      for (const part of String(v || '').split(/;\s*/)) {
+        const at = part.indexOf('=')
+        if (at > 0 && COOKIES.includes(part.slice(0, at))) jar.set(part.slice(0, at), part.slice(at + 1))
+      }
+    },
+    /** The PocketBase token alone, and its device session's id. */
+    get token() { return decodeURIComponent(jar.get('pb_token') || '') },
+    get sid() { return decodeURIComponent(jar.get('cheddar_sid') || '') },
     async call(method, path, body, headers = {}) {
+      const cookie = this.cookie
       const r = await fetch(`${APP}${path}`, {
         method,
         headers: {
@@ -34,8 +49,12 @@ export function client(from = ip()) {
         body: body ? JSON.stringify(body) : undefined,
         redirect: 'manual',
       })
-      const set = r.headers.getSetCookie().find(c => c.startsWith('pb_token='))
-      if (set) cookie = /pb_token=;|Max-Age=0/i.test(set) ? '' : set.split(';')[0]
+      for (const set of r.headers.getSetCookie()) {
+        const name = set.slice(0, set.indexOf('='))
+        if (!COOKIES.includes(name)) continue
+        if (new RegExp(`^${name}=;|Max-Age=0`, 'i').test(set)) jar.delete(name)
+        else jar.set(name, set.split(';')[0].slice(name.length + 1))
+      }
       const text = await r.text()
       let json
       try { json = text ? JSON.parse(text) : null } catch { json = text }
@@ -43,6 +62,9 @@ export function client(from = ip()) {
     },
   }
 }
+
+/** Headers that call PocketBase directly as `c`: its token, and its device session. */
+export const asPb = c => ({ authorization: c.token, 'x-cheddar-session': c.sid })
 
 export async function superuser() {
   const r = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {

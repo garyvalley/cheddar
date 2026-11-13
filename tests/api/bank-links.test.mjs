@@ -9,22 +9,21 @@
 
 import { before, after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { client, PASSWORD, PB, ready, signedIn, superuser } from './helpers.mjs'
+import { asPb, client, PASSWORD, PB, ready, signedIn, superuser } from './helpers.mjs'
 import { sampleBank, startMock } from './plaid-mock.mjs'
 
 let mock
 
-/** A new account, signed in; with two-step sign-in on unless `passwordOnly`. Its `token` is the session's PocketBase token. */
+/** A new account, signed in; with two-step sign-in on unless `passwordOnly`.  */
 async function person({ passwordOnly = false } = {}) {
   const { c } = passwordOnly ? await signedIn() : await ready()
-  Object.defineProperty(c, 'token', { get: () => decodeURIComponent(c.cookie.slice('pb_token='.length)) })
   return c
 }
 
-/** PocketBase's record API as `token`, as anyone holding a session could call it. */
-async function pb(method, path, token, body) {
+/** PocketBase's record API as `as` (asPb(c), or a superuser's token), as anyone holding a session could call it. */
+async function pb(method, path, as, body) {
   const r = await fetch(`${PB}${path}`, {
-    method, headers: { authorization: token, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
+    method, headers: { ...(typeof as === 'string' ? { authorization: as } : as), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
   })
   return { status: r.status, json: await r.json().catch(() => null) }
 }
@@ -54,7 +53,7 @@ const usDay = (n) => {
 }
 
 const transactions = async (c, accountId) =>
-  (await pb('GET', `/api/collections/transactions/records?perPage=200&sort=posted&filter=${encodeURIComponent(`account='${accountId}'`)}`, c.token)).json.items
+  (await pb('GET', `/api/collections/transactions/records?perPage=200&sort=posted&filter=${encodeURIComponent(`account='${accountId}'`)}`, asPb(c))).json.items
 
 describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT is not set' }, () => {
   before(async () => { mock = await startMock() })
@@ -66,6 +65,27 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal((await c.call('GET', '/api/bank-links')).status, 403)
     assert.equal((await c.call('POST', '/api/bank-links/link-token', {})).status, 403)
     assert.equal((await c.call('POST', '/api/bank-links', { public_token: mock.publicToken().token })).status, 403)
+  })
+
+  test('a new link and an unlink want the password once it is 15 minutes old', async () => {
+    const c = await person()
+    const me = (await c.call('GET', '/api/auth/me')).json.me
+    const su = await superuser()
+    const [row] = (await pb('GET', `/api/collections/sessions/records?filter=${encodeURIComponent(`user='${me.id}'`)}`, su)).json.items
+    await pb('PATCH', `/api/collections/sessions/records/${row.id}`, su, { verified: Date.now() - 16 * 60 * 1000 })
+
+    const asked = await c.call('POST', '/api/bank-links/link-token', {})
+    assert.equal(asked.status, 403)
+    assert.equal(asked.json.data.password, 'required')
+    assert.equal((await c.call('POST', '/api/auth/confirm-password', { password: 'not the password' })).status, 400)
+    assert.equal((await c.call('POST', '/api/auth/confirm-password', { password: PASSWORD })).status, 204)
+    assert.equal((await c.call('POST', '/api/bank-links/link-token', {})).status, 200)
+
+    const l = (await link(c)).link
+    await pb('PATCH', `/api/collections/sessions/records/${row.id}`, su, { verified: Date.now() - 16 * 60 * 1000 })
+    assert.equal((await c.call('POST', `/api/bank-links/${l.id}/remove`)).status, 403)
+    // Signing in to a bank again, for a link already made, never asks.
+    assert.equal((await c.call('POST', '/api/bank-links/link-token', { link: l.id })).status, 200)
   })
 
   test('a person\'s links stop at PLAID_LINKS_PER_PERSON (10 by default), said before they open Plaid Link', async () => {
@@ -103,7 +123,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     // Two pages of two, then the cursor is kept.
     assert.deepEqual(r.bank.calls.filter(x => x.path === '/transactions/sync').map(x => x.cursor), [null, '2'])
 
-    const accounts = (await pb('GET', '/api/collections/accounts/records?sort=name', c.token)).json.items
+    const accounts = (await pb('GET', '/api/collections/accounts/records?sort=name', asPb(c))).json.items
     assert.deepEqual(accounts.map(a => [a.name, a.kind, a.last4, a.institution, a.balance_cents, a.source]), [
       ['Plaid Checking', 'checking', '0000', 'First Platypus Bank', 245017, 'sync'],
       ['Plaid Credit Card', 'credit_card', '3333', 'First Platypus Bank', -31055, 'sync'],
@@ -142,10 +162,10 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.deepEqual(r.json.sync, { ok: true, added: 1, updated: 1, removed: 1 })
     assert.deepEqual(bank.calls.slice(calls).filter(x => x.path === '/transactions/sync').map(x => x.cursor), ['4', '6'])
 
-    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
+    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, asPb(c))).json.items[0]
     assert.equal(account.balance_cents, 240707)
     // Overview's history keeps the day's last balance, once (pb_hooks/balances.pb.js).
-    const days = (await pb('GET', `/api/collections/balance_history/records?filter=${encodeURIComponent(`account='${account.id}'`)}`, c.token)).json.items
+    const days = (await pb('GET', `/api/collections/balance_history/records?filter=${encodeURIComponent(`account='${account.id}'`)}`, asPb(c))).json.items
     assert.deepEqual(days.map(d => [d.date, d.balance_cents]), [[account.balance_date, 240707]])
     assert.deepEqual((await transactions(c, account.id)).map(t => [t.description, t.amount_cents, t.pending]),
       [['PAYROLL ACME', 320000, false], ['RENT NOVEMBER', -180000, false], ['GROCER', -4310, false]])
@@ -178,7 +198,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
   test('a person\'s name, note and leaving one out outlast the next sync; nothing is added by hand or deleted in a linked account', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)
-    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
+    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, asPb(c))).json.items[0]
     const rent = (await transactions(c, account.id)).find(t => t.description === 'RENT')
     const r = await c.call('PATCH', `/api/transactions/${rent.id}`, { payee: 'Landlord', note: 'Split with Sam', excluded: true })
     assert.equal(r.status, 200, JSON.stringify(r.json))
@@ -200,7 +220,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
   test('a split outlasts the next sync, and a pending charge\'s split, name and note carry to it as it posts', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)
-    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, c.token)).json.items[0]
+    const account = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, asPb(c))).json.items[0]
     const rows = await transactions(c, account.id)
     const rent = rows.find(t => t.description === 'RENT')
     const grocer = rows.find(t => t.description === 'GROCER')
@@ -232,7 +252,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
   test('synced transactions are sorted by Plaid\'s category, and a person\'s choice outlasts the next sync', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)
-    const all = async () => Object.fromEntries((await pb('GET', '/api/collections/transactions/records?perPage=200&sort=posted', c.token)).json.items
+    const all = async () => Object.fromEntries((await pb('GET', '/api/collections/transactions/records?perPage=200&sort=posted', asPb(c))).json.items
       .map(t => [t.description, [t.category, t.category_by]]))
     assert.deepEqual(await all(), {
       'PAYROLL ACME': ['income', 'match'],
@@ -241,8 +261,8 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
       'CAFE': ['dining', 'bank'],
     })
 
-    const cafe = (await pb('GET', `/api/collections/transactions/records?filter=${encodeURIComponent('description=\'CAFE\'')}`, c.token)).json.items[0]
-    const rent = (await pb('GET', `/api/collections/transactions/records?filter=${encodeURIComponent('description=\'RENT\'')}`, c.token)).json.items[0]
+    const cafe = (await pb('GET', `/api/collections/transactions/records?filter=${encodeURIComponent('description=\'CAFE\'')}`, asPb(c))).json.items[0]
+    const rent = (await pb('GET', `/api/collections/transactions/records?filter=${encodeURIComponent('description=\'RENT\'')}`, asPb(c))).json.items[0]
     assert.equal((await c.call('POST', `/api/transactions/${cafe.id}/category`, { category: 'entertainment' })).status, 200)
     assert.equal((await c.call('POST', `/api/transactions/${rent.id}/category`, { category: 'utilities' })).status, 200)
 
@@ -349,11 +369,11 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal((await other.call('POST', `/api/bank-links/${l.id}/sync`, {})).status, 404)
     assert.equal((await other.call('POST', `/api/bank-links/${l.id}/remove`)).status, 404)
     assert.equal((await other.call('POST', '/api/bank-links/link-token', { link: l.id })).status, 404)
-    assert.equal((await pb('GET', '/api/collections/accounts/records', other.token)).json.items.length, 0)
+    assert.equal((await pb('GET', '/api/collections/accounts/records', asPb(other))).json.items.length, 0)
 
-    assert.equal((await pb('GET', `/api/collections/bank_links/records/${l.id}`, owner.token)).status, 403)
-    assert.equal((await pb('GET', '/api/collections/bank_links/records', owner.token)).status, 403)
-    assert.equal((await pb('PATCH', `/api/collections/bank_links/records/${l.id}`, owner.token, { status: 'ok' })).status, 403)
+    assert.equal((await pb('GET', `/api/collections/bank_links/records/${l.id}`, asPb(owner))).status, 403)
+    assert.equal((await pb('GET', '/api/collections/bank_links/records', asPb(owner))).status, 403)
+    assert.equal((await pb('PATCH', `/api/collections/bank_links/records/${l.id}`, asPb(owner), { status: 'ok' })).status, 403)
     // A superuser sees the field, but only as ciphertext.
     const su = await pb('GET', `/api/collections/bank_links/records/${l.id}`, await superuser())
     assert.ok(su.json.access.length > 40)
@@ -365,10 +385,10 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     const { link: l } = await link(owner)
     const other = await person()
     const me = (await other.call('GET', '/api/auth/me')).json.me
-    const created = await pb('POST', '/api/collections/accounts/records', other.token, { owner: me.id, name: 'Mine', kind: 'checking', link: l.id })
+    const created = await pb('POST', '/api/collections/accounts/records', asPb(other), { owner: me.id, name: 'Mine', kind: 'checking', link: l.id })
     assert.equal(created.status, 200, JSON.stringify(created.json))
     assert.equal(created.json.link, '')
-    const changed = await pb('PATCH', `/api/collections/accounts/records/${created.json.id}`, other.token, { link: l.id })
+    const changed = await pb('PATCH', `/api/collections/accounts/records/${created.json.id}`, asPb(other), { link: l.id })
     assert.equal(changed.json.link, '')
   })
 
@@ -379,7 +399,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal(mock.removed(bank), true)
     assert.equal(mock.removals(bank), 1, 'asked once')
     assert.deepEqual((await c.call('GET', '/api/bank-links')).json.links, [])
-    const accounts = (await pb('GET', '/api/collections/accounts/records', c.token)).json.items
+    const accounts = (await pb('GET', '/api/collections/accounts/records', asPb(c))).json.items
     assert.equal(accounts.length, 2)
     assert.ok(accounts.every(a => a.link === ''))
     assert.equal((await transactions(c, accounts.find(a => a.last4 === '0000').id)).length, 3)
