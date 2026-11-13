@@ -23,6 +23,10 @@
 //                               removed: [external_id], cursor }
 //   remove(access)              tells the provider to forget the link
 //   clean(text)                 a name from the provider made safe to show
+//   webhookUrl()                where its links send webhooks, or "" for none
+//   setWebhook(access, url)     points an older link's webhooks at `url`
+//   webhookKey(kid)             the public key that checks a webhook's signature
+//   webhookEvent(body)          { itemId, sync }: which link, and whether to sync it now
 //   MIN_SYNC_GAP_MS             a manual sync this soon answers the last one
 //
 // External ids carry the provider's prefix ("plaid:"), so they never match

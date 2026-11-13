@@ -15,6 +15,15 @@
 //   POST /api/bank-links                   { public_token, institution? } -> { link, sync }
 //   POST /api/bank-links/{id}/sync         -> { link, sync }
 //   POST /api/bank-links/{id}/remove       -> 204; its accounts stay, unlinked
+//   GET  /api/bank-links/webhook-key?kid=  -> { key } (a JWK) the provider signs webhooks with
+//   POST /api/bank-links/webhook           { item_id, webhook_type, webhook_code, ... }
+//                                          -> { done }; syncs the link it names
+//
+// The two webhook routes take no sign-in: Plaid calls Nuxt's public
+// /api/webhooks/plaid, which checks the webhook's signature with that key
+// before passing it on (server/data/plaid-webhook.ts). PocketBase itself is
+// never public. Even unchecked, a webhook can only sync a link sooner than
+// the daily sync would, and not twice within MIN_SYNC_GAP_MS.
 //
 // A new link and an unlink want the password typed in the last 15 minutes
 // (POST /api/sessions/confirm), or answer 403 with data.password "required".
@@ -137,6 +146,30 @@ routerAdd("POST", "/api/bank-links/{id}/remove", (e) => {
   require(`${__hooks}/glue/events.js`).record(e.app, e.auth.id, "bank_unlinked", e, names)
   return e.noContent(204)
 }, $apis.requireAuth("users"))
+
+routerAdd("GET", "/api/bank-links/webhook-key", (e) => {
+  var glue = require(`${__hooks}/glue/bank_links.js`)
+  var providers = require(`${__hooks}/glue/providers.js`)
+  if (!glue.isEnabled()) throw new NotFoundError("No webhooks here.")
+  var kid = String(e.request.url.query().get("kid") || "")
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(kid)) throw new BadRequestError("That key id isn't one.")
+  var key = null
+  try {
+    key = providers.current().webhookKey(kid)
+  }
+  catch (err) {
+    if (!(err instanceof glue.ProviderError)) throw err
+  }
+  if (!key) throw new NotFoundError("No such key.")
+  return e.json(200, { key: key })
+})
+
+routerAdd("POST", "/api/bank-links/webhook", (e) => {
+  var glue = require(`${__hooks}/glue/bank_links.js`)
+  var providers = require(`${__hooks}/glue/providers.js`)
+  if (!glue.isEnabled()) return e.json(200, { done: "ignored" })
+  return e.json(200, { done: glue.onWebhook(e.app, providers.current().name, e.requestInfo().body || {}) })
+})
 
 // Every link, once a day. One link failing never stops the rest. At 11:17 UTC
 // it is that same date in every zone from UTC-11 to UTC+12, so the UTC day is

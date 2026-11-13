@@ -6,7 +6,7 @@
 // CLIENT_ID and SECRET below.
 
 import { createServer } from 'node:http'
-import { randomBytes } from 'node:crypto'
+import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 
 export const CLIENT_ID = 'test-client-id'
 export const SECRET = 'test-secret'
@@ -39,6 +39,9 @@ export function sampleBank() {
 export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8097) } = {}) {
   const publicTokens = new Map() // public_token -> bank, until exchanged
   const items = new Map() // access_token -> { bank, itemId, removed, removals }
+  // What Plaid signs its webhooks with (webhookFor, below).
+  const webhookKey = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const webhookKid = `kid-${id()}`
 
   function answer(res, status, json) {
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(json))
@@ -69,6 +72,11 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
       return answer(res, 200, { access_token: access, item_id: items.get(access).itemId, request_id: id() })
     }
 
+    if (req.url === '/webhook_verification_key/get') {
+      if (body.key_id !== webhookKid) return error(res, 'INVALID_WEBHOOK_VERIFICATION_KEY_ID')
+      return answer(res, 200, { key: { ...webhookKey.publicKey.export({ format: 'jwk' }), kid: webhookKid, alg: 'ES256', use: 'sig', created_at: 1, expired_at: null }, request_id: id() })
+    }
+
     const item = items.get(body.access_token)
     if (item && req.url === '/item/remove') item.removals++
     if (!item || item.removed) return error(res, 'INVALID_ACCESS_TOKEN')
@@ -92,6 +100,10 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
         request_id: id(),
       })
     }
+    if (req.url === '/item/webhook/update') {
+      item.webhook = body.webhook
+      return answer(res, 200, { item: { item_id: item.itemId, webhook: body.webhook }, request_id: id() })
+    }
     if (req.url === '/item/remove') {
       item.removed = true
       return answer(res, 200, { request_id: id() })
@@ -111,6 +123,20 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
     removed: bank => !!items.get(bank.access)?.removed,
     /** How many times Plaid was asked to forget it, the first time included. */
     removals: bank => items.get(bank.access)?.removals ?? 0,
+    /** The item id Plaid gave the bank's link. */
+    itemId: bank => items.get(bank.access)?.itemId,
+    /**
+     * A webhook as Plaid sends it about `bank`: the exact body and its
+     * Plaid-Verification JWT. `kid`, `iat` (seconds) and `bodyHash` change
+     * what's signed, to make bad ones.
+     */
+    webhookFor(bank, { type = 'TRANSACTIONS', code = 'SYNC_UPDATES_AVAILABLE', kid = webhookKid, iat = Math.floor(Date.now() / 1000), bodyHash } = {}) {
+      const raw = JSON.stringify({ webhook_type: type, webhook_code: code, item_id: items.get(bank.access)?.itemId, environment: 'sandbox' })
+      const enc = v => Buffer.from(JSON.stringify(v)).toString('base64url')
+      const head = `${enc({ alg: 'ES256', kid, typ: 'JWT' })}.${enc({ iat, request_body_sha256: bodyHash ?? createHash('sha256').update(raw).digest('hex') })}`
+      const sig = sign('sha256', Buffer.from(head), { key: webhookKey.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')
+      return { raw, jwt: `${head}.${sig}` }
+    },
     close: () => new Promise(resolve => server.close(resolve)),
   }
 }

@@ -60,10 +60,26 @@ module.exports = {
   /** What the page opens Plaid Link with: a new link, or with `access`, signing in to that one again. */
   linkToken: function (userId, access) {
     return String(
-      call("/link/token/create", plaid.linkTokenBody(userId, access || null))
+      call("/link/token/create", plaid.linkTokenBody(userId, access || null, plaid.webhookUrl($os.getenv("APP_URL"))))
         .link_token || "",
     );
   },
+  /** Where this Cheddar's links should send webhooks, or "" for none (not https). */
+  webhookUrl: function () {
+    return plaid.webhookUrl($os.getenv("APP_URL"));
+  },
+  /** Points a link made before webhooks (or at another address) at `url`. */
+  setWebhook: function (access, url) {
+    call("/item/webhook/update", { access_token: access, webhook: url });
+  },
+  /** The public key (a JWK) Plaid signs webhooks with under `kid`, or null once it has expired. */
+  webhookKey: function (kid) {
+    var key = (call("/webhook_verification_key/get", { key_id: kid }) || {}).key || null;
+    if (!key || (key.expired_at && Number(key.expired_at) * 1000 < Date.now())) return null;
+    return { kty: key.kty, crv: key.crv, x: key.x, y: key.y, kid: key.kid, alg: key.alg };
+  },
+  /** A webhook's body as { itemId, sync } (lib/plaid.js webhookEvent). */
+  webhookEvent: plaid.webhookEvent,
   /** Link's public_token as { access, itemId }. */
   exchange: function (publicToken) {
     if (!/^public-[a-z]+-[A-Za-z0-9-]{8,200}$/.test(publicToken))
