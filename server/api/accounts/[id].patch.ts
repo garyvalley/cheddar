@@ -1,7 +1,7 @@
+import { todayFor } from '~~/server/data/profile'
 import { getAccount, setBalance } from '~~/server/data/money'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { parseBalance } from '~~/shared/accounts'
-import { localToday } from '~~/shared/categories'
 
 /**
  * PATCH /api/accounts/:id { balance }: what an account holds today, for one
@@ -16,5 +16,6 @@ export default defineEventHandler(async (event) => {
   if (account.linked) throw createError({ statusCode: 400, statusMessage: 'Its bank keeps this account\'s balance up to date.' })
   const parsed = parseBalance(balance, account.kind)
   if ('problem' in parsed) throw createError({ statusCode: 400, statusMessage: parsed.problem })
-  return { account: await attempt(() => setBalance(s, id, parsed.ok, localToday()), 'No such account') }
+  const today = await attempt(() => todayFor(s))
+  return { account: await attempt(() => setBalance(s, id, parsed.ok, today), 'No such account') }
 })

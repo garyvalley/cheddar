@@ -1,4 +1,5 @@
-import { localToday, periodOf } from '~~/shared/categories'
+import { periodOf } from '~~/shared/categories'
+import { todayFor } from '~~/server/data/profile'
 import { spendingSummary } from '~~/server/data/money'
 import { attempt, sessionFor } from '~~/server/data/session'
 
@@ -12,7 +13,8 @@ export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const account = q.account ? recordId(q.account, 'No such account') : undefined
   const kind = q.period === 'year' ? 'year' : 'month'
-  const p = periodOf(kind, typeof q.at === 'string' ? q.at : undefined, localToday())
-  const before = periodOf(kind, p.prev, localToday())
+  const today = await attempt(() => todayFor(s))
+  const p = periodOf(kind, typeof q.at === 'string' ? q.at : undefined, today)
+  const before = periodOf(kind, p.prev, today)
   return await attempt(() => spendingSummary(s, { account, from: p.from, to: p.to, previous: { from: before.from, to: before.to } }))
 })

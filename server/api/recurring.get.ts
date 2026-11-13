@@ -1,4 +1,5 @@
 import { recurringCharges } from '~~/server/data/money'
+import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**
@@ -11,5 +12,6 @@ export default defineEventHandler(async (event) => {
   const s = sessionFor(event)
   const q = getQuery(event)
   const account = q.account ? recordId(q.account, 'No such account') : undefined
-  return await attempt(() => recurringCharges(s, account))
+  const today = await attempt(() => todayFor(s))
+  return await attempt(() => recurringCharges(s, account, today))
 })

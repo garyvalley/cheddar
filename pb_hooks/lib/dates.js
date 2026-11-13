@@ -42,7 +42,23 @@ function daysBetween(a, b) {
   return Math.round((toDay - fromDay) / DAY_MS)
 }
 
+/**
+ * The person's own "today" (YYYY-MM-DD), as Nuxt worked it out in their time
+ * zone (shared/time-zone.ts) -- the hooks have no time zone data -- when it's
+ * a real date within a day of `now`'s UTC one, as every zone's is; otherwise
+ * the UTC day.
+ */
+function personToday(value, now) {
+  var utc = new Date(now).toISOString().slice(0, 10)
+  var s = String(value || "")
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return utc
+  var d = new Date(s + "T00:00:00Z")
+  if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return utc
+  return Math.abs(daysBetween(utc + "T00:00:00Z", d)) <= 1 ? s : utc
+}
+
 module.exports = {
+  personToday: personToday,
   parsePb: parsePb,
   toPb: toPb,
   toPbDay: toPbDay,

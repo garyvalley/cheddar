@@ -17,13 +17,17 @@ export function linkToken(s: Session, link?: string): Promise<{ link_token: stri
 }
 
 /** Swaps the public_token Plaid Link handed the page for a link, then syncs it. */
-export function addLink(s: Session, publicToken: string, institution: string): Promise<LinkAnswer> {
-  return s.send('/api/bank-links', { method: 'POST', body: { public_token: publicToken, institution } })
+export function addLink(s: Session, publicToken: string, institution: string, today: string): Promise<LinkAnswer> {
+  return s.send('/api/bank-links', { method: 'POST', body: { public_token: publicToken, institution, today } })
 }
 
-/** `reconnected`: the person just signed in to the bank again, so sync even if it synced moments ago. */
-export function syncLink(s: Session, id: string, reconnected = false): Promise<LinkAnswer> {
-  return s.send(`/api/bank-links/${encodeURIComponent(id)}/sync`, { method: 'POST', body: { reconnected } })
+/**
+ * `reconnected`: the person just signed in to the bank again, so sync even if
+ * it synced moments ago. `today` (todayFor()) dates the balances, as the hooks
+ * can't tell the person's time zone.
+ */
+export function syncLink(s: Session, id: string, today: string, reconnected = false): Promise<LinkAnswer> {
+  return s.send(`/api/bank-links/${encodeURIComponent(id)}/sync`, { method: 'POST', body: { reconnected, today } })
 }
 
 /** Removes a link; its accounts and transactions stay, no longer syncing. */
