@@ -11,6 +11,7 @@ import { loadHookModule } from './load-hook-module.mjs'
 const twoStep = loadHookModule('pb_hooks/lib/two_step.js')
 const totp = loadHookModule('pb_hooks/lib/totp.js')
 const sha256 = text => createHash('sha256').update(text).digest('hex')
+const matches = (stored, raw) => stored === sha256(raw)
 const SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 const NOW = Date.parse('2026-11-06T12:00:00Z')
 
@@ -37,18 +38,18 @@ describe('a code at sign-in', () => {
   const step = totp.stepAt(NOW)
   const row = { secret: SECRET, last_step: step - 2, hashes: [sha256('abcde23456'), sha256('fghjk78923')] }
   test("the app's current code is accepted, and its step is spent", () => {
-    assert.deepEqual(twoStep.acceptCode(row, totp.codeAt(SECRET, step), NOW, sha256), { kind: 'app', last_step: step })
+    assert.deepEqual(twoStep.acceptCode(row, totp.codeAt(SECRET, step), NOW, matches), { kind: 'app', last_step: step })
   })
   test('a code at or before the last step used is refused', () => {
-    assert.deepEqual(twoStep.acceptCode({ ...row, last_step: step }, totp.codeAt(SECRET, step), NOW, sha256), { kind: '' })
+    assert.deepEqual(twoStep.acceptCode({ ...row, last_step: step }, totp.codeAt(SECRET, step), NOW, matches), { kind: '' })
   })
   test('a recovery code is accepted as typed, and only that one is spent', () => {
-    assert.deepEqual(twoStep.acceptCode(row, ' FGHJK-78923 ', NOW, sha256), { kind: 'recovery', hashes: [sha256('abcde23456')] })
+    assert.deepEqual(twoStep.acceptCode(row, ' FGHJK-78923 ', NOW, matches), { kind: 'recovery', hashes: [sha256('abcde23456')] })
     assert.equal(row.hashes.length, 2, 'the row passed in is left as it was')
   })
   test('a wrong code of either kind is refused', () => {
-    assert.deepEqual(twoStep.acceptCode(row, '000000', NOW, sha256), { kind: '' })
-    assert.deepEqual(twoStep.acceptCode(row, 'zzzzz-zzzzz', NOW, sha256), { kind: '' })
+    assert.deepEqual(twoStep.acceptCode(row, '000000', NOW, matches), { kind: '' })
+    assert.deepEqual(twoStep.acceptCode(row, 'zzzzz-zzzzz', NOW, matches), { kind: '' })
   })
 })
 

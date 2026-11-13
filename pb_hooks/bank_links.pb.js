@@ -4,8 +4,9 @@
 // Linking bank and card accounts through a provider (glue/providers.js; Plaid
 // today): the person signs in to their bank in the provider's window, and
 // Cheddar keeps only the resulting access token, encrypted -- never the bank
-// password (lib/plaid.js says how Plaid's works). Off unless BANK_LINK_KEY
-// and the provider's settings (PLAID_CLIENT_ID, PLAID_SECRET) are all set.
+// password (lib/plaid.js says how Plaid's works). Off unless a data key
+// (DATA_KEYS, or BANK_LINK_KEY) and the provider's settings
+// (PLAID_CLIENT_ID, PLAID_SECRET) are all set.
 //
 //   GET  /api/bank-links                   -> { enabled, links: [summary], full };
 //                                          full: why no new link can be made, or null
@@ -20,7 +21,9 @@
 // day on its own.
 //
 // Settings, from the environment:
-//   BANK_LINK_KEY      32 characters; encrypts each link's access token
+//   DATA_KEYS          "v2:<32 characters>,v1:<32 characters>", newest first;
+//                      seals each link's access token (lib/data_keys.js)
+//   BANK_LINK_KEY      32 characters; before DATA_KEYS, key v1
 //   PLAID_CLIENT_ID    from dashboard.plaid.com, Developers -> Keys
 //   PLAID_SECRET       the secret for PLAID_ENV
 //   PLAID_ENV          sandbox (default) or production

@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 var twoStep = require(`${__hooks}/lib/two_step.js`)
+var dataKeys = require(`${__hooks}/glue/data_keys.js`)
 
 /** The person's user_totp row, or null. */
 function appRow(userId) {
@@ -16,6 +17,20 @@ function appRow(userId) {
   catch (_) {
     return null
   }
+}
+
+/**
+ * The row's app secret, or its pending one, opened: sealed with a data key
+ * (glue/data_keys.js), or plain from before encryption. "" when there's none
+ * or its key is gone.
+ */
+function secretOf(row, field) {
+  return dataKeys.open(row.getString(field || "secret"), "plain") || ""
+}
+
+/** Stores an app secret (or "") in `field`, sealed with the newest data key. */
+function setSecret(row, field, secret) {
+  row.set(field, dataKeys.seal(secret))
 }
 
 /** "off" or "app" for a users record. */
@@ -48,7 +63,7 @@ function recoveryHashes(row) {
 
 /** Replaces the row's recovery codes with new ones; returns them, formatted. */
 function newRecoveryCodes(row) {
-  var made = twoStep.newRecoveryCodes($security.randomStringWithAlphabet, $security.sha256)
+  var made = twoStep.newRecoveryCodes($security.randomStringWithAlphabet, dataKeys.hashCode)
   row.set("recovery_codes", made.hashes)
   return made.codes
 }
@@ -56,8 +71,8 @@ function newRecoveryCodes(row) {
 /** "app", "recovery" or "" for a code typed at sign-in, spending what it accepts on the row. */
 function acceptCode(row, code) {
   var got = twoStep.acceptCode(
-    { secret: row.getString("secret"), last_step: row.getInt("last_step"), hashes: recoveryHashes(row) },
-    code, Date.now(), $security.sha256)
+    { secret: secretOf(row), last_step: row.getInt("last_step"), hashes: recoveryHashes(row) },
+    code, Date.now(), dataKeys.codeMatcher())
   if (got.kind === "app") row.set("last_step", got.last_step)
   if (got.kind === "recovery") row.set("recovery_codes", got.hashes)
   return got.kind
@@ -80,6 +95,8 @@ function notify(user, kind, arg) {
 
 module.exports = {
   notify: notify,
+  secretOf: secretOf,
+  setSecret: setSecret,
   appRow: appRow,
   method: method,
   passwordStepUser: passwordStepUser,

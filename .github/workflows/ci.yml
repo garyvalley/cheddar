@@ -241,6 +241,7 @@ jobs:
       MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
       MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
       MAILJET_SENDER_EMAIL: ${{ secrets.MAILJET_SENDER_EMAIL }}
+      DATA_KEYS: ${{ secrets.DATA_KEYS }}
       BANK_LINK_KEY: ${{ secrets.BANK_LINK_KEY }}
       PLAID_CLIENT_ID: ${{ secrets.PLAID_CLIENT_ID }}
       PLAID_SECRET: ${{ secrets.PLAID_SECRET }}

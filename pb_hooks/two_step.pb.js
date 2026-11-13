@@ -69,7 +69,7 @@ routerAdd("POST", "/api/two-step/app", (e) => {
     row.set("user", user.id)
   }
   var secret = $security.randomStringWithAlphabet(32, totp.BASE32) // 160 bits
-  row.set("pending_secret", secret)
+  twoStep.setSecret(row, "pending_secret", secret)
   e.app.save(row)
   return e.json(200, { secret: secret, uri: totp.otpauthUri(secret, user.getString("email"), "Cheddar") })
 }, $apis.requireAuth("users"))
@@ -83,18 +83,19 @@ routerAdd("POST", "/api/two-step/app/confirm", (e) => {
   var user = e.app.findRecordById("users", e.auth.id)
 
   var row = twoStep.appRow(user.id)
-  if (!row || !row.getString("pending_secret")) throw new BadRequestError("Start again: set up your authenticator app first.")
+  var pending = row ? twoStep.secretOf(row, "pending_secret") : ""
+  if (!pending) throw new BadRequestError("Start again: set up your authenticator app first.")
   lockout.refuseIfLocked(row, "codes")
 
-  var step = totp.matchStep(row.getString("pending_secret"), (e.requestInfo().body || {}).code, Date.now(), 0)
+  var step = totp.matchStep(pending, (e.requestInfo().body || {}).code, Date.now(), 0)
   if (step < 0) {
     lockout.strike(row, "That code is wrong. Check it's the Cheddar entry in your app, and try the next one.", "codes")
   }
 
   // Replacing an app that was already on is what a takeover would do: say so.
   var replacing = !!row.getString("secret") && user.getBool("mfa_enabled")
-  row.set("secret", row.getString("pending_secret"))
-  row.set("pending_secret", "")
+  twoStep.setSecret(row, "secret", pending)
+  twoStep.setSecret(row, "pending_secret", "")
   row.set("last_step", step)
   lockout.clear(row)
   var codes = twoStep.newRecoveryCodes(row)

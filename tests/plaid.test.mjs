@@ -7,14 +7,13 @@ import { loadHookModule } from './load-hook-module.mjs'
 
 const plaid = loadHookModule('pb_hooks/lib/plaid.js')
 const env = vars => k => vars[k] ?? ''
-const KEY = 'k'.repeat(32)
 
 describe('config', () => {
-  test('is on only with the bank-link key and both Plaid keys', () => {
+  test('is on only with both Plaid keys', () => {
     assert.equal(plaid.isEnabled(plaid.config(env({}))), false)
-    assert.equal(plaid.isEnabled(plaid.config(env({ BANK_LINK_KEY: KEY, PLAID_CLIENT_ID: 'id' }))), false)
-    assert.equal(plaid.isEnabled(plaid.config(env({ BANK_LINK_KEY: 'short', PLAID_CLIENT_ID: 'id', PLAID_SECRET: 's' }))), false)
-    assert.equal(plaid.isEnabled(plaid.config(env({ BANK_LINK_KEY: KEY, PLAID_CLIENT_ID: 'id', PLAID_SECRET: 's' }))), true)
+    assert.equal(plaid.isEnabled(plaid.config(env({ PLAID_CLIENT_ID: 'id' }))), false)
+    assert.equal(plaid.isEnabled(plaid.config(env({ PLAID_SECRET: 's' }))), false)
+    assert.equal(plaid.isEnabled(plaid.config(env({ PLAID_CLIENT_ID: 'id', PLAID_SECRET: 's' }))), true)
   })
 
   test('talks to Sandbox unless told Production, and to a stand-in only when given one', () => {

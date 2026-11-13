@@ -244,6 +244,38 @@ describe('two-step sign-in', () => {
     assert.equal((await use()).status, 400)
   })
 
+  test('the app secret and recovery codes are kept sealed, and old plain ones are sealed by the reseal', async () => {
+    const { address, id, secret, codes } = await ready()
+    const token = await superuser()
+    const totpRow = async () => {
+      const r = await fetch(`${PB}/api/collections/user_totp/records?filter=${encodeURIComponent(`user='${id}'`)}`, { headers: { authorization: token } })
+      return (await r.json()).items[0]
+    }
+    const row = await totpRow()
+    assert.match(row.secret, /^[a-z0-9]{1,8}:/, 'sealed with a data key')
+    assert.ok(!row.secret.includes(secret))
+    for (const h of row.recovery_codes) assert.match(h, /^[a-z0-9]{1,8}:[0-9a-f]{64}$/)
+
+    // As every secret was before #39: plain. It still signs in, and the reseal seals it.
+    await fetch(`${PB}/api/collections/user_totp/records/${row.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', authorization: token }, body: JSON.stringify({ secret }),
+    })
+    const signIn = async (code) => {
+      const b = client()
+      const s = await b.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
+      return b.call('POST', '/api/auth/code', { mfaId: s.json.twoStep.mfaId, code })
+    }
+    assert.equal((await signIn(totp.codeAt(secret, totp.stepAt(Date.now()) + 1))).status, 200)
+    const reseal = await fetch(`${PB}/api/data-keys/reseal`, { method: 'POST', headers: { authorization: token } })
+    assert.equal(reseal.status, 200)
+    assert.ok((await reseal.json()).resealed >= 1)
+    assert.match((await totpRow()).secret, /^[a-z0-9]{1,8}:/)
+    assert.equal((await signIn(codes[0])).status, 200, 'recovery codes still work')
+
+    // Only a superuser may reseal.
+    assert.equal((await fetch(`${PB}/api/data-keys/reseal`, { method: 'POST' })).status, 401)
+  })
+
   test('a code needs a password step first', async () => {
     const { c } = await signedIn()
     const { secret } = await withTwoStep(c)
