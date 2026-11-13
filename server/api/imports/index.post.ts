@@ -1,7 +1,7 @@
 import { getAccount, importRows, setBalance } from '~~/server/data/money'
+import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { isLiability } from '~~/shared/accounts'
-import { localToday } from '~~/shared/categories'
 import { MAX_FILE_BYTES, readStatement, type CsvMapping } from '~~/shared/statements'
 
 interface Body { account: string, filename: string, text: string, mapping: CsvMapping, flip: boolean }
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   const mapping = body.mapping && typeof body.mapping === 'object' ? body.mapping : undefined
 
   const into = await attempt(() => getAccount(s, account), 'No such account')
-  const statement = readStatement(filename, body.text, mapping, { liability: isLiability(into.kind), flip: body.flip === true, today: localToday() })
+  const statement = readStatement(filename, body.text, mapping, { liability: isLiability(into.kind), flip: body.flip === true, today: await attempt(() => todayFor(s)) })
   if ('problem' in statement) throw createError({ statusCode: 400, statusMessage: statement.problem })
   if (!statement.rows.length) throw createError({ statusCode: 400, statusMessage: 'No line of the file could be read as a transaction.' })
 

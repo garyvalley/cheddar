@@ -1,4 +1,5 @@
 import { projections } from '~~/server/data/money'
+import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /**
@@ -8,5 +9,6 @@ import { attempt, sessionFor } from '~~/server/data/session'
  */
 export default defineEventHandler(async (event) => {
   const s = sessionFor(event)
-  return await attempt(() => projections(s))
+  const today = await attempt(() => todayFor(s))
+  return await attempt(() => projections(s, today))
 })

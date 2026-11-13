@@ -212,9 +212,10 @@ function failed(app, link, f, result) {
 /**
  * Fetches the link's balances and new transactions and writes them. Records
  * the outcome on the link either way, and answers
- * { ok, added, updated, removed, problem? }.
+ * { ok, added, updated, removed, problem? }. `today` is the person's own day
+ * for the balances' date (dates.personToday); the UTC day without one.
  */
-function sync(app, link) {
+function sync(app, link, today) {
   var now = Date.now()
   var result = { ok: false, added: 0, updated: 0, removed: 0 }
   link.set("last_attempt", dates.toPb(now))
@@ -244,7 +245,7 @@ function sync(app, link) {
 
   var item = accounts.item || {}
   var institution = plaid.clean(item.institution_name) || (link.get("institutions") || [])[0] || ""
-  var rows = plaid.accountRows(accounts, institution, new Date(now).toISOString().slice(0, 10))
+  var rows = plaid.accountRows(accounts, institution, dates.personToday(today, now))
 
   app.runInTransaction(function (txApp) {
     var byPlaidId = {}

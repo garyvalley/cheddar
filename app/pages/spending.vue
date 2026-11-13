@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCents, type Account, type Transaction } from '~~/shared/accounts'
-import { BUILT_IN, categoryOf, isCategoryRef, localToday, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
+import { BUILT_IN, categoryOf, isCategoryRef, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
 
 // Spending only reads the accounts set up on Accounts. Every transaction is
 // sorted into a category on its own; what a person does here is move one
@@ -14,7 +14,8 @@ const NEW = '__new'
 
 // The view lives in the address, so a category can be linked to and Back leaves it.
 const kind = computed(() => (route.query.period === 'year' ? 'year' : 'month'))
-const period = computed(() => periodOf(kind.value, text(route.query.at) || undefined, localToday()))
+const today = useToday()
+const period = computed(() => periodOf(kind.value, text(route.query.at) || undefined, today))
 const account = computed(() => text(route.query.account))
 // A category's id, "all" for every transaction, or "" for the categories.
 const category = computed(() => (route.query.category === 'all' || isCategoryRef(route.query.category) ? route.query.category as string : ''))

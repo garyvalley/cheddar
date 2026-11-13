@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { formatCents } from '~~/shared/accounts'
-import { localToday } from '~~/shared/categories'
 import { cadenceOf, type Recurring, type RecurringSummary } from '~~/shared/recurring'
 
 // Spending's Recurring section: the subscriptions and bills Cheddar found in
@@ -14,7 +13,7 @@ const { data, error } = await useFetch<RecurringSummary>('/api/recurring', {
   default: () => ({ items: [], stopped: [], yearly_cents: 0, monthly_cents: 0 }),
 })
 
-const today = localToday()
+const today = useToday()
 const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(undefined, {
   month: 'short', day: 'numeric', ...(ymd.slice(0, 4) === today.slice(0, 4) ? {} : { year: 'numeric' }),
 })

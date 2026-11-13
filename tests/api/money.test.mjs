@@ -154,6 +154,21 @@ describe('importing a statement', () => {
     assert.match(letter.json.message, /No transactions could be found/)
   })
 
+  test('a balance entered is dated today in the person\'s own time zone, not the server\'s', async () => {
+    const { c } = await ready()
+    const day = zone => new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+    const savings = await account(c, { name: 'Savings', kind: 'savings' })
+    // UTC+14 and UTC-12 are always on different days, so neither can pass by being UTC's.
+    for (const zone of ['Pacific/Kiritimati', 'Etc/GMT+12']) {
+      assert.equal((await c.call('PATCH', '/api/profile', { time_zone: zone })).json.me.time_zone, zone)
+      const before = day(zone)
+      const r = await c.call('PATCH', `/api/accounts/${savings.id}`, { balance: '100.00' })
+      assert.equal(r.status, 200, JSON.stringify(r.json))
+      assert.ok([before, day(zone)].includes(r.json.account.balance_date), `${zone}: ${r.json.account.balance_date}`)
+    }
+    assert.equal((await c.call('PATCH', '/api/profile', { time_zone: 'Mars/Olympus_Mons' })).status, 400)
+  })
+
   test('a statement\'s closing balance becomes the account\'s, unless the account has a newer one', async () => {
     const { c } = await ready()
     const card = await account(c, { name: 'Card', kind: 'credit_card' })

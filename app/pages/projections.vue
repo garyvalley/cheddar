@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { formatCents } from '~~/shared/accounts'
-import { localToday } from '~~/shared/categories'
 import { MAX_PAYOFF_MONTHS, monthsAfter, payoff, project, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
 
 // Projections only read what the accounts hold (set up on Accounts): the
@@ -10,7 +9,7 @@ import { MAX_PAYOFF_MONTHS, monthsAfter, payoff, project, WITHDRAWAL_RATE, type 
 
 const { me } = useAuth()
 const { data: pj, error } = await useFetch<Projections>('/api/projections')
-const today = localToday()
+const today = useToday()
 
 const signed = (cents: number) => (cents > 0 ? `+${formatCents(cents)}` : formatCents(cents))
 const percent = (rate: number) => `${rate < 0 ? '−' : ''}${Math.abs(rate * 100).toFixed(Math.abs(rate) < 0.1 ? 1 : 0)}%`

@@ -79,7 +79,9 @@ tunnel, repository secrets) and day-to-day operations.
 - **Finish setting up** (the checklist on the Overview):
   - **Confirm your email.** The link comes by email.
   - **Choose your state and filing status** in Settings. Every state and DC
-    is available, and tax features use your choice.
+    is available, and tax features use your choice. Your time zone is taken
+    from your device the first time you sign in, and can be changed there too:
+    it decides when your day, month and tax year roll over.
   - **Connect your accounts** on Accounts (below).
 - **Pick how it looks** (Settings → Appearance): violet, blue, rose, mint or the original
   Cheddar orange, and light, dark or automatic. It's saved to your account,

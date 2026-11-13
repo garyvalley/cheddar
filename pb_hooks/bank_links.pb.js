@@ -111,7 +111,7 @@ routerAdd("POST", "/api/bank-links", (e) => {
   e.app.save(link)
 
   // The link is saved: a failed first sync is the link's status to show, not a failed request.
-  var result = glue.sync(e.app, link)
+  var result = glue.sync(e.app, link, (e.requestInfo().body || {}).today)
   return e.json(200, { link: glue.summary(e.app, e.app.findRecordById("bank_links", link.id)), sync: result })
 }, $apis.requireAuth("users"))
 
@@ -130,7 +130,7 @@ routerAdd("POST", "/api/bank-links/{id}/sync", (e) => {
   if (!fresh && last && Date.now() - last.getTime() < plaid.MIN_SYNC_GAP_MS) {
     return e.json(200, { link: glue.summary(e.app, link), sync: { ok: link.getString("status") === "ok", added: 0, updated: 0, removed: 0, recent: true } })
   }
-  var result = glue.sync(e.app, link)
+  var result = glue.sync(e.app, link, (e.requestInfo().body || {}).today)
   return e.json(200, { link: glue.summary(e.app, e.app.findRecordById("bank_links", link.id)), sync: result })
 }, $apis.requireAuth("users"))
 
@@ -141,7 +141,9 @@ routerAdd("POST", "/api/bank-links/{id}/remove", (e) => {
   return e.noContent(204)
 }, $apis.requireAuth("users"))
 
-// Every link, once a day. One link failing never stops the rest.
+// Every link, once a day. One link failing never stops the rest. At 11:17 UTC
+// it is that same date in every zone from UTC-11 to UTC+12, so the UTC day is
+// each person's own.
 cronAdd("bank_links_sync", "17 11 * * *", () => {
   var glue = require(`${__hooks}/glue/plaid.js`)
   var plaid = require(`${__hooks}/lib/plaid.js`)
