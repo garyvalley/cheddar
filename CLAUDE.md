@@ -25,6 +25,7 @@ Multi-user from day one: every user's data is theirs alone; state and filing sta
 - Import shared TypeScript with the `.ts` extension (`./states.ts`): unit tests run it through Node's type stripping.
 - Node's type stripping can't erase TS parameter properties (`constructor(readonly x)`): declare fields instead.
 - The users collection has OTP enabled only because PocketBase refuses MFA without a second built-in method; `pb_hooks/two_step.pb.js` refuses every OTP request. Don't remove either half.
+- Password and email changes go only through `pb_hooks/credentials.pb.js`, which checks the current password; it refuses PocketBase's own `request-email-change` (no password). The confirm link goes to `/confirm-email` (template in `migrations/0012_email_change.mjs`).
 - `mfa_enabled` is set only by the two-step hooks; the record API can't change it. A locked-out user is reset by a superuser in the admin UI.
 - Two-step sign-in is required and enforced by collection rules: every new collection's rules include `@request.auth.mfa_enabled = true` (migrations/README.md).
 - Rate limits and the country block live only in nginx (`nginx/nginx.conf.template`); Nuxt has none, so test them through nginx (:8085), not the dev server.

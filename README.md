@@ -135,6 +135,12 @@ tunnel, repository secrets) and day-to-day operations.
     one and move it there; Cheddar remembers it for that merchant like any
     other. Rename or delete it on its own page; deleting one sorts its
     transactions again on their own.
+- **Change your password** (Settings → Account) with your current one. Every
+  other device is signed out; this one stays signed in.
+- **Change your email** (Settings → Account): your password, then a link
+  sent to the new address, which asks for your password again. The old
+  address is told when the change is asked for and when it's done, and every
+  device is signed out once it moves.
 - **Sign out everywhere** (Settings) ends every session on every device.
 - **Delete account** (Settings) removes your account and everything in it.
   It asks for your password.
@@ -165,6 +171,9 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - Emailed codes are refused, since whoever reads the inbox can also reset
     the password.
   - Five wrong codes lock the codes for 15 minutes.
+  - Changing the password or email needs the current password
+    (`pb_hooks/credentials.pb.js`); PocketBase's own email-change request,
+    which doesn't, is refused.
   - Sessions last 3 days and renew on use.
 - **nginx** (`nginx/nginx.conf.template`) sits between the tunnel and Nuxt:
   - It refuses visitors from China, Russia, India, North Korea, Iran and

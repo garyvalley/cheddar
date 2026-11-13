@@ -1,8 +1,41 @@
 <script setup lang="ts">
+import { MIN_LENGTH } from '~~/shared/passwords'
+
 const { me, signOut } = useAuth()
 const verify = useAction()
 const everywhere = useAction()
 const remove = useAction()
+const emailChange = useAction()
+const passwordChange = useAction()
+
+// Each change opens its own small form; both ask for the current password.
+const editing = ref<'' | 'email' | 'password'>('')
+const current = ref('')
+const newEmail = ref('')
+const newPassword = ref('')
+const emailSentTo = ref('')
+const passwordChanged = ref(false)
+
+function edit(what: '' | 'email' | 'password') {
+  editing.value = what
+  current.value = newEmail.value = newPassword.value = ''
+  emailChange.error.value = passwordChange.error.value = ''
+  if (what) emailSentTo.value = ''
+  if (what) passwordChanged.value = false
+}
+
+async function changeEmail() {
+  const to = newEmail.value.trim()
+  if (!await emailChange.succeed(() => $fetch('/api/auth/request-email-change', { method: 'POST', body: { password: current.value, email: to } }))) return
+  edit('')
+  emailSentTo.value = to
+}
+
+async function changePassword() {
+  if (!await passwordChange.succeed(() => $fetch('/api/auth/change-password', { method: 'POST', body: { password: current.value, newPassword: newPassword.value } }))) return
+  edit('')
+  passwordChanged.value = true
+}
 
 const sent = ref(false)
 const deleting = ref(false)
@@ -26,7 +59,29 @@ async function deleteAccount() {
       <div class="row">
         <span class="row-label">Email</span>
         <span class="row-value">{{ me?.email }}</span>
+        <button v-if="editing !== 'email'" class="btn btn-plain" @click="edit('email')">Change…</button>
       </div>
+      <form v-if="editing === 'email'" class="field stack" @submit.prevent="changeEmail">
+        <label>
+          <span class="field-label">New email</span>
+          <input v-model="newEmail" v-focus class="input" type="email" autocomplete="email" required>
+        </label>
+        <label>
+          <span class="field-label">Your password</span>
+          <input v-model="current" class="input" type="password" autocomplete="current-password" required>
+          <span class="caption">We'll email a link to the new address. Your email stays as it is until you open it.</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn btn-primary" :disabled="emailChange.busy.value">
+            <span v-if="emailChange.busy.value" class="spinner" aria-hidden="true" /> Send link
+          </button>
+          <button type="button" class="btn btn-plain" @click="edit('')">Cancel</button>
+        </div>
+        <p v-if="emailChange.error.value" class="notice notice-error" role="alert">{{ emailChange.error.value }}</p>
+      </form>
+      <p v-if="emailSentTo" class="row footnote" role="status">
+        Sent a link to {{ emailSentTo }}. Open it within 30 minutes to move your account there.
+      </p>
       <div class="row">
         <span class="row-label">
           <span class="badge" :class="me?.verified ? 'badge-on' : 'badge-off'">{{ me?.verified ? 'Confirmed' : 'Not confirmed' }}</span>
@@ -36,6 +91,31 @@ async function deleteAccount() {
         </button>
         <span v-else-if="sent" class="footnote" role="status">Sent. Check your inbox.</span>
       </div>
+      <div class="row">
+        <span class="row-label">
+          Password
+          <span v-if="passwordChanged" class="footnote block" role="status">Changed. Every other device has been signed out.</span>
+        </span>
+        <button v-if="editing !== 'password'" class="btn btn-plain" @click="edit('password')">Change…</button>
+      </div>
+      <form v-if="editing === 'password'" class="field stack" @submit.prevent="changePassword">
+        <label>
+          <span class="field-label">Current password</span>
+          <input v-model="current" v-focus class="input" type="password" autocomplete="current-password" required>
+        </label>
+        <label>
+          <span class="field-label">New password</span>
+          <input v-model="newPassword" class="input" type="password" autocomplete="new-password" :minlength="MIN_LENGTH" required>
+          <span class="caption">At least {{ MIN_LENGTH }} characters. Every other device will be signed out.</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn btn-primary" :disabled="passwordChange.busy.value">
+            <span v-if="passwordChange.busy.value" class="spinner" aria-hidden="true" /> Change password
+          </button>
+          <button type="button" class="btn btn-plain" @click="edit('')">Cancel</button>
+        </div>
+        <p v-if="passwordChange.error.value" class="notice notice-error" role="alert">{{ passwordChange.error.value }}</p>
+      </form>
       <div class="row">
         <span class="row-label">
           Sign out everywhere

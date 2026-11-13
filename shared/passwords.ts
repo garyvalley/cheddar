@@ -1,8 +1,9 @@
 /**
- * What a new password must be, for both ways one is set: sign-up
- * (server/api/auth/register.post.ts) and a password reset
- * (server/api/auth/confirm-password-reset.post.ts). Nothing else sets a
- * password: the browser cannot reach PocketBase.
+ * What a new password must be, for every way one is set: sign-up
+ * (server/api/auth/register.post.ts), a password reset
+ * (server/api/auth/confirm-password-reset.post.ts) and a change in Settings
+ * (server/api/auth/change-password.post.ts). Nothing else sets a password:
+ * the browser cannot reach PocketBase.
  *
  * Length and a list of common passwords, with no composition rules, as NIST
  * SP 800-63B asks: "Password1" meets a lower-upper-digit rule and is still

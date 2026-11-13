@@ -294,3 +294,92 @@ describe('sessions and deletion', () => {
     assert.equal((await client().call('POST', '/api/auth/login', { email: address, password: PASSWORD })).status, 400)
   })
 })
+
+describe('changing the password and email', () => {
+  test('a new password needs the current one and a strong one, and ends every other session', async () => {
+    const { c, address, secret } = await ready()
+    const other = client()
+    const step = await other.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
+    // The confirm step spent the current code; the next one is new.
+    const code = totp.codeAt(secret, totp.stepAt(Date.now()) + 1)
+    assert.equal((await other.call('POST', '/api/auth/code', { mfaId: step.json.twoStep.mfaId, code })).status, 200)
+    const NEW = 'a brand new passphrase'
+    // Each try from an address of its own, so it is the route that answers, not the sign-in limit.
+    const change = async (body) => {
+      const from = client()
+      from.cookie = c.cookie
+      const r = await from.call('POST', '/api/auth/change-password', body)
+      c.cookie = from.cookie
+      return r
+    }
+
+    assert.equal((await change({ password: 'wrong password!', newPassword: NEW })).status, 400)
+    assert.equal((await change({ password: PASSWORD, newPassword: 'short' })).status, 400)
+    assert.equal((await change({ password: PASSWORD, newPassword: 'password1234' })).status, 400)
+    assert.notEqual((await other.call('GET', '/api/auth/me')).json.me, null, 'a refused change ends nothing')
+
+    const before = c.cookie
+    assert.equal((await change({ password: PASSWORD, newPassword: NEW })).status, 204)
+    assert.notEqual(c.cookie, before, 'this session gets a fresh token')
+    const me = (await c.call('GET', '/api/auth/me')).json.me
+    assert.equal(me.email, address, 'and stays signed in')
+    assert.equal(me.mfa_enabled, true)
+    assert.equal((await c.call('GET', '/api/auth/two-step')).status, 200)
+    assert.equal((await other.call('GET', '/api/auth/me')).json.me, null, 'every other session ends')
+
+    assert.equal((await client().call('POST', '/api/auth/login', { email: address, password: PASSWORD })).status, 400)
+    assert.ok((await client().call('POST', '/api/auth/login', { email: address, password: NEW })).json.twoStep.mfaId)
+  })
+
+  test('both wait for two-step sign-in', async () => {
+    const { c } = await signedIn()
+    assert.equal((await c.call('POST', '/api/auth/change-password', { password: PASSWORD, newPassword: 'a brand new passphrase' })).status, 403)
+    assert.equal((await c.call('POST', '/api/auth/request-email-change', { password: PASSWORD, email: email() })).status, 403)
+  })
+
+  test('an email change needs the password and a free, valid address, and changes nothing until confirmed', async () => {
+    const { c, address } = await ready()
+    const taken = await signedIn()
+    const to = email()
+    made.push(to)
+    // Each try from an address of its own, so it is the route that answers, not the mail limit.
+    const ask = body => client().call('POST', '/api/auth/request-email-change', body, { cookie: c.cookie })
+    assert.equal((await ask({ password: 'wrong password!', email: to })).status, 400)
+    assert.equal((await ask({ password: PASSWORD, email: 'not an address' })).status, 400)
+    assert.equal((await ask({ password: PASSWORD, email: taken.address })).status, 400)
+    assert.equal((await ask({ password: PASSWORD, email: address })).status, 400)
+    assert.equal((await ask({ password: PASSWORD, email: to })).status, 204)
+    assert.equal((await c.call('GET', '/api/auth/me')).json.me.email, address)
+  })
+
+  test('PocketBase\'s own email-change request, which skips the password, is refused', async () => {
+    const { c } = await ready()
+    const r = await fetch(`${PB}/api/collections/users/request-email-change`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': c.cookie.slice('pb_token='.length) },
+      body: JSON.stringify({ newEmail: email() }),
+    })
+    assert.equal(r.status, 400)
+  })
+
+  test('the record API cannot set a password, even with the old one', async () => {
+    const { c, id, address } = await ready()
+    const r = await fetch(`${PB}/api/collections/users/records/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'authorization': c.cookie.slice('pb_token='.length) },
+      body: JSON.stringify({ oldPassword: PASSWORD, password: 'password1234', passwordConfirm: 'password1234' }),
+    })
+    assert.equal(r.status, 400)
+    assert.ok((await client().call('POST', '/api/auth/login', { email: address, password: PASSWORD })).json.twoStep.mfaId)
+  })
+
+  test('a made-up confirm token changes nothing', async () => {
+    const r = await client().call('POST', '/api/auth/confirm-email-change', { token: 'made.up.token', password: PASSWORD })
+    assert.equal(r.status, 400)
+  })
+
+  test('each needs a session', async () => {
+    assert.equal((await client().call('POST', '/api/auth/change-password', { password: PASSWORD, newPassword: 'whatever passphrase' })).status, 401)
+    assert.equal((await client().call('POST', '/api/auth/request-email-change', { password: PASSWORD, email: email() })).status, 401)
+  })
+})
