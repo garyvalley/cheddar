@@ -63,7 +63,23 @@ function acceptCode(row, code) {
   return got.kind
 }
 
+/**
+ * Emails the person one of lib/notices.js's security notices (`kind`, with
+ * `arg`). Best effort: the step it reports is already done, so a notice that
+ * fails to send must not undo it.
+ */
+function notify(user, kind, arg) {
+  try {
+    var notice = require(`${__hooks}/lib/notices.js`)[kind](arg)
+    require(`${__hooks}/glue/mailjet.js`).send({ to: user.email(), toName: user.getString("name"), subject: notice.subject, html: notice.html })
+  }
+  catch (err) {
+    console.log("[two_step] Could not send the " + kind + " notice: " + err)
+  }
+}
+
 module.exports = {
+  notify: notify,
   appRow: appRow,
   method: method,
   passwordStepUser: passwordStepUser,

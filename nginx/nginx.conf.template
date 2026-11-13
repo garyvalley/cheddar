@@ -100,9 +100,11 @@ server {
     proxy_intercept_errors on;
     error_page 502 503 504 =503 @unavailable;
     # A refused rate limit answers in the app's error shape, which the pages
-    # show as written (app/utils/errors.ts).
-    limit_req_status 429;
-    error_page 429 @limited;
+    # show as written (app/utils/errors.ts). nginx's own refusals use 529
+    # inside, so a 429 from the app (two-step codes locked, with how long)
+    # passes through as it was written; @limited answers 429.
+    limit_req_status 529;
+    error_page 529 =429 @limited;
 
     location = /api/auth/login {
         limit_req zone=auth burst=5 nodelay;

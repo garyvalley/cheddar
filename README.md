@@ -223,7 +223,10 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
     account, and nothing else.
   - Emailed codes are refused, since whoever reads the inbox can also reset
     the password.
-  - Five wrong codes lock the codes for 15 minutes.
+  - Five wrong codes lock the codes for 15 minutes, and each lockout after
+    that lasts twice as long (up to a day) until a right code. A lockout
+    after a right password, a new authenticator app and new recovery codes
+    each email the person (`pb_hooks/lib/notices.js`).
   - Changing the password or email needs the current password
     (`pb_hooks/credentials.pb.js`); PocketBase's own email-change request,
     which doesn't, is refused.
