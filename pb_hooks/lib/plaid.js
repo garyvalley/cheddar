@@ -95,13 +95,14 @@ function request(cfg, path, body) {
  * in update mode: the person signs in to the bank again for a link that
  * stopped working, and keeps the same link.
  */
-function linkTokenBody(userId, accessToken) {
+function linkTokenBody(userId, accessToken, webhook) {
   var body = {
     client_name: "Cheddar",
     user: { client_user_id: String(userId) },
     country_codes: ["US"],
     language: "en",
   }
+  if (webhook) body.webhook = webhook
   if (accessToken) {
     body.access_token = accessToken
   }
@@ -250,7 +251,35 @@ function syncPage(json) {
   }
 }
 
+/**
+ * Where Plaid sends a link's webhooks: Nuxt's /api/webhooks/plaid on the
+ * public origin (APP_URL). Plaid only calls https, so with any other origin
+ * (dev, CI) links get none and the daily sync is all there is.
+ */
+function webhookUrl(appUrl) {
+  var origin = String(appUrl || "").trim().replace(/\/+$/, "")
+  return /^https:\/\/[^\s/]+$/.test(origin) ? origin + "/api/webhooks/plaid" : ""
+}
+
+// Webhooks that mean "sync this link now": new transactions, or the link's
+// state changed (a sync finds out how: signed in again, needs signing in,
+// expiring, new accounts). Anything else is acknowledged and ignored.
+var SYNC_ON = {
+  TRANSACTIONS: ["SYNC_UPDATES_AVAILABLE"],
+  ITEM: ["ERROR", "LOGIN_REPAIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT", "NEW_ACCOUNTS_AVAILABLE", "USER_PERMISSION_REVOKED"],
+}
+
+/** A webhook's body as { itemId, sync }: which link, and whether to sync it now. */
+function webhookEvent(body) {
+  var b = body || {}
+  var codes = SYNC_ON[String(b.webhook_type || "")] || []
+  var itemId = String(b.item_id || "")
+  return { itemId: /^[A-Za-z0-9_-]{1,200}$/.test(itemId) ? itemId : "", sync: codes.indexOf(String(b.webhook_code || "")) >= 0 }
+}
+
 module.exports = {
+  webhookUrl: webhookUrl,
+  webhookEvent: webhookEvent,
   PREFIX: PREFIX,
   MIN_SYNC_GAP_MS: MIN_SYNC_GAP_MS,
   MAX_PAGES: MAX_PAGES,

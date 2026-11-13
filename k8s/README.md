@@ -87,6 +87,12 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```
    Then run the deploy again (`gh workflow run ci.yml --ref main -R garyvalley/cheddar`).
 
+   Plaid's webhooks need nothing more: each link is told to send them to
+   `https://<APP_HOST>/api/webhooks/plaid` (links made before that are
+   pointed there at their next sync), and Cheddar syncs a link as soon as one
+   comes. The route checks Plaid's signature on each, so nothing else can use
+   it. Without them, links still sync once a day.
+
    Plaid bills you for each linked bank, so new links stop at a limit:
    `PLAID_LINKS_PER_PERSON` (default 10) and `PLAID_MAX_LINKS` for the whole
    Cheddar (default 25 here, `0` for none). Signing in to a bank again never

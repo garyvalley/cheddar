@@ -108,7 +108,8 @@ tunnel, repository secrets) and day-to-day operations.
     window that opens (Plaid Link). Your password goes to your bank, never
     to Cheddar; Cheddar keeps only a read-only access token, encrypted.
     The first sync brings 90 days of transactions.
-  - Each link then syncs once a day on its own, or when you tap **Update
+  - Each link then syncs within minutes of the bank having something new
+    (Plaid tells Cheddar), once a day regardless, and when you tap **Update
     now**. Pending charges are replaced once they post.
   - When a bank asks you to sign in again, the link says so: tap **Sign in
     again**.

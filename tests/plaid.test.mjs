@@ -66,6 +66,26 @@ describe('requests', () => {
     const again = plaid.linkTokenBody('u1', 'access-sandbox-x')
     assert.equal(again.access_token, 'access-sandbox-x')
     assert.equal(again.products, undefined)
+    assert.equal(fresh.webhook, undefined)
+    assert.equal(plaid.linkTokenBody('u1', null, 'https://cheddar.example/api/webhooks/plaid').webhook, 'https://cheddar.example/api/webhooks/plaid')
+  })
+})
+
+describe('webhooks', () => {
+  test('go to the public https origin only', () => {
+    assert.equal(plaid.webhookUrl('https://cheddar.example.com/'), 'https://cheddar.example.com/api/webhooks/plaid')
+    assert.equal(plaid.webhookUrl('http://localhost:3005'), '')
+    assert.equal(plaid.webhookUrl('https://cheddar.example.com/app'), '')
+    assert.equal(plaid.webhookUrl(''), '')
+  })
+
+  test('new transactions and a change in the link\'s state sync it; anything else does not', () => {
+    assert.deepEqual(plaid.webhookEvent({ webhook_type: 'TRANSACTIONS', webhook_code: 'SYNC_UPDATES_AVAILABLE', item_id: 'item-1' }), { itemId: 'item-1', sync: true })
+    assert.equal(plaid.webhookEvent({ webhook_type: 'ITEM', webhook_code: 'LOGIN_REPAIRED', item_id: 'i' }).sync, true)
+    assert.equal(plaid.webhookEvent({ webhook_type: 'ITEM', webhook_code: 'WEBHOOK_UPDATE_ACKNOWLEDGED', item_id: 'i' }).sync, false)
+    assert.equal(plaid.webhookEvent({ webhook_type: 'TRANSACTIONS', webhook_code: 'DEFAULT_UPDATE', item_id: 'i' }).sync, false)
+    assert.equal(plaid.webhookEvent({ webhook_type: 'TRANSACTIONS', webhook_code: 'SYNC_UPDATES_AVAILABLE', item_id: "x' || 1=1" }).itemId, '')
+    assert.deepEqual(plaid.webhookEvent(null), { itemId: '', sync: false })
   })
 })
 

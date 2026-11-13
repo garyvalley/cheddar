@@ -9,7 +9,7 @@
 
 import { before, after, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { asPb, client, PASSWORD, PB, ready, signedIn, superuser } from './helpers.mjs'
+import { APP, asPb, client, PASSWORD, PB, ready, signedIn, superuser } from './helpers.mjs'
 import { sampleBank, startMock } from './plaid-mock.mjs'
 
 let mock
@@ -431,5 +431,70 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     const me = (await c.call('GET', '/api/auth/me')).json.me
     assert.equal((await pb('DELETE', `/api/collections/users/records/${me.id}`, await superuser())).status, 204)
     assert.equal(mock.removals(bank), 1)
+  })
+  /** Posts a webhook to Nuxt's public route as Plaid would. */
+  const postWebhook = ({ raw, jwt }) => fetch(`${APP}/api/webhooks/plaid`, {
+    method: 'POST', headers: { 'content-type': 'application/json', ...(jwt ? { 'plaid-verification': jwt } : {}) }, body: raw,
+  })
+  /** Waits for the link's sync calls to Plaid to reach `count` (the route answers before PocketBase syncs). */
+  async function syncCalls(bank, count) {
+    for (let i = 0; i < 50 && bank.calls.filter(x => x.path === '/transactions/sync').length < count; i++) await new Promise(r => setTimeout(r, 100))
+    return bank.calls.filter(x => x.path === '/transactions/sync').length
+  }
+
+  test('a signed webhook from Plaid syncs its link at once', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    assert.ok(mock.itemId(bank))
+    const rent = bank.events[1].t
+    bank.events.push({ kind: 'added', t: { ...rent, transaction_id: `${rent.transaction_id}-dec`, date: daysAgo(0), name: 'RENT DECEMBER' } })
+    const before = await syncCalls(bank, 0)
+
+    // Moments after the last sync, a webhook is acknowledged and waits for the next one.
+    assert.equal((await postWebhook(mock.webhookFor(bank))).status, 200)
+    await new Promise(r => setTimeout(r, 500))
+    assert.equal(await syncCalls(bank, 0), before)
+
+    await allowSync(l.id)
+    const r = await postWebhook(mock.webhookFor(bank))
+    assert.equal(r.status, 200)
+    assert.equal(await syncCalls(bank, before + 1), before + 1)
+    const accounts = (await pb('GET', `/api/collections/accounts/records?filter=${encodeURIComponent('last4=\'0000\'')}`, asPb(c))).json.items
+    let rows = []
+    for (let i = 0; i < 30 && !rows.some(t => t.description === 'RENT DECEMBER'); i++) {
+      rows = await transactions(c, accounts[0].id)
+      await new Promise(r => setTimeout(r, 100))
+    }
+    assert.ok(rows.some(t => t.description === 'RENT DECEMBER'))
+  })
+
+  test('a webhook that is not signed by Plaid, too old, or for another body is refused and syncs nothing', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    await allowSync(l.id)
+    const before = await syncCalls(bank, 0)
+    const good = mock.webhookFor(bank)
+    const bad = [
+      { raw: good.raw, jwt: '' },
+      { raw: good.raw, jwt: 'not.a.jwt' },
+      { raw: good.raw.replace('sandbox', 'production'), jwt: good.jwt },
+      mock.webhookFor(bank, { iat: Math.floor(Date.now() / 1000) - 600 }),
+      mock.webhookFor(bank, { kid: 'kid-nobody' }),
+      { raw: good.raw, jwt: `${good.jwt.split('.').slice(0, 2).join('.')}.${Buffer.alloc(64).toString('base64url')}` },
+    ]
+    for (const w of bad) assert.equal((await postWebhook(w)).status, 400, w.jwt)
+    await new Promise(r => setTimeout(r, 500))
+    assert.equal(await syncCalls(bank, 0), before)
+  })
+
+  test('a webhook that needs no sync, or names no link here, is acknowledged and does nothing', async () => {
+    const c = await person()
+    const { link: l, bank } = await link(c)
+    await allowSync(l.id)
+    const before = await syncCalls(bank, 0)
+    assert.equal((await postWebhook(mock.webhookFor(bank, { type: 'ITEM', code: 'WEBHOOK_UPDATE_ACKNOWLEDGED' }))).status, 200)
+    assert.equal((await postWebhook(mock.webhookFor(sampleBank()))).status, 200)
+    await new Promise(r => setTimeout(r, 500))
+    assert.equal(await syncCalls(bank, 0), before)
   })
 })

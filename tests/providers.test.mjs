@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { loadHookModule } from './load-hook-module.mjs'
 
 const providers = loadHookModule('pb_hooks/glue/providers.js')
-const CONTRACT = ['enabled', 'limits', 'linkToken', 'exchange', 'accounts', 'changes', 'remove', 'clean']
+const CONTRACT = ['enabled', 'limits', 'linkToken', 'exchange', 'accounts', 'changes', 'remove', 'clean', 'webhookUrl', 'setWebhook', 'webhookKey', 'webhookEvent']
 
 test('every provider answers the whole contract, under the name links store', () => {
   assert.ok(Object.keys(providers.ALL).length > 0)

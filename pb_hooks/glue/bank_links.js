@@ -346,6 +346,7 @@ function sync(app, link, today) {
   }
   var institution = found.institution;
   var rows = found.rows;
+  pointWebhook(link, provider, access);
 
   app.runInTransaction(function (txApp) {
     var byPlaidId = {};
@@ -386,6 +387,59 @@ function sync(app, link, today) {
   });
   result.ok = true;
   return result;
+}
+
+/**
+ * Points a link made before webhooks, or at an older address, at where this
+ * Cheddar takes them (provider.webhookUrl(), "" with no https APP_URL), and
+ * notes it on the link, which the sync then saves. Best effort: a link that
+ * can't be pointed still syncs every day.
+ */
+function pointWebhook(link, provider, access) {
+  var url = provider.webhookUrl ? provider.webhookUrl() : "";
+  if (!url || url === link.getString("webhook")) return;
+  try {
+    provider.setWebhook(access, url);
+    link.set("webhook", url);
+  } catch (err) {
+    console.log(
+      "[bank_links] pointing webhooks for " +
+        link.id +
+        " failed: " +
+        (err && err.failure ? err.failure.code : err),
+    );
+  }
+}
+
+/**
+ * A webhook from a link's provider, already checked by Nuxt
+ * (server/data/plaid-webhook.ts): syncs the link it names when the event
+ * calls for it and the last sync isn't moments old. Answers what it did:
+ * "synced", "recent", "ignored" or "unknown" (no such link).
+ */
+function onWebhook(app, providerName, body) {
+  var provider = providers.of(providerName);
+  if (!provider.webhookEvent) return "ignored";
+  var event = provider.webhookEvent(body);
+  if (!event.itemId) return "unknown";
+  var link;
+  try {
+    link = app.findFirstRecordByFilter(
+      "bank_links",
+      "provider = {:p} && item_id = {:item}",
+      { p: provider.name, item: event.itemId },
+    );
+  } catch (_) {
+    return "unknown";
+  }
+  if (!event.sync) return "ignored";
+  var last = dates.parsePb(link.getString("last_attempt"));
+  if (last && Date.now() - last.getTime() < provider.MIN_SYNC_GAP_MS)
+    return "recent";
+  var r = sync(app, link);
+  if (!r.ok)
+    console.log("[bank_links] webhook sync failed for " + link.id + ": " + r.problem);
+  return "synced";
 }
 
 /** The caller's own link, or a 404 for one that isn't theirs. */
@@ -456,6 +510,7 @@ module.exports = {
   create: create,
   summary: summary,
   sync: sync,
+  onWebhook: onWebhook,
   ownLink: ownLink,
   remove: remove,
   forget: forget,
