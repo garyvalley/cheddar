@@ -18,6 +18,12 @@ Each file is `NNNN_what_it_does.mjs`. They run in name order, and each one
 that ran is recorded by name in the `schema_migrations` collection, which
 only a superuser can read.
 
+Take the next free number. Two branches open at once can pick the same
+one: `tests/migrations.test.mjs` fails on a shared number (or a gap, or a
+name `scripts/migrate.mjs` wouldn't run), so the second branch renumbers
+before it merges. `0010` is shared by two files from before that check;
+they stay as they are.
+
 ## Writing one
 
 ```js
