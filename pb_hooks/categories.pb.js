@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // Spending categories (lib/categories.js says how one is chosen). Every
 // transaction is sorted as it's saved, whichever way it arrives: a statement
-// import through the record API, or a bank sync through glue/plaid.js.
+// import through the record API, or a bank sync through glue/bank_links.js.
 //
 //   POST /api/transactions/{id}/category  { category } -> { transaction, moved }
 //     The person moves a transaction to another category. It stays there,

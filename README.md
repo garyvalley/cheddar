@@ -239,7 +239,9 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
   - Mutating requests must come from this site (an Origin check).
   - The CSP is strict and nonce-based (`nuxt.config.ts`).
   - Frames are refused, and HSTS is set.
-- **Bank links** (`pb_hooks/bank_links.pb.js`, `pb_hooks/lib/plaid.js`):
+- **Bank links** (`pb_hooks/bank_links.pb.js`, `pb_hooks/glue/bank_links.js`,
+  through a provider in `pb_hooks/glue/providers.js`; Plaid is
+  `pb_hooks/glue/providers/plaid.js` and `pb_hooks/lib/plaid.js`):
   - The person signs in to their bank in Plaid Link, which hands the page a
     short-lived public token. PocketBase swaps it for an access token with
     Plaid's secret (`PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`), so the
