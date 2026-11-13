@@ -280,16 +280,41 @@ export async function transactionsBetween(
   })) as unknown as ReportRow[];
 }
 
-/** The daily balances Cheddar has seen (balance_history), oldest first: the caller's own only with `ownedOnly`. */
+/**
+ * The balances Cheddar has seen, oldest first: the caller's own only with
+ * `ownedOnly`. Every day's from the first of `dailyFrom`'s month on, and
+ * before that only each account's first and last of every month
+ * (`balance_history_months`, migrations/0023), so a report reads a bounded
+ * number of rows however long the history (issue #35). That keeps what the
+ * reports need: the latest balance at or before any day from `dailyFrom`,
+ * and each account's first. Without `dailyFrom`, every day's.
+ */
 export async function balanceHistory(
   s: Session,
-  opts: { ownedOnly?: boolean } = {},
+  opts: { ownedOnly?: boolean; dailyFrom?: string } = {},
 ): Promise<BalancePoint[]> {
-  return (await s.collection("balance_history").getFullList({
-    fields: "account,date,balance_cents",
-    sort: "date",
-    ...(opts.ownedOnly
-      ? { filter: s.filter("owner = {:owner}", { owner: callerId(s) }) }
-      : {}),
-  })) as unknown as BalancePoint[];
+  const read = (collection: string, extra?: string) => {
+    const parts = [
+      ...(opts.ownedOnly ? ["owner = {:owner}"] : []),
+      ...(extra ? [extra] : []),
+    ];
+    return s.collection(collection).getFullList({
+      fields: "account,date,balance_cents",
+      sort: "date",
+      ...(parts.length
+        ? {
+            filter: s.filter(parts.join(" && "), {
+              owner: callerId(s),
+              cut: `${opts.dailyFrom?.slice(0, 7)}-01`,
+            }),
+          }
+        : {}),
+    }) as Promise<unknown> as Promise<BalancePoint[]>;
+  };
+  if (!opts.dailyFrom) return read("balance_history");
+  const [months, days] = await Promise.all([
+    read("balance_history_months", "date < {:cut}"),
+    read("balance_history", "date >= {:cut}"),
+  ]);
+  return [...months, ...days];
 }

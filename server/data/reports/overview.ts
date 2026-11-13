@@ -32,7 +32,9 @@ export async function overview(
   const [all, fetched, kept, list, budgets] = await Promise.all([
     counted(s),
     transactionsBetween(s, `${months[0]}-01`, `${months.at(-1)}-31`),
-    balanceHistory(s),
+    // Every sum here needs a day's balance only from the longest period but
+    // "All" on (a year back); "All" needs only each account's first.
+    balanceHistory(s, { dailyFrom: growthStart("1y", today) }),
     listCategories(s),
     listBudgets(s),
   ]);
