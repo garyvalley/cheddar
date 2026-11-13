@@ -120,19 +120,21 @@ server {
         include snippets/proxy-to-nuxt.conf;
     }
 
-    # Deleting an account checks the password.
-    location = /api/auth/delete-account {
+    # Deleting an account or changing its password checks the password.
+    location ~ ^/api/auth/(delete-account|change-password)$ {
         limit_req zone=auth burst=5 nodelay;
         include snippets/proxy-to-nuxt.conf;
     }
 
-    # Guesses at an emailed token.
-    location ~ ^/api/auth/confirm-(password-reset|verification)$ {
+    # Guesses at an emailed token (and, for an email change, the password).
+    location ~ ^/api/auth/confirm-(password-reset|verification|email-change)$ {
         limit_req zone=auth burst=5 nodelay;
         include snippets/proxy-to-nuxt.conf;
     }
 
-    location ~ ^/api/auth/request-(password-reset|verification)$ {
+    # An email change also checks the password: the mail zone is the
+    # tighter of the two, so it holds both.
+    location ~ ^/api/auth/request-(password-reset|verification|email-change)$ {
         limit_req zone=mail burst=3 nodelay;
         include snippets/proxy-to-nuxt.conf;
     }

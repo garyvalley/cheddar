@@ -2,8 +2,8 @@ import type { RecordAuthResponse, RecordModel } from 'pocketbase'
 import { anonymous, type Session } from './session'
 
 /**
- * Signing up and in, confirming an address, resetting a password, two-step
- * sign-in and deleting an account: the auth provider's contract as the
+ * Signing up and in, confirming an address, resetting or changing a password,
+ * changing an email, two-step sign-in and deleting an account: the auth provider's contract as the
  * routes in server/api/auth/ use it. The bodies use PocketBase's users
  * collection and the routes in pb_hooks/.
  *
@@ -58,6 +58,22 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
 export async function confirmPasswordReset(token: string, password: string): Promise<void> {
   await anonymous().collection('users').confirmPasswordReset(token, password, password)
+}
+
+/** A new password, after the current one. Every other session ends; the token is this one's new one. */
+export async function changePassword(s: Session, password: string, newPassword: string): Promise<string> {
+  const { token } = await s.send<{ token: string }>('/api/change-password', { method: 'POST', body: { password, newPassword } })
+  return token
+}
+
+/** After the current password, email a confirm link to `newEmail`, and a notice to the old address. */
+export async function requestEmailChange(s: Session, password: string, newEmail: string): Promise<void> {
+  await s.send('/api/request-email-change', { method: 'POST', body: { password, newEmail } })
+}
+
+/** The link's token and the password move the account to the new address, and end every session. */
+export async function confirmEmailChange(token: string, password: string): Promise<void> {
+  await anonymous().collection('users').confirmEmailChange(token, password)
 }
 
 /** Whether two-step sign-in is on, and how many recovery codes are left. */
