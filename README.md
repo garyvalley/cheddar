@@ -126,9 +126,14 @@ tunnel, repository secrets) and day-to-day operations.
     same day in one file are both kept.
   - **Undo** next to an import removes the transactions it added.
 - **See where your money goes** (Spending): what each category came to in a
-  month or a year, for one account or all, against the period before. Tap a
-  category for its transactions. Spending only shows what your accounts
-  hold: to add more, go to Accounts.
+  week (Monday to Sunday), a month, a year or a range of dates you pick, for
+  one account or all, against the span before. Tap a category for its
+  transactions. Spending only shows what your accounts hold: to add more, go
+  to Accounts.
+  - **Budgets:** open a spending category to give it a monthly budget. Its
+    bar then shows what's spent against it (red once over), scaled to the
+    span shown (a year is twelve months' worth, a week its share by days),
+    and Overview lists the categories over budget this month.
   - **Search** by words (in the description, a name you gave it, or its
     note) and by amount, money in or out, on any date.
   - **Needs review** shows transactions added since the review inbox was

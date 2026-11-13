@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCents, type Account, type Transaction } from '~~/shared/accounts'
-import { BUILT_IN, categoryOf, isCategoryRef, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
+import { BUILT_IN, categoryOf, isCategoryRef, isPeriodKind, parseRange, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
 
 // Spending only reads the accounts set up on Accounts. Every transaction is
 // sorted into a category on its own; what a person does here is move one
@@ -13,7 +13,7 @@ const router = useRouter()
 const text = (v: unknown) => (typeof v === 'string' ? v : '')
 
 // The view lives in the address, so a category can be linked to and Back leaves it.
-const kind = computed(() => (route.query.period === 'year' ? 'year' : 'month'))
+const kind = computed(() => (isPeriodKind(route.query.period) ? route.query.period : 'month'))
 const today = useToday()
 const period = computed(() => periodOf(kind.value, text(route.query.at) || undefined, today))
 const account = computed(() => text(route.query.account))
@@ -30,7 +30,7 @@ const searching = computed(() => !!(q.value || min.value || max.value))
 function go(change: Record<string, string | undefined>) {
   const query: Record<string, string> = {}
   const next = {
-    period: kind.value === 'year' ? 'year' : undefined, at: text(route.query.at) || undefined, account: account.value || undefined, category: category.value || undefined,
+    period: kind.value === 'month' ? undefined : kind.value, at: text(route.query.at) || undefined, account: account.value || undefined, category: category.value || undefined,
     q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, review: reviewMode.value ? 'true' : undefined, page: undefined, ...change,
   }
   for (const [k, v] of Object.entries(next)) if (v) query[k] = v
@@ -126,13 +126,45 @@ async function markReviewed(ids: string[]) {
 const comparison = computed(() => {
   const was = summary.value.previous_spent_cents
   const now = summary.value.spent_cents
-  const before = kind.value === 'year' ? 'last year' : 'last month'
+  const before = { week: 'the week before', month: 'the month before', year: 'the year before', custom: 'the same number of days before' }[kind.value]
   if (!was) return ''
   if (now === was) return `The same as ${before}.`
   return `${formatCents(Math.abs(now - was))} ${now > was ? 'more' : 'less'} than ${before}.`
 })
 
-watch([category, q, min, max], () => { renaming.value = false; deleting.value = false; notice.value = '' })
+watch([category, q, min, max], () => { renaming.value = false; deleting.value = false; notice.value = ''; budgeting.value = false })
+
+// A custom range: two dates, kept in the address as "from~to".
+const range = reactive({ from: period.value.from, to: period.value.to })
+watch(period, p => Object.assign(range, { from: p.from, to: p.to }))
+const rangeProblem = ref('')
+function showRange() {
+  rangeProblem.value = ''
+  const at = `${range.from}~${range.to}`
+  if (!parseRange(at)) {
+    rangeProblem.value = 'Pick a start on or before the end, up to five years apart.'
+    return
+  }
+  return go({ period: 'custom', at })
+}
+
+// Budgets: a monthly amount per spending category, shown against the span's spending.
+const overBy = (c: { total_cents: number, budget_cents?: number }) => (c.budget_cents ?? 0) - c.total_cents
+const budgetShare = (c: { total_cents: number, budget_cents?: number }) => `${Math.max(0, Math.min(100, (c.total_cents / Math.max(1, c.budget_cents ?? 0)) * 100)).toFixed(1)}%`
+const { data: budgetList, refresh: refreshBudgets } = await useFetch<{ budgets: { category: string, amount_cents: number }[] }>('/api/budgets', { default: () => ({ budgets: [] }) })
+const monthlyBudget = computed(() => budgetList.value.budgets.find(b => b.category === category.value)?.amount_cents ?? 0)
+const budgeting = ref(false)
+const budgetInput = ref('')
+const budget = useAction()
+function startBudget() {
+  budgetInput.value = monthlyBudget.value ? (monthlyBudget.value / 100).toFixed(2) : ''
+  budgeting.value = true
+}
+async function saveBudget(amount: string) {
+  if (!await budget.run(() => $fetch(`/api/budgets/${category.value}`, { method: 'PUT', body: { amount } }))) return
+  budgeting.value = false
+  await Promise.all([refreshBudgets(), refreshSummary()])
+}
 
 // Renaming or deleting one of the person's own categories, from its page.
 const manage = useAction()
@@ -176,14 +208,22 @@ async function confirmDelete() {
       <section class="group toolbar" aria-label="Which spending">
         <div v-if="!searching" class="bar-row">
           <div v-if="!reviewMode" class="segmented" role="group" aria-label="Period">
+            <button class="seg" :aria-pressed="kind === 'week'" @click="go({ period: 'week', at: undefined })">Week</button>
             <button class="seg" :aria-pressed="kind === 'month'" @click="go({ period: undefined, at: undefined })">Month</button>
             <button class="seg" :aria-pressed="kind === 'year'" @click="go({ period: 'year', at: undefined })">Year</button>
+            <button class="seg" :aria-pressed="kind === 'custom'" @click="go({ period: 'custom', at: undefined })">Range</button>
           </div>
           <div v-if="!reviewMode" class="stepper">
             <button class="btn btn-plain" :aria-label="`Before ${period.label}`" @click="go({ at: period.prev })"><AppIcon name="chevron" class="back" /></button>
             <span class="headline num when" aria-live="polite">{{ period.label }}</span>
             <button class="btn btn-plain" :aria-label="`After ${period.label}`" @click="go({ at: period.next })"><AppIcon name="chevron" /></button>
           </div>
+          <form v-if="!reviewMode && kind === 'custom'" class="range" @submit.prevent="showRange">
+            <label><span class="visually-hidden">From</span><input v-model="range.from" class="input num" type="date" required></label>
+            <span class="footnote">to</span>
+            <label><span class="visually-hidden">To</span><input v-model="range.to" class="input num" type="date" required></label>
+            <button class="btn btn-tinted">Show</button>
+          </form>
           <label class="pick">
             <span class="visually-hidden">Account</span>
             <select class="select" :value="account" @change="go({ account: ($event.target as HTMLSelectElement).value || undefined })">
@@ -195,6 +235,7 @@ async function confirmDelete() {
             {{ reviewMode ? 'Back to spending' : 'Needs review' }}
           </button>
         </div>
+        <p v-if="rangeProblem" class="notice notice-error" role="alert">{{ rangeProblem }}</p>
         <form class="bar-row search" role="search" @submit.prevent="find">
           <label class="visually-hidden" for="search-q">Search transactions</label>
           <input id="search-q" v-model="search.q" class="input" type="search" maxlength="100" placeholder="Search transactions" enterkeyhint="search">
@@ -252,6 +293,27 @@ async function confirmDelete() {
             <h2 id="cat-title" class="title-2">{{ label(category) }}</h2>
             <p class="num title-3 total" :class="current?.spending ? spendTone(current.total_cents) : moneyTone(current?.total_cents ?? 0)">{{ formatCents(current?.total_cents ?? 0) }}</p>
             <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}<template v-if="viewing?.custom"> · {{ viewing.shared ? 'Shared category' : 'Your own category' }}</template></p>
+            <div v-if="viewing?.spending" class="budget">
+              <template v-if="current?.budget_cents">
+                <span class="bar" aria-hidden="true"><span class="bar-fill" :class="overBy(current) < 0 ? 'over' : 'under'" :style="{ width: budgetShare(current) }" /></span>
+                <p class="footnote">
+                  {{ formatCents(current.budget_cents) }} budget for {{ period.label }} ·
+                  <span v-if="overBy(current) < 0" class="loss">{{ formatCents(-overBy(current)) }} over</span>
+                  <span v-else>{{ formatCents(overBy(current)) }} left</span>
+                </p>
+              </template>
+              <form v-if="budgeting" class="inline-form" @submit.prevent="saveBudget(budgetInput)">
+                <label class="visually-hidden" for="budget">Monthly budget</label>
+                <input id="budget" v-model="budgetInput" class="input num" inputmode="decimal" placeholder="Monthly budget, $">
+                <button class="btn btn-primary" :disabled="budget.busy.value"><span v-if="budget.busy.value" class="spinner" aria-hidden="true" /> Save</button>
+                <button v-if="monthlyBudget" type="button" class="btn btn-plain danger" :disabled="budget.busy.value" @click="saveBudget('')">Remove budget</button>
+                <button type="button" class="btn btn-plain" @click="budgeting = false">Cancel</button>
+              </form>
+              <p v-else class="btn-row">
+                <button class="btn btn-tinted" @click="startBudget">{{ monthlyBudget ? `Budget: ${formatCents(monthlyBudget)} a month` : 'Set a monthly budget' }}</button>
+              </p>
+              <p v-if="budget.error.value" class="notice notice-error" role="alert">{{ budget.error.value }}</p>
+            </div>
             <template v-if="viewing?.custom && !viewing.shared">
               <form v-if="renaming" class="inline-form" @submit.prevent="saveRename">
                 <label class="visually-hidden" for="rename">New name</label>
@@ -302,7 +364,7 @@ async function confirmDelete() {
               <div class="panel-head top-line">
                 <h2 id="cats-title" class="panel-title">Categories</h2>
               </div>
-              <div v-if="!spending.length" class="card-pad stack">
+              <div v-if="!spending.some(c => c.count)" class="card-pad stack">
                 <p class="muted">No spending in {{ period.label }}. Transactions arrive when a linked bank syncs, or when you import a statement on Accounts.</p>
                 <NuxtLink to="/accounts" class="btn btn-tinted">Go to Accounts</NuxtLink>
               </div>
@@ -311,15 +373,21 @@ async function confirmDelete() {
                   <NuxtLink :to="{ query: { ...route.query, category: c.id, page: undefined } }" class="row cat">
                     <span class="row-label">
                       <span class="cat-head"><span class="cat-name">{{ c.label }}</span><span class="num" :class="spendTone(c.total_cents)">{{ formatCents(c.total_cents) }}</span></span>
-                      <span class="bar" aria-hidden="true"><span class="bar-fill" :style="{ width: share(c.total_cents) }" /></span>
-                      <span class="caption">{{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}</span>
+                      <span v-if="c.budget_cents" class="bar" aria-hidden="true"><span class="bar-fill" :class="overBy(c) < 0 ? 'over' : 'under'" :style="{ width: budgetShare(c) }" /></span>
+                      <span v-else class="bar" aria-hidden="true"><span class="bar-fill" :style="{ width: share(c.total_cents) }" /></span>
+                      <span class="caption">
+                        {{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}<template v-if="c.budget_cents"> ·
+                          <span v-if="overBy(c) < 0" class="loss">{{ formatCents(-overBy(c)) }} over its {{ formatCents(c.budget_cents) }} budget</span>
+                          <template v-else>{{ formatCents(overBy(c)) }} left of {{ formatCents(c.budget_cents) }}</template>
+                        </template>
+                      </span>
                     </span>
                     <AppIcon name="chevron" class="chev" />
                   </NuxtLink>
                 </li>
               </ul>
             </div>
-            <p class="group-footer">Something in the wrong place? Open it and pick another category; that merchant's other transactions follow.</p>
+            <p class="group-footer">Something in the wrong place? Open it and pick another category; that merchant's other transactions follow. Open a category to give it a monthly budget.</p>
           </section>
         </div>
 
@@ -392,6 +460,13 @@ async function confirmDelete() {
 .bar { display: block; height: 6px; margin: 0.375rem 0 0.25rem; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
 .bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--loss); }
 .chev { color: var(--text-3); flex: none; }
+/* Within budget is a neutral progress bar; over it is the fixed loss red. */
+.bar-fill.under { background: var(--text-3); }
+.bar-fill.over { background: var(--loss); }
+.budget { margin-top: 0.75rem; }
+.budget .bar { max-width: 28rem; }
+.range { display: inline-flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.range .input { width: auto; background: var(--surface); border-color: var(--separator); }
 
 .back-link { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0 0 0.5rem 0.5rem; min-height: 2.75rem; }
 .tight > * { margin: 0; }

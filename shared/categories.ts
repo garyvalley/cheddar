@@ -72,6 +72,8 @@ export interface CategoryTotal {
   /** Spending: what went out, less refunds (positive is spent). Income and transfers: the net in. */
   total_cents: number;
   count: number;
+  /** The person's budget for this category, scaled to the span shown (shared/budgets.ts). */
+  budget_cents?: number;
 }
 
 export interface SpendingSummary {
@@ -125,11 +127,17 @@ export function summarize(
   return { categories, spent_cents: spent, income_cents: income };
 }
 
-export type PeriodKind = "month" | "year";
+export type PeriodKind = "week" | "month" | "year" | "custom";
+
+export const isPeriodKind = (v: unknown): v is PeriodKind =>
+  v === "week" || v === "month" || v === "year" || v === "custom";
+
+/** The longest custom range Spending reads at once. */
+export const MAX_RANGE_DAYS = 366 * 5;
 
 export interface Period {
   kind: PeriodKind;
-  /** "2026-11" for a month, "2026" for a year. */
+  /** "2026-11" for a month, "2026" for a year, the Monday for a week, "2026-01-05~2026-02-10" for a range. */
   at: string;
   from: string;
   to: string;
@@ -140,12 +148,84 @@ export interface Period {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** The month or year `at` names, or the one `today` (YYYY-MM-DD) is in when it names none. */
+const DAY = 86_400_000;
+const isDate = (v: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+  new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+const toTime = (d: string) => Date.parse(`${d}T00:00:00Z`);
+const fromTime = (t: number) => new Date(t).toISOString().slice(0, 10);
+/** `d` moved by `n` days. */
+export const addDays = (d: string, n: number) => fromTime(toTime(d) + n * DAY);
+/** Days from `from` to `to`, counting both. */
+export const daysIn = (from: string, to: string) =>
+  Math.round((toTime(to) - toTime(from)) / DAY) + 1;
+
+const short = (d: string, year: boolean) =>
+  new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(year ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
+/** "Nov 9 – 15, 2026", "Dec 28, 2026 – Jan 3, 2027". */
+export function rangeLabel(from: string, to: string): string {
+  if (from === to) return short(from, true);
+  if (from.slice(0, 4) !== to.slice(0, 4))
+    return `${short(from, true)} – ${short(to, true)}`;
+  if (from.slice(0, 7) === to.slice(0, 7))
+    return `${short(from, false)} – ${Number(to.slice(8))}, ${to.slice(0, 4)}`;
+  return `${short(from, false)} – ${short(to, true)}`;
+}
+
+/** The Monday of the week `d` is in. */
+export const weekStart = (d: string) =>
+  addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7));
+
+/** A custom range as `at` carries it, when it's a real one: `from` on or before `to`, at most MAX_RANGE_DAYS. */
+export function parseRange(at: string | undefined): { from: string; to: string } | null {
+  const m = /^(\d{4}-\d{2}-\d{2})~(\d{4}-\d{2}-\d{2})$/.exec(at ?? "");
+  if (!m || !isDate(m[1]!) || !isDate(m[2]!) || m[1]! > m[2]!) return null;
+  if (daysIn(m[1]!, m[2]!) > MAX_RANGE_DAYS) return null;
+  return { from: m[1]!, to: m[2]! };
+}
+
+/**
+ * The week, month, year or range `at` names, or the one `today`
+ * (YYYY-MM-DD) is in when it names none. A week runs Monday to Sunday; a
+ * range with nothing usable is the 30 days to today. A range's prev and next
+ * are the spans of the same length either side.
+ */
 export function periodOf(
   kind: PeriodKind,
   at: string | undefined,
   today: string,
 ): Period {
+  if (kind === "week") {
+    const from = weekStart(at && isDate(at) ? at : today);
+    const to = addDays(from, 6);
+    return {
+      kind,
+      at: from,
+      from,
+      to,
+      label: rangeLabel(from, to),
+      prev: addDays(from, -7),
+      next: addDays(from, 7),
+    };
+  }
+  if (kind === "custom") {
+    const r = parseRange(at) ?? { from: addDays(today, -29), to: today };
+    const n = daysIn(r.from, r.to);
+    const span = (from: string) => `${from}~${addDays(from, n - 1)}`;
+    return {
+      kind,
+      at: `${r.from}~${r.to}`,
+      ...r,
+      label: rangeLabel(r.from, r.to),
+      prev: span(addDays(r.from, -n)),
+      next: span(addDays(r.to, 1)),
+    };
+  }
   if (kind === "year") {
     const y = /^\d{4}$/.test(at ?? "") ? Number(at) : Number(today.slice(0, 4));
     return {

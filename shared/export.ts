@@ -1,5 +1,6 @@
 import type { Account, Import, Transaction } from "./accounts.ts";
 import type { Goal } from "./goals.ts";
+import type { Budget } from "./budgets.ts";
 import type { CashflowItem } from "./cashflow.ts";
 import { kindLabel } from "./accounts.ts";
 import { categoryLabel, type Category } from "./categories.ts";
@@ -42,6 +43,7 @@ export interface ExportData {
   imports: Import[];
   balance_history: BalancePoint[];
   goals: Goal[];
+  budgets: Budget[];
   cashflow_items: CashflowItem[];
   categories: Category[];
   category_rules: CategoryRule[];

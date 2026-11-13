@@ -5,7 +5,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadHookModule } from './load-hook-module.mjs'
-import { BUILT_IN, CATEGORIES, categoryLabel, isCategoryRef, periodOf, summarize } from '../shared/categories.ts'
+import { BUILT_IN, CATEGORIES, categoryLabel, isCategoryRef, isPeriodKind, periodOf, summarize } from '../shared/categories.ts'
 
 const cats = loadHookModule('pb_hooks/lib/categories.js')
 const sort = (description, amount_cents, more = {}) => cats.categorize({ description, payee: '', bank_category: '', amount_cents, liability: false, ...more }, more.rule ?? '')
@@ -153,5 +153,30 @@ describe('periodOf', () => {
     assert.equal(periodOf('month', undefined, '2026-11-09').at, '2026-11')
     assert.equal(periodOf('month', '2026-13', '2026-11-09').at, '2026-11')
     assert.deepEqual([periodOf('year', 'x', '2026-11-09').from, periodOf('year', '2025', '2026-11-09').to], ['2026-01-01', '2025-12-31'])
+  })
+})
+
+describe('weeks and custom ranges', () => {
+  test('a week runs Monday to Sunday, across a year end', () => {
+    assert.deepEqual(periodOf('week', undefined, '2026-11-13'), {
+      kind: 'week', at: '2026-11-09', from: '2026-11-09', to: '2026-11-15', label: 'Nov 9 – 15, 2026', prev: '2026-11-02', next: '2026-11-16',
+    })
+    const w = periodOf('week', '2026-12-31', '2026-11-13')
+    assert.deepEqual([w.from, w.to, w.label], ['2026-12-28', '2027-01-03', 'Dec 28, 2026 – Jan 3, 2027'])
+    assert.equal(periodOf('week', '2026-02-30', '2026-11-13').at, '2026-11-09')
+  })
+
+  test('a range, with the spans of the same length either side', () => {
+    const r = periodOf('custom', '2026-01-05~2026-02-10', '2026-11-13')
+    assert.deepEqual([r.from, r.to, r.label, r.prev, r.next], ['2026-01-05', '2026-02-10', 'Jan 5 – Feb 10, 2026', '2025-11-29~2026-01-04', '2026-02-11~2026-03-19'])
+    assert.equal(periodOf('custom', r.prev, '2026-11-13').next, r.at)
+  })
+
+  test('a backwards, malformed or too-long range is the last 30 days', () => {
+    for (const at of [undefined, '2026-02-10~2026-01-05', '2026-01-05', '2026-02-31~2026-03-01', '2020-01-01~2026-01-01']) {
+      assert.equal(periodOf('custom', at, '2026-11-13').at, '2026-10-15~2026-11-13', String(at))
+    }
+    assert.equal(isPeriodKind('week'), true)
+    assert.equal(isPeriodKind('decade'), false)
   })
 })
