@@ -55,6 +55,10 @@ export interface Transaction {
   category_by: 'bank' | 'match' | 'default' | 'rule' | 'person' | ''
   pending: boolean
   source: 'manual' | 'import' | 'sync'
+  /** The person's own words about it. */
+  note: string
+  /** Left out of spending, Overview, Projections and Taxes, though it stays listed. */
+  excluded: boolean
 }
 
 export interface Import {

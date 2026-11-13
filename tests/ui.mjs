@@ -151,6 +151,26 @@ try {
   await page.getByRole('link', { name: /Dining and drinks/ }).waitFor()
   assert.equal(await page.getByRole('link', { name: 'Import', exact: true }).count(), 0)
 
+  // One added by hand, found by a search, given a note and left out of the totals.
+  await page.getByRole('button', { name: 'Add a transaction by hand…' }).click()
+  await page.getByLabel('What it was').fill('Farmers market')
+  await page.getByLabel('Amount', { exact: true }).fill('12.40')
+  await page.getByRole('button', { name: 'Add transaction' }).click()
+  await page.getByRole('status').filter({ hasText: 'Added Farmers market to Everyday checking.' }).waitFor()
+  await page.getByLabel('Search transactions').fill('farmers')
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await page.getByText('1 transaction for “farmers”, any date').waitFor()
+  await page.getByRole('button', { name: /^Change Farmers market/ }).click()
+  await page.getByLabel('Note (optional)').fill('Paid cash')
+  await page.getByLabel('Leave out of spending, Overview, Projections and Taxes').check()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'Farmers market is left out of spending and taxes now.' }).waitFor()
+  await page.getByText('Left out', { exact: true }).waitFor()
+  await page.getByText('Paid cash').waitFor()
+  await page.getByRole('button', { name: 'Clear search' }).click()
+  await page.getByRole('heading', { name: 'Categories' }).waitFor()
+  await page.getByText('$86.60').first().waitFor()
+
   // Taking it out again: the month's transactions as a spreadsheet, and everything from Settings.
   const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download CSV' }).click()])
   assert.match(csv.suggestedFilename(), new RegExp(`^cheddar-transactions-${yyyy}-${mm}-01-to-${yyyy}-${mm}-\\d\\d\\.csv$`))

@@ -65,8 +65,8 @@ export const dollars = (cents: number): number => Math.round(cents) / 100
 export function transactionsCsv(rows: Transaction[], accounts: Pick<Account, 'id' | 'name'>[], categories: Category[]): string {
   const names = new Map(accounts.map(a => [a.id, a.name]))
   return toCsv(
-    ['Date', 'Account', 'Amount', 'Description', 'Payee', 'Category', 'Pending'],
-    rows.map(t => [t.posted, names.get(t.account) ?? '', dollars(t.amount_cents), t.description, t.payee, categoryLabel(t.category, categories), t.pending]),
+    ['Date', 'Account', 'Amount', 'Description', 'Payee', 'Category', 'Pending', 'Note', 'Left out'],
+    rows.map(t => [t.posted, names.get(t.account) ?? '', dollars(t.amount_cents), t.description, t.payee, categoryLabel(t.category, categories), t.pending, t.note, t.excluded]),
   )
 }
 
