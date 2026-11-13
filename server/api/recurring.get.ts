@@ -1,4 +1,4 @@
-import { recurringCharges } from '~~/server/data/money'
+import { recurringCharges } from '~~/server/data/reports/recurring'
 import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 

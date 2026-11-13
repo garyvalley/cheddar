@@ -1,4 +1,4 @@
-import { markTransactionsReviewed } from "~~/server/data/money";
+import { markTransactionsReviewed } from "~~/server/data/transactions";
 import { attempt, sessionFor } from "~~/server/data/session";
 
 export default defineEventHandler(async (event) => {

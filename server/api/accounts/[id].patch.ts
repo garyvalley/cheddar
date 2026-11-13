@@ -1,5 +1,5 @@
 import { todayFor } from '~~/server/data/profile'
-import { getAccount, updateAccount } from '~~/server/data/money'
+import { getAccount, updateAccount } from '~~/server/data/accounts'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { checkAccountChange, parseBalance, type AccountChange } from '~~/shared/accounts'
 

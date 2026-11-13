@@ -1,4 +1,4 @@
-import { createAccount } from '~~/server/data/money'
+import { createAccount } from '~~/server/data/accounts'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { checkAccount, type NewAccount } from '~~/shared/accounts'
 

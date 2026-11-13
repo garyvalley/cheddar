@@ -1,5 +1,5 @@
 import { setBudget } from "~~/server/data/budgets";
-import { listCategories } from "~~/server/data/money";
+import { listCategories } from "~~/server/data/categories";
 import { attempt, sessionFor } from "~~/server/data/session";
 import { checkBudget } from "~~/shared/budgets";
 

@@ -1,4 +1,4 @@
-import { deleteImport } from '~~/server/data/money'
+import { deleteImport } from '~~/server/data/imports'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** DELETE /api/imports/:id: undoes an import, removing the transactions it added. */

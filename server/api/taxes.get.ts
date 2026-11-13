@@ -1,4 +1,4 @@
-import { taxes } from '~~/server/data/money'
+import { taxes } from '~~/server/data/reports/taxes'
 import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { defaultTaxYear, taxYearsOn } from '~~/shared/taxes'

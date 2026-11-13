@@ -1,4 +1,4 @@
-import { listAccounts } from '~~/server/data/money'
+import { listAccounts } from '~~/server/data/accounts'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** GET /api/accounts: the caller's accounts, by name. */

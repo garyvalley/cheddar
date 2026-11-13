@@ -9,12 +9,10 @@ import { listLinks } from "./bank-links";
 import { listGoals } from "./goals";
 import { listBudgets } from "./budgets";
 import { listCashflowItems } from "./cashflow";
-import {
-  allTransactions,
-  listAccounts,
-  listCategories,
-  listImports,
-} from "./money";
+import { allTransactions } from "./transactions";
+import { listAccounts } from "./accounts";
+import { listCategories } from "./categories";
+import { listImports } from "./imports";
 import { toMe } from "./profile";
 import { todayIn } from "~~/shared/time-zone";
 import { zip } from "./zip";

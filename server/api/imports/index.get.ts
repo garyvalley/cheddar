@@ -1,4 +1,4 @@
-import { listImports } from '~~/server/data/money'
+import { listImports } from '~~/server/data/imports'
 import { attempt, sessionFor } from '~~/server/data/session'
 
 /** GET /api/imports?account=: the statement files imported, newest first. */
