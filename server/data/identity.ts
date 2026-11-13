@@ -1,4 +1,5 @@
 import type { RecordAuthResponse, RecordModel } from 'pocketbase'
+import { asSignUpMode, type SignUpMode } from '~~/shared/sign-up'
 import { anonymous, type Session } from './session'
 
 /**
@@ -37,6 +38,12 @@ export function signInWithCode(mfaId: string, code: string) {
 /** The token's holder with a fresh token. */
 export function refresh(s: Session) {
   return s.collection('users').authRefresh()
+}
+
+/** Who may sign up here (GET /api/sign-up in pb_hooks/signup.pb.js). Never the list of addresses. */
+export async function signUpMode(): Promise<SignUpMode> {
+  const { mode } = await anonymous().send<{ mode?: string }>('/api/sign-up', { method: 'GET' })
+  return asSignUpMode(mode)
 }
 
 export async function register(input: { email: string, password: string, name: string }): Promise<void> {

@@ -52,6 +52,13 @@ apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfi
   echo "PLAID_CLIENT_ID=${PLAID_CLIENT_ID:-}"
   echo "PLAID_SECRET=${PLAID_SECRET:-}"
   echo "PLAID_ENV=${PLAID_ENV:-sandbox}"
+  # Plaid bills per linked bank: new links stop at these (k8s/README.md, "Who can sign up").
+  echo "PLAID_LINKS_PER_PERSON=${PLAID_LINKS_PER_PERSON:-10}"
+  echo "PLAID_MAX_LINKS=${PLAID_MAX_LINKS:-25}"
+  # Production is invite-only unless the repository variable SIGNUP says otherwise:
+  # only the addresses and @domains in the secret SIGNUP_ALLOW can make an account.
+  echo "SIGNUP=${SIGNUP:-invite}"
+  echo "SIGNUP_ALLOW=${SIGNUP_ALLOW:-}"
 } > "$tmp/pocketbase.env"
 apply_secret pocketbase-env --from-env-file="$tmp/pocketbase.env"
 

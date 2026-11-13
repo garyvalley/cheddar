@@ -32,6 +32,8 @@ export interface BankLinks {
   /** Whether this Cheddar can link banks (BANK_LINK_KEY and the Plaid keys are set). */
   enabled: boolean
   links: BankLink[]
+  /** Why no new link can be made (this Cheddar's or the person's limit is reached), or null. */
+  full?: string | null
 }
 
 /** What a sync did. `recent`: it had just synced, so this one didn't ask Plaid again. */

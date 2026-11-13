@@ -11,6 +11,13 @@ import assert from 'node:assert/strict'
 import { APP, PB, PASSWORD, client, email, made, ready, signedIn, totp, withTwoStep } from './helpers.mjs'
 
 describe('signing up', () => {
+  test('says who may sign up, and never the list', async () => {
+    const r = await client().call('GET', '/api/auth/sign-up')
+    assert.equal(r.status, 200)
+    // The suite's PocketBase has no SIGNUP set: open, the default.
+    assert.deepEqual(r.json, { mode: 'open' })
+  })
+
   test('refuses a short or common password, and a taken address', async () => {
     const c = client()
     const address = email()

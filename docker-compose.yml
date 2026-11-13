@@ -25,6 +25,11 @@ services:
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       PLAID_API_URL: ${PLAID_API_URL:-}
+      PLAID_LINKS_PER_PERSON: ${PLAID_LINKS_PER_PERSON:-}
+      PLAID_MAX_LINKS: ${PLAID_MAX_LINKS:-}
+      # open (default), invite (only SIGNUP_ALLOW's addresses and @domains) or closed.
+      SIGNUP: ${SIGNUP:-}
+      SIGNUP_ALLOW: ${SIGNUP_ALLOW:-}
       # The superuser scripts/migrate.mjs signs in with; PocketBase makes it
       # on start (scripts/pocketbase-start.sh).
       PB_SU_EMAIL: ${PB_SU_EMAIL:-}

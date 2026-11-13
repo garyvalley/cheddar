@@ -6,7 +6,8 @@
 // encrypted -- never the bank password (lib/plaid.js says how it works).
 // Off unless BANK_LINK_KEY, PLAID_CLIENT_ID and PLAID_SECRET are all set.
 //
-//   GET  /api/bank-links                   -> { enabled, links: [summary] }
+//   GET  /api/bank-links                   -> { enabled, links: [summary], full };
+//                                          full: why no new link can be made, or null
 //   POST /api/bank-links/link-token        { link? } -> { link_token } to open Plaid Link;
 //                                          with a link's id, to sign in to that bank again
 //   POST /api/bank-links                   { public_token, institution? } -> { link, sync }
@@ -22,6 +23,9 @@
 //   PLAID_CLIENT_ID    from dashboard.plaid.com, Developers -> Keys
 //   PLAID_SECRET       the secret for PLAID_ENV
 //   PLAID_ENV          sandbox (default) or production
+//   PLAID_LINKS_PER_PERSON  links each person may have (default 10)
+//   PLAID_MAX_LINKS    links the whole Cheddar may have (default 0: no limit);
+//                      Plaid bills whoever runs Cheddar for each one
 //   PLAID_API_URL      tests only: a stand-in Plaid
 // ---------------------------------------------------------------------------
 
@@ -51,9 +55,12 @@ routerAdd("GET", "/api/bank-links", (e) => {
   var plaid = require(`${__hooks}/lib/plaid.js`)
   if (!e.auth.getBool("mfa_enabled")) throw new ForbiddenError("Turn on two-step sign-in first.")
   var links = e.app.findRecordsByFilter("bank_links", "owner = {:owner}", "created", 0, 0, { owner: e.auth.id })
+  var enabled = plaid.isEnabled(glue.cfg())
+  var hit = enabled ? glue.linkLimitFor(e.app, e.auth.id) : null
   return e.json(200, {
-    enabled: plaid.isEnabled(glue.cfg()),
+    enabled: enabled,
     links: links.map(function (l) { return glue.summary(e.app, l) }),
+    full: hit ? hit.message : null,
   })
 }, $apis.requireAuth("users"))
 
@@ -64,9 +71,7 @@ routerAdd("POST", "/api/bank-links/link-token", (e) => {
   if (!plaid.isEnabled(glue.cfg())) throw new BadRequestError("Linking banks isn't switched on for this Cheddar.")
   var id = String((e.requestInfo().body || {}).link || "")
   var link = id ? glue.ownLink(e.app, e.auth, id) : null
-  if (!link && e.app.countRecords("bank_links", $dbx.hashExp({ owner: e.auth.id })) >= 25) {
-    throw new BadRequestError("That's as many linked banks as one account can have. Remove one first.")
-  }
+  if (!link) glue.checkLinkLimit(e.app, e.auth.id)
   try {
     return e.json(200, { link_token: glue.linkToken(e.auth.id, link) })
   }
@@ -85,9 +90,7 @@ routerAdd("POST", "/api/bank-links", (e) => {
   var body = e.requestInfo().body || {}
   var publicToken = String(body.public_token || "").trim()
   if (!/^public-[a-z]+-[A-Za-z0-9-]{8,200}$/.test(publicToken)) throw new BadRequestError("Plaid didn't finish linking. Try again.")
-  if (e.app.countRecords("bank_links", $dbx.hashExp({ owner: e.auth.id })) >= 25) {
-    throw new BadRequestError("That's as many linked banks as one account can have. Remove one first.")
-  }
+  glue.checkLinkLimit(e.app, e.auth.id)
 
   var token
   try {
