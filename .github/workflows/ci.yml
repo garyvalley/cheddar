@@ -264,6 +264,9 @@ jobs:
       LITESTREAM_AGE_RECIPIENT: ${{ vars.LITESTREAM_AGE_RECIPIENT }}
       BACKUP_NAS_CIDR: ${{ vars.BACKUP_NAS_CIDR }}
       BACKUP_NAS_PORT: ${{ vars.BACKUP_NAS_PORT }}
+      BACKUP_SMB: ${{ vars.BACKUP_SMB }}
+      BACKUP_SMB_USER: ${{ secrets.BACKUP_SMB_USER }}
+      BACKUP_SMB_PASSWORD: ${{ secrets.BACKUP_SMB_PASSWORD }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Apply the manifests and wait for the rollout

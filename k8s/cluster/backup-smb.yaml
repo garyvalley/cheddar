@@ -1,0 +1,41 @@
+# Backups over SMB (k8s/README.md "First deploy" step 11): the NAS's share,
+# as a volume the `pb-backup` pod writes Litestream's encrypted replica to.
+# A PersistentVolume is cluster-wide, which the deployer can't make, so a
+# cluster admin applies this once, with the share's address filled in:
+#
+#   sed 's#${BACKUP_SMB_SHARE}#//192.168.68.202/homefile-backups#' k8s/cluster/backup-smb.yaml \
+#     | ssh ubuntu@primary sudo k3s kubectl apply -f -
+#
+# It needs the SMB CSI driver (csi-driver-smb.yaml beside this). The
+# node mounts the share, with the login from the `smb-backup` Secret that
+# each deploy writes from BACKUP_SMB_USER and BACKUP_SMB_PASSWORD. Cheddar
+# writes only to its own `cheddar` folder on it.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: cheddar-backup-smb
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  # Only Cheddar's claim may bind it.
+  claimRef:
+    namespace: cheddar
+    name: pb-backup-replica
+  mountOptions:
+    # Owned by the image's user, and private to it.
+    - uid=10001
+    - gid=10001
+    - dir_mode=0700
+    - file_mode=0600
+    - vers=3.0
+  csi:
+    driver: smb.csi.k8s.io
+    volumeHandle: cheddar-backup-smb
+    volumeAttributes:
+      source: ${BACKUP_SMB_SHARE}
+    nodeStageSecretRef:
+      name: smb-backup
+      namespace: cheddar

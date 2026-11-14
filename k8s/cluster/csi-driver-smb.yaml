@@ -1,0 +1,13 @@
+# The SMB CSI driver, which mounts an SMB share as a volume (for backups,
+# k8s/cluster/backup-smb.yaml). Cluster-wide: a cluster admin applies it once,
+# and only if `kubectl get csidriver smb.csi.k8s.io` finds nothing (Homefile
+# may have installed it already). k3s's Helm controller installs the chart.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: csi-driver-smb
+  namespace: kube-system
+spec:
+  repo: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
+  chart: csi-driver-smb
+  targetNamespace: kube-system

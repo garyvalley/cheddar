@@ -12,6 +12,10 @@
 #       AGE_IDENTITY_FILE: the file holding the backup's private key. --at
 #       restores the database as it was then (any time in the last 30 days).
 #       IMAGE picks the PocketBase image (default: built from this checkout).
+#       For backups on an SMB share, mount the share on this machine (Finder,
+#       Go -> Connect to Server) and set REPLICA_DIR to it instead, e.g.
+#       REPLICA_DIR=/Volumes/homefile-backups: the replica is its `cheddar`
+#       folder, read only.
 #
 #   scripts/restore-drill.sh --self-test IMAGE
 #       CI's check: in IMAGE, streams a new database to a replica in a temp
@@ -68,7 +72,13 @@ fi
 
 at=""
 if [ "${1:-}" = "--at" ]; then at=${2:?--at needs a time, e.g. 2026-11-13T04:00:00Z}; fi
-: "${LITESTREAM_REPLICA_URL:?LITESTREAM_REPLICA_URL is required (the replica, as in the cluster)}"
+replica_mount=()
+if [ -n "${REPLICA_DIR:-}" ]; then
+  [ -d "$REPLICA_DIR/cheddar" ] || { echo "No cheddar folder in $REPLICA_DIR: is the share mounted, and has the backup pod run?" >&2; exit 1; }
+  replica_mount=(-v "$REPLICA_DIR:/replica:ro")
+  LITESTREAM_REPLICA_URL=file:///replica/cheddar
+fi
+: "${LITESTREAM_REPLICA_URL:?LITESTREAM_REPLICA_URL (or REPLICA_DIR) is required: the replica, as in the cluster}"
 : "${AGE_IDENTITY_FILE:?AGE_IDENTITY_FILE is required (the file holding the backup key)}"
 LITESTREAM_AGE_IDENTITY=$(grep '^AGE-SECRET-KEY-' "$AGE_IDENTITY_FILE" | head -1)
 [ -n "$LITESTREAM_AGE_IDENTITY" ] || { echo "No AGE-SECRET-KEY-... line in $AGE_IDENTITY_FILE" >&2; exit 1; }
@@ -101,7 +111,7 @@ echo "Restoring${at:+ as of $at}..."
 docker run --rm "${as_me[@]}" \
   -e LITESTREAM_REPLICA_URL -e LITESTREAM_ENDPOINT -e LITESTREAM_ACCESS_KEY_ID -e LITESTREAM_SECRET_ACCESS_KEY \
   -e LITESTREAM_AGE_IDENTITY -e LITESTREAM_AGE_RECIPIENT \
-  -v "$PWD/k8s/backup/litestream.yml:/etc/litestream/litestream.yml:ro" -v "$tmp:/out" \
+  -v "$PWD/k8s/backup/litestream.yml:/etc/litestream/litestream.yml:ro" -v "$tmp:/out" ${replica_mount[@]+"${replica_mount[@]}"} \
   "$image" litestream restore -config /etc/litestream/litestream.yml ${at:+-timestamp "$at"} -o /out/data.db /pb/pb_data/data.db
 
 PB_SU_EMAIL=drill@cheddar.internal

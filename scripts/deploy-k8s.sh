@@ -102,6 +102,18 @@ kubectl apply -f "$tmp/app.yaml"
 # unencrypted: without an age recipient the deploy stops here. Turning them
 # off again is a person's step (k8s/README.md, "Backups"): the deployer
 # can't delete.
+# With BACKUP_SMB, the replica is a folder on the NAS's SMB share, which the
+# node mounts (k8s/cluster/backup-smb.yaml, applied once by an admin).
+if [ "${BACKUP_SMB:-}" = "true" ]; then
+  LITESTREAM_REPLICA_URL=${LITESTREAM_REPLICA_URL:-file:///replica/cheddar}
+  : "${BACKUP_SMB_USER:?BACKUP_SMB_USER is required with BACKUP_SMB}"
+  : "${BACKUP_SMB_PASSWORD:?BACKUP_SMB_PASSWORD is required with BACKUP_SMB}"
+  {
+    echo "username=$BACKUP_SMB_USER"
+    echo "password=$BACKUP_SMB_PASSWORD"
+  } > "$tmp/smb-backup.env"
+  apply_secret smb-backup --from-env-file="$tmp/smb-backup.env"
+fi
 if [ -n "${LITESTREAM_REPLICA_URL:-}" ]; then
   case "${LITESTREAM_AGE_RECIPIENT:-}" in
     age1*) ;;
@@ -123,7 +135,11 @@ if [ -n "${LITESTREAM_REPLICA_URL:-}" ]; then
   BACKUP_NAS_PORT=${BACKUP_NAS_PORT:-443}
   export BACKUP_CONFIG BACKUP_NAS_CIDR BACKUP_NAS_PORT
   # shellcheck disable=SC2016 # envsubst's names, as above
-  envsubst '${NAMESPACE} ${IMAGE_PREFIX} ${PB_TAG} ${BACKUP_CONFIG} ${BACKUP_NAS_CIDR} ${BACKUP_NAS_PORT}' < k8s/backup/litestream.yaml > "$tmp/backup.yaml"
+  if [ "${BACKUP_SMB:-}" = "true" ]; then
+    sed 's/ *# smb-only$//' k8s/backup/litestream.yaml
+  else
+    grep -v '# smb-only$' k8s/backup/litestream.yaml
+  fi | envsubst '${NAMESPACE} ${IMAGE_PREFIX} ${PB_TAG} ${BACKUP_CONFIG} ${BACKUP_NAS_CIDR} ${BACKUP_NAS_PORT}' > "$tmp/backup.yaml"
   kubectl apply -f "$tmp/backup.yaml"
 fi
 
