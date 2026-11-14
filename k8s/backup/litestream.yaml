@@ -4,8 +4,11 @@
 # mounts the same volume on the same node, which SQLite's locks allow, and
 # keeps a read lock so nothing is checkpointed past what it has sent.
 #
-# scripts/deploy-k8s.sh applies this only once LITESTREAM_REPLICA_URL is set,
-# with the `pb-backup` Secret and the `litestream` ConfigMap beside it.
+# scripts/deploy-k8s.sh applies this only once LITESTREAM_REPLICA_URL is set
+# (or BACKUP_SMB is "true"), with the `pb-backup` Secret and the `litestream`
+# ConfigMap beside it. Lines ending "# smb-only" are kept only with
+# BACKUP_SMB: the NAS's SMB share mounted at /replica
+# (k8s/cluster/backup-smb.yaml), and Litestream writing a plain folder there.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,6 +60,7 @@ spec:
             - { name: data, mountPath: /pb/pb_data }
             - { name: config, mountPath: /etc/litestream, readOnly: true }
             - { name: tmp, mountPath: /tmp }
+            - { name: replica, mountPath: /replica } # smb-only
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -66,10 +70,26 @@ spec:
             name: litestream
         - name: tmp
           emptyDir: {}
+        - name: replica # smb-only
+          persistentVolumeClaim: { claimName: pb-backup-replica } # smb-only
 ---
+# The SMB share, bound to the admin's PersistentVolume by name. # smb-only
+apiVersion: v1 # smb-only
+kind: PersistentVolumeClaim # smb-only
+metadata: # smb-only
+  name: pb-backup-replica # smb-only
+  namespace: ${NAMESPACE} # smb-only
+spec: # smb-only
+  accessModes: [ReadWriteMany] # smb-only
+  storageClassName: "" # smb-only
+  volumeName: cheddar-backup-smb # smb-only
+  resources: { requests: { storage: 50Gi } } # smb-only
+--- # smb-only
+
 # It reaches only the replica: the NAS's address and port on the home
 # network (BACKUP_NAS_CIDR, BACKUP_NAS_PORT), or an S3 service over HTTPS on
-# the internet. Nothing reaches it.
+# the internet. Nothing reaches it. An SMB share needs neither: the node
+# mounts it, not the pod.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

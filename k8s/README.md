@@ -43,6 +43,7 @@ browser ──https──▶ Cloudflare ──tunnel──▶ cloudflared ──
 | `app/cloudflared.yaml` | The tunnel. |
 | `app/network-policy.yaml` | Ingress and egress, closed except the request path. |
 | `backup/litestream.yaml`, `backup/litestream.yml` | Backups: Litestream to the NAS, encrypted. Applied once a replica is named (step 11). |
+| `cluster/backup-smb.yaml`, `cluster/csi-driver-smb.yaml` | The NAS's SMB share as a volume for backups, and the driver that mounts it. Applied by hand, once (step 11). |
 
 ## First deploy
 
@@ -146,9 +147,34 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
     ```sh
     age-keygen -o ~/cheddar-backup.key   # prints "Public key: age1..."
     ```
-    Then name the replica. For a bucket on the NAS's S3 (MinIO, Garage,
-    Synology's): `s3://<bucket>/cheddar`, with the endpoint and an access
-    key for that bucket only. For SFTP: `sftp://<user>:<password>@<nas>/<path>`.
+    Then tell Cheddar where to put them. Pick one of the two below.
+
+    **An SMB share on the NAS** (what this cluster uses, e.g.
+    `//192.168.68.202/homefile-backups`). The node mounts the share, and
+    Litestream writes to a `cheddar` folder on it, which it makes itself.
+    Then:
+    1. Check for the SMB CSI driver, and install it once if it's missing:
+       ```sh
+       ssh ubuntu@primary sudo k3s kubectl get csidriver smb.csi.k8s.io \
+         || ssh ubuntu@primary sudo k3s kubectl apply -f - < k8s/cluster/csi-driver-smb.yaml
+       ```
+    2. Add the share as a volume (`cluster/backup-smb.yaml`):
+       ```sh
+       sed 's#${BACKUP_SMB_SHARE}#//192.168.68.202/homefile-backups#' k8s/cluster/backup-smb.yaml \
+         | ssh ubuntu@primary sudo k3s kubectl apply -f -
+       ```
+    3. Set the login, the switch and the key:
+       ```sh
+       gh secret set BACKUP_SMB_USER --env production -R garyvalley/cheddar
+       gh secret set BACKUP_SMB_PASSWORD --env production -R garyvalley/cheddar
+       gh variable set BACKUP_SMB --body true -R garyvalley/cheddar
+       gh variable set LITESTREAM_AGE_RECIPIENT --body age1... -R garyvalley/cheddar
+       ```
+
+    **S3 or SFTP.** For a bucket on the NAS's S3 (MinIO, Garage,
+    Synology's), the replica is `s3://<bucket>/cheddar`, with the endpoint
+    and an access key for that bucket only. For SFTP it is
+    `sftp://<user>:<password>@<nas>/<path>`.
     ```sh
     gh secret set LITESTREAM_REPLICA_URL --env production -R garyvalley/cheddar
     gh variable set LITESTREAM_AGE_RECIPIENT --body age1... -R garyvalley/cheddar
@@ -159,8 +185,8 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
     gh secret set LITESTREAM_ACCESS_KEY_ID --env production -R garyvalley/cheddar
     gh secret set LITESTREAM_SECRET_ACCESS_KEY --env production -R garyvalley/cheddar
     ```
-    Deploy, then run the restore drill once (below) to see it work end to
-    end.
+    Deploy, wait a minute for the first copy, then run the restore drill
+    once (below) to see it work end to end.
 
 The zone settings Homefile needed (Bot Fight Mode, Email Address
 Obfuscation and Rocket Loader off) are zone-wide, so they cover Cheddar too
@@ -222,6 +248,11 @@ stop at Cloudflare's edge.
     AGE_IDENTITY_FILE=~/cheddar-backup.key scripts/restore-drill.sh            # the latest
     AGE_IDENTITY_FILE=~/cheddar-backup.key scripts/restore-drill.sh --at 2026-11-13T04:00:00Z
     ```
+    With the SMB share, mount it in Finder first (Go → Connect to Server,
+    `smb://192.168.68.202/homefile-backups`) and skip the `export` line:
+    ```sh
+    REPLICA_DIR=/Volumes/homefile-backups AGE_IDENTITY_FILE=~/cheddar-backup.key scripts/restore-drill.sh
+    ```
     The drill restores into a private temp dir and starts a scratch
     PocketBase on 127.0.0.1:8096 with no mail and no Plaid keys. It runs the
     migrations against the copy and prints how many people, accounts,
@@ -239,8 +270,9 @@ stop at Cloudflare's edge.
     3. Scale both back to 1.
     Litestream starts a new generation from the restored file.
   - **Turning backups off** is an admin step, since the deployer can't
-    delete: unset `LITESTREAM_REPLICA_URL`, then
-    `… delete deploy/pb-backup networkpolicy/pb-backup`.
+    delete: unset `LITESTREAM_REPLICA_URL` (or `BACKUP_SMB`), then
+    `… delete deploy/pb-backup networkpolicy/pb-backup` (and
+    `pvc/pb-backup-replica` with SMB).
 - Rotate the superuser: delete the `pocketbase-superuser` Secret (as admin)
   and deploy; PocketBase sets the new password on start.
 
