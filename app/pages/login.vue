@@ -63,6 +63,7 @@ const { data: signUp } = await useFetch<{ mode: SignUpMode }>('/api/auth/sign-up
       <p class="center footnote">
         <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
         <template v-if="signUp.mode !== 'closed'"> · <NuxtLink to="/register">Create an account</NuxtLink></template>
+        · <NuxtLink to="/privacy">Privacy</NuxtLink>
       </p>
     </form>
 

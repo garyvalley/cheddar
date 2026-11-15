@@ -134,6 +134,12 @@ function clean(text) {
   return String(text === undefined || text === null ? "" : text).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
 }
 
+/** Plaid's id for one request, which its support asks for; safe to log (it names no person or token). */
+function requestId(json) {
+  var id = json && typeof json === "object" ? String(json.request_id || "") : ""
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : ""
+}
+
 /** Plaid error codes that mean the person must sign in to their bank again. */
 var RECONNECT = ["ITEM_LOGIN_REQUIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT", "ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN", "ACCESS_NOT_GRANTED", "USER_PERMISSION_REVOKED", "NO_ACCOUNTS"]
 
@@ -282,6 +288,8 @@ function webhookUrl(appUrl) {
 var SYNC_ON = {
   TRANSACTIONS: ["SYNC_UPDATES_AVAILABLE"],
   ITEM: ["ERROR", "LOGIN_REPAIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT", "NEW_ACCOUNTS_AVAILABLE", "USER_PERMISSION_REVOKED"],
+  // New holdings (PLAID_INVESTMENTS): the sync fetches them with the rest.
+  HOLDINGS: ["DEFAULT_UPDATE"],
 }
 
 /** A webhook's body as { itemId, sync }: which link, and whether to sync it now. */
@@ -363,6 +371,7 @@ module.exports = {
   linkTokenBody: linkTokenBody,
   clean: clean,
   failure: failure,
+  requestId: requestId,
   toCents: toCents,
   kindOf: kindOf,
   accountRows: accountRows,

@@ -25,7 +25,7 @@ function call(path, body) {
   }
   if (res.statusCode !== 200) {
     var f = plaid.failure(res.statusCode, res.json);
-    console.log("[plaid] " + path + " failed: " + f.code);
+    console.log("[plaid] " + path + " failed: " + f.code + " (request " + (plaid.requestId(res.json) || "-") + ")");
     throw new errors.ProviderError(f);
   }
   return res.json;
@@ -137,7 +137,7 @@ module.exports = {
     if (res.statusCode === 200) return { status: "ok", rows: plaid.holdingRows(res.json) };
     var f = plaid.failure(res.statusCode, res.json);
     var gap = plaid.holdingsGap(f.code);
-    console.log("[plaid] /investments/holdings/get: " + f.code);
+    console.log("[plaid] /investments/holdings/get: " + f.code + " (request " + (plaid.requestId(res.json) || "-") + ")");
     if (gap) return { status: gap, rows: [] };
     throw new errors.ProviderError(f);
   },
