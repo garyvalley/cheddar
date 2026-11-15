@@ -156,9 +156,6 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
       </div>
     </section>
 
-    <!-- Whether linked banks are current: quiet when they are. -->
-    <BankHealth />
-
     <!-- Categories over this month's budget. -->
     <section v-if="ov?.over_budget.length" class="group" aria-labelledby="budget-title">
       <div class="card">
@@ -359,6 +356,9 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
           </div>
         </section>
     </div>
+
+    <!-- Whether linked banks are current, last on the page (G's choice): quiet when they are. -->
+    <BankHealth class="health-last" />
   </div>
 </template>
 
@@ -381,6 +381,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
  */
 .dash { display: grid; gap: 1.5rem; align-items: start; }
 .dash > * { min-width: 0; }
+.health-last { margin: 1.5rem 0 0; }
 @media (min-width: 900px) {
   .dash {
     grid-template-columns: repeat(3, 1fr);
