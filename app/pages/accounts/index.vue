@@ -3,22 +3,20 @@ import { ACCOUNT_KINDS, formatCents, isLiability, isStale, kindLabel, type Accou
 import type { BankLinks } from '~~/shared/bank-links'
 import { GROUPS, groupOf } from '~~/shared/overview'
 
-// The one place accounts are set up: linked by signing in to the bank (Plaid), or added here
-// and filled from statement files. Every other page only reads them.
+// Every account, linked or not: named, closed, left out, filled from statement files and
+// deleted here. Banks are linked (and unlinked) in Settings; their accounts are listed here too.
 const { data, refresh } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
-// Asks BankLinks, below, to open Plaid Link.
-const askLink = useState('bank-link-asked', () => 0)
-const linking = useState('bank-linking', () => false)
-const canLinkMore = computed(() => links.value.enabled && links.value.links.length > 0 && !links.value.full)
-const linked = computed(() => new Set(links.value.links.flatMap(l => l.accounts.map(a => a.id))))
+// Linking happens in Settings: the button goes there and opens Plaid straight away.
+const canLink = computed(() => links.value.enabled && !links.value.full)
+const linkTo = { path: '/settings', query: { link: '1' }, hash: '#linked-banks' }
+// Each linked account's link, for its bank's name and whether it needs signing in again.
+const linkOf = computed(() => new Map(links.value.links.flatMap(l => l.accounts.map(a => [a.id, l] as const))))
 // Closed accounts stay, for their history, out of the way until asked for.
 const showClosed = ref(false)
 const closedCount = computed(() => data.value.accounts.filter(a => a.closed_on).length)
 watch(closedCount, (n) => { if (!n) showClosed.value = false })
-// Accounts a current link keeps up to date are listed under that link; these are the rest,
-// including the accounts of a link that was removed.
-const accounts = computed(() => data.value.accounts.filter(a => !linked.value.has(a.id) && (showClosed.value || !a.closed_on)))
+const accounts = computed(() => data.value.accounts.filter(a => showClosed.value || !a.closed_on))
 
 // Listed by kind, as Overview adds them up, each kind with its total.
 const kinds = computed(() => GROUPS.map(g => {
@@ -78,24 +76,30 @@ const asOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString(
 // A typed-in balance past its kind's age (shared/accounts.ts) is marked, as Overview counts it.
 const stale = (a: Account) => isStale(a, today)
 
-const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `••${a.last4}`, a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' · ')
+const detail = (a: Account) => [kindLabel(a.kind), a.institution, linkOf.value.has(a.id) && 'Linked', a.last4 && `••${a.last4}`, a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' · ')
 </script>
 
 <template>
   <div>
     <AppHeader title="Accounts" sub="Every number in Cheddar comes from these accounts.">
       <NuxtLink v-if="data.accounts.length" to="/accounts/import" class="btn btn-plain">Import</NuxtLink>
-      <!-- Linking is the way in when it's on; adding by hand is the fallback. With no links yet, the card below has the button. -->
-      <button v-if="!adding" class="btn" :class="links.enabled ? 'btn-tinted' : 'btn-primary'" @click="adding = true">Add an account…</button>
-      <button v-if="canLinkMore" class="btn btn-primary" :disabled="linking" @click="askLink++">
-        <span v-if="linking" class="spinner" aria-hidden="true" /> Link a bank or card
-      </button>
+      <!-- Linking is the way in when it's on; adding by hand is the fallback. With no accounts yet, the card below has the button. -->
+      <button v-if="!adding" class="btn" :class="canLink ? 'btn-tinted' : 'btn-primary'" @click="adding = true">Add an account…</button>
+      <NuxtLink v-if="canLink && data.accounts.length" :to="linkTo" class="btn btn-primary">Link a bank or card</NuxtLink>
     </AppHeader>
 
-    <BankLinks :show-closed="showClosed" @changed="refresh()" />
+    <section v-if="canLink && !data.accounts.length" class="card card-pad first" aria-labelledby="first-title">
+      <h2 id="first-title" class="headline">Link your bank, card or brokerage</h2>
+      <p class="footnote">
+        Sign in to it, and Cheddar brings in up to two years of transactions and keeps your balances up to date.
+        Your bank password goes to your bank, never to Cheddar. Linked banks are managed in Settings.
+      </p>
+      <NuxtLink :to="linkTo" class="btn btn-primary first-btn">Link a bank or card</NuxtLink>
+      <p class="caption">No link for your bank? Add the account yourself and import its statements.</p>
+    </section>
 
     <section v-if="accounts.length" class="group" aria-labelledby="list-title">
-      <h2 id="list-title" class="group-title">{{ links.links.length ? 'Other accounts' : 'Your accounts' }}</h2>
+      <h2 id="list-title" class="group-title">Your accounts</h2>
       <div class="kinds">
         <div v-for="g in kinds" :key="g.id" class="card">
           <div class="panel-head">
@@ -124,22 +128,27 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `�
               </form>
               <template v-else>
                 <span class="row-label">
-                  <span class="block">{{ a.name }} <span v-if="a.shared" class="badge">Shared household</span><span v-if="a.excluded" class="badge badge-off">Not counted</span></span>
+                  <span class="block">
+                    {{ a.name }} <span v-if="a.shared" class="badge">Shared household</span><span v-if="a.excluded" class="badge badge-off">Not counted</span>
+                    <NuxtLink v-if="linkOf.get(a.id) && linkOf.get(a.id)!.status !== 'ok'" to="/settings#linked-banks" class="badge badge-warn">{{ linkOf.get(a.id)!.status === 'reconnect' ? 'Sign in needed' : 'Update failed' }}</NuxtLink>
+                  </span>
                   <span class="caption">{{ detail(a) }}</span>
                 </span>
                 <span class="actions">
                   <template v-if="a.owned !== false">
                     <button class="act" :aria-label="`Edit ${a.name}`" @click="changing = a.id">Edit</button>
                     <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="act" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
-                    <button class="act danger" :aria-label="`Delete ${a.name}`" @click="deleting = a.id">Delete</button>
+                    <!-- A link would only bring a deleted account back: unlink its bank in Settings first. -->
+                    <button v-if="!linkOf.has(a.id)" class="act danger" :aria-label="`Delete ${a.name}`" @click="deleting = a.id">Delete</button>
                   </template>
                 </span>
-                <span v-if="a.owned === false" class="balance" :aria-label="`Shared balance of ${a.name}`">
+                <!-- A link keeps its accounts' balances, so they aren't typed in. -->
+                <span v-if="a.owned === false || linkOf.has(a.id)" class="balance fixed" :aria-label="`Balance of ${a.name}`">
                   <template v-if="a.balance_cents !== null">
                     <span class="num block" :class="moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
                     <span class="caption">as of {{ asOf(a.balance_date) }}</span>
                   </template>
-                  <template v-else>Balance unavailable</template>
+                  <template v-else>{{ linkOf.has(a.id) ? 'Not synced yet' : 'Balance unavailable' }}</template>
                 </span>
                 <button v-else class="balance" :aria-label="stale(a) ? `Update the out-of-date balance of ${a.name}` : `Set the balance of ${a.name}`" :title="stale(a) ? 'Out of date: click to bring it up to date' : `Set the balance of ${a.name}`" @click="startBalance(a)">
                   <template v-if="a.balance_cents !== null">
@@ -156,7 +165,10 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `�
       </div>
       <p v-if="remove.error.value" class="notice notice-error" role="alert">{{ remove.error.value }}</p>
       <p v-if="balance.error.value" class="notice notice-error" role="alert">{{ balance.error.value }}</p>
-      <p class="group-footer">Click a balance to bring it up to date. Edit renames an account, closes it, or leaves it out of your numbers.</p>
+      <p class="group-footer">
+        Linked accounts update on their own; click any other balance to bring it up to date. Edit renames an account, closes it, or leaves it out of your numbers.
+        <template v-if="links.enabled">Link, update or unlink banks in <NuxtLink to="/settings#linked-banks">Settings</NuxtLink>.</template>
+      </p>
     </section>
 
     <div v-if="closedCount" class="closed-toggle">
@@ -232,4 +244,11 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `�
 .editing { list-style: none; }
 .closed-toggle { margin: -1rem 0 1.5rem; }
 .stale { color: var(--warning); font-weight: 600; }
+.balance.fixed { color: var(--text-2); cursor: default; }
+.balance.fixed:hover { background: none; }
+.badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }
+.badge-warn:hover { text-decoration: none; }
+.first { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; margin-bottom: 1.5rem; }
+.first > * { margin: 0; }
+.first .first-btn { margin-top: 0.25rem; min-height: 3rem; padding-inline: 1.5rem; font-size: 1rem; }
 </style>

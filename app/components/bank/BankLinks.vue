@@ -1,23 +1,9 @@
 <script setup lang="ts">
-import type { AccountKind } from '~~/shared/accounts'
 import { formatCents, type BankLink, type BankLinks, type LinkAnswer, type SyncResult } from '~~/shared/bank-links'
 
-// The Accounts page reads the same key, to tell linked accounts from the ones added by hand.
+// Settings' linked banks: link, update, sign in again, unlink. The accounts a link brings in
+// are listed, edited and imported into on Accounts, which reads the same key to mark them.
 const { data, refresh } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
-/** A link was added, synced or removed, so the accounts it brings in may have changed. */
-const emit = defineEmits<{ changed: [] }>()
-/** Closed accounts are listed only when the Accounts page asks for them. */
-const props = defineProps<{ showClosed?: boolean }>()
-const shownAccounts = (l: BankLink) => l.accounts.filter(a => props.showClosed || !a.closed_on)
-
-// A linked account's name, kind, closed day and whether it counts are the person's (AccountEditor).
-const changing = ref('')
-async function changed(saved: boolean) {
-  changing.value = ''
-  if (!saved) return
-  await refresh()
-  emit('changed')
-}
 
 const add = useAction()
 const work = useAction()
@@ -141,7 +127,6 @@ async function link() {
   if (!r) return
   notice.value = said(r.sync)
   await refresh()
-  emit('changed')
 }
 
 /** Signs in to the bank again for a link that stopped working, then syncs it. */
@@ -157,7 +142,6 @@ async function reconnect(l: BankLink) {
   if (!r) return
   notice.value = said(r.sync)
   await refresh()
-  emit('changed')
 }
 
 async function sync(l: BankLink) {
@@ -168,7 +152,6 @@ async function sync(l: BankLink) {
   if (!r) return
   notice.value = said(r.sync)
   await refresh()
-  emit('changed')
 }
 
 async function remove(l: BankLink) {
@@ -182,15 +165,16 @@ async function remove(l: BankLink) {
   if (!ok || asked) return
   notice.value = 'Unlinked. Its accounts and transactions stay in Cheddar, and no longer update.'
   await refresh()
-  emit('changed')
 }
 
-// The Accounts page's header button links another bank once there's one: it bumps this, and
-// reads whether a link is under way from 'bank-linking'.
-const asked = useState('bank-link-asked', () => 0)
-watch(asked, () => link())
-const linking = useState('bank-linking', () => false)
-watch(add.busy, (b) => { linking.value = b })
+// "Link a bank or card" elsewhere (Accounts, Investments) comes here with ?link=1, and Plaid opens
+// straight away. The query goes, so a reload doesn't open it again.
+const route = useRoute()
+onMounted(() => {
+  if (route.query.link !== '1') return
+  navigateTo({ query: { ...route.query, link: undefined }, hash: route.hash }, { replace: true })
+  if (data.value.enabled && !data.value.full) link()
+})
 
 const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
@@ -230,24 +214,14 @@ function when(pb: string) {
           </span>
           <span v-if="l.status !== 'ok'" class="badge badge-warn">{{ l.status === 'reconnect' ? 'Sign in needed' : 'Update failed' }}</span>
         </div>
-        <template v-for="a in shownAccounts(l)" :key="a.id">
-          <div v-if="changing === a.id" class="editing">
-            <AccountEditor :account="{ ...a, kind: a.kind as AccountKind, linked: true }" @done="changed" />
-          </div>
-          <div v-else class="row">
-            <span class="row-label">
-              {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
-              <span v-if="a.excluded" class="badge badge-off">Not counted</span>
-              <span v-if="a.closed_on" class="footnote block">Closed {{ closedDay(a.closed_on) }}</span>
-            </span>
-            <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
-            <span class="actions">
-              <button class="btn btn-plain" :aria-label="`Edit ${a.name}`" @click="changing = a.id">Edit</button>
-              <!-- A statement adds what the link doesn't reach, such as older history; what the link already has is skipped. -->
-              <NuxtLink :to="{ path: '/accounts/import', query: { account: a.id } }" class="btn btn-plain" :aria-label="`Import a statement into ${a.name}`">Import</NuxtLink>
-            </span>
-          </div>
-        </template>
+        <div v-for="a in l.accounts" :key="a.id" class="row">
+          <span class="row-label">
+            {{ a.name }}<span v-if="a.last4" class="footnote"> ••{{ a.last4 }}</span>
+            <span v-if="a.excluded" class="badge badge-off">Not counted</span>
+            <span v-if="a.closed_on" class="footnote block">Closed {{ closedDay(a.closed_on) }}</span>
+          </span>
+          <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
+        </div>
         <p v-if="l.message" class="field footnote" :class="{ warn: l.status !== 'ok' }">{{ l.message }}</p>
         <div v-if="removingId === l.id" class="field stack">
           <p class="footnote">Unlink {{ title(l) }}? Cheddar stops reading it and deletes its access. Its accounts and transactions stay.</p>
@@ -281,7 +255,12 @@ function when(pb: string) {
         <button class="btn btn-primary first-btn" :disabled="add.busy.value" @click="link">
           <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
         </button>
-        <p class="caption">No link for your bank? Add the account yourself and import its statements.</p>
+        <p class="caption">No link for your bank? Add the account yourself on <NuxtLink to="/accounts">Accounts</NuxtLink> and import its statements.</p>
+      </div>
+      <div v-else class="btn-row more">
+        <button class="btn btn-primary" :disabled="add.busy.value" @click="link">
+          <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
+        </button>
       </div>
     </template>
 
@@ -302,7 +281,7 @@ function when(pb: string) {
     <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
     <p v-if="data.enabled" class="group-footer">
       Linked accounts update on their own: within minutes of your bank having something new, and at least once a day. Cheddar can only read them: it can't move money.
-      For history older than the link brought in, import a statement your bank lets you download: what the link already has is skipped.
+      Rename, close or leave out a linked account on <NuxtLink to="/accounts">Accounts</NuxtLink>. For history older than the link brought in, import a statement there: what the link already has is skipped.
     </p>
   </section>
 </template>
@@ -317,8 +296,7 @@ function when(pb: string) {
 .first { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 .first > p { margin: 0; }
 .first .first-btn { margin-top: 0.25rem; min-height: 3rem; padding-inline: 1.5rem; font-size: 1rem; }
-.actions { display: flex; margin-right: -0.5rem; }
-.editing { border-top: var(--border); }
+.more { margin-bottom: 0.75rem; }
 .badge { margin-left: 0.375rem; }
 .warn { color: var(--warning); }
 .off code { font-size: 0.75rem; }

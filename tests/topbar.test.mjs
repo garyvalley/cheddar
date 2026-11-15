@@ -43,11 +43,13 @@ test('white and the softer white read at 4.5:1 on every theme\'s bar', () => {
   }
 })
 
-test('every section in the bar has a page and an icon, Goals among them', () => {
+test('every section in the bar has a page and an icon, Goals and Investments among them', () => {
   const nav = readFileSync(new URL('../app/utils/nav.ts', import.meta.url), 'utf8')
   const icons = readFileSync(new URL('../app/components/app/AppIcon.vue', import.meta.url), 'utf8')
-  const items = [...nav.matchAll(/\{ to: '([^']+)', label: '([^']+)', icon: '([^']+)' \}/g)]
+  const items = [...nav.matchAll(/\{ to: '([^']+)', label: '([^']+)', icon: '([^']+)'(?:, short: '[^']+')? \}/g)]
   assert.ok(items.some(m => m[1] === '/goals'), 'Goals is a section of its own')
+  assert.ok(items.some(m => m[1] === '/investments'), 'Investments is a section of its own')
+  assert.equal(items.length, (nav.match(/\{ to: '/g) ?? []).length, 'every section is read')
   for (const [, to, label, icon] of items) {
     const page = to === '/' ? 'index' : to.slice(1)
     assert.ok(existsSync(new URL(`../app/pages/${page}.vue`, import.meta.url)) || existsSync(new URL(`../app/pages/${page}/index.vue`, import.meta.url)), `${label} has a page`)

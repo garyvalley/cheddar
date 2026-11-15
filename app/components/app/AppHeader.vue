@@ -22,6 +22,6 @@ useHead({ title: () => props.title })
 .page-titles { flex: 1 1 14rem; min-width: 0; }
 .page-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.015em; }
 .page-sub { margin: 0.25rem 0 0; font-size: 0.9375rem; color: var(--text-2); }
-.actions { margin-left: auto; display: flex; gap: 0.5rem; flex: none; }
+.actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; max-width: 100%; }
 @media (max-width: 767px) { .page-title { font-size: 1.5rem; } }
 </style>

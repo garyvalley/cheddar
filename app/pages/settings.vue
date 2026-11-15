@@ -1,9 +1,10 @@
 <template>
   <div>
     <AppHeader title="Settings" />
-    <!-- Two columns on a wide screen: you and how Cheddar looks; then sign-in, your data and the account itself. -->
+    <!-- Two columns on a wide screen: linked banks, you and how Cheddar looks; then sign-in, your data and the account itself. -->
     <div class="cols">
       <div>
+        <BankLinks />
         <SettingsProfile />
         <SettingsHousehold />
         <SettingsAppearance />
