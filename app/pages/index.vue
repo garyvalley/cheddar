@@ -218,7 +218,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
         <div class="tiles tiles-area">
           <section class="card tile growth-area" aria-labelledby="growth-title">
             <div class="tile-head">
-              <h2 id="growth-title" class="tile-label">Investments</h2>
+              <h2 id="growth-title" class="tile-label"><NuxtLink to="/investments" class="tile-link">Investments</NuxtLink></h2>
               <template v-if="ov?.has_investments">
                 <label class="visually-hidden" for="growth-period">Over</label>
                 <select id="growth-period" v-model="period" class="select tile-pick">
@@ -431,6 +431,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
 .goals-line > span:only-of-type { margin-right: auto; }
 .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 1.75rem; }
 .tile-label { margin: 0; font-size: 1rem; font-weight: 600; }
+.tile-link { color: inherit; }
 .tile-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
 .tile-pick { width: auto; min-height: 1.75rem; padding: 0.125rem 0.5rem; font-size: 0.8125rem; }
 .meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 0.125rem 0; }

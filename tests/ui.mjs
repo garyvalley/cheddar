@@ -75,7 +75,9 @@ try {
   // Profile: every state is offered.
   await page.goto(`${APP}/settings`)
   await page.getByText('10 recovery codes left.').waitFor()
-  assert.equal(await page.getByRole('heading', { name: 'Linked banks and cards' }).count(), 0)
+  // Banks are linked here, in Settings.
+  await page.getByRole('heading', { name: 'Linked banks and cards' }).waitFor()
+  await page.getByRole('button', { name: 'Link a bank or card' }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Turn off' }).count(), 0)
   assert.equal(await page.getByLabel('State you file taxes in').locator('option').count(), 52)
   await page.getByLabel('State you file taxes in').selectOption('CA')
@@ -99,8 +101,15 @@ try {
   await page.goto(`${APP}/`)
   await page.getByRole('link', { name: /Connect your accounts/ }).click()
   await page.getByRole('heading', { name: 'Accounts', exact: true }).waitFor()
-  await page.getByRole('heading', { name: 'Linked banks and cards' }).waitFor()
-  await page.getByRole('button', { name: 'Link a bank or card' }).waitFor()
+  // With nothing set up, linking comes first: its button leads to Settings' linked banks.
+  await page.getByRole('heading', { name: 'Link your bank, card or brokerage' }).waitFor()
+  assert.equal(await page.getByRole('heading', { name: 'Linked banks and cards' }).count(), 0)
+  assert.match(await page.getByRole('link', { name: 'Link a bank or card' }).getAttribute('href'), /^\/settings\?link=1#linked-banks$/)
+
+  // Investments is a section of its own, empty until there's a brokerage or retirement account.
+  await page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Investments' }).click()
+  await page.getByRole('heading', { name: 'No investment accounts yet' }).waitFor()
+  await page.goto(`${APP}/accounts`)
 
   // Money: an account, a statement file previewed and imported, its
   // transactions on Spending, and the import undone.
