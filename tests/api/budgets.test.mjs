@@ -45,6 +45,45 @@ describe('budgets', () => {
     assert.deepEqual((await c.call('GET', '/api/budgets')).json.budgets, [])
   })
 
+  test('the monthly plan sets every budget beside the month, with totals and suggestions from the months before', async () => {
+    const { c } = await ready()
+    const a = (await c.call('POST', '/api/accounts', { name: 'Wallet', kind: 'checking' })).json.account
+    const add = async (posted, amount, direction = 'out', description = 'Corner store') =>
+      assert.equal((await c.call('POST', '/api/transactions', { account: a.id, posted, amount, direction, description })).status, 201)
+    const monthOf = (back) => {
+      const d = new Date()
+      d.setUTCDate(15)
+      d.setUTCMonth(d.getUTCMonth() - back)
+      return d.toISOString().slice(0, 10)
+    }
+    await add(today(), '80')
+    await add(monthOf(1), '60')
+    await add(monthOf(2), '30')
+    await add(monthOf(4), '999') // four months back: not in the suggestion
+    const spent = (await c.call('GET', '/api/spending')).json.categories.find(x => x.spending && x.count)
+    assert.equal((await c.call('PUT', '/api/budgets/travel', { amount: '300' })).status, 200)
+
+    const plan = (await c.call('GET', '/api/budgets/plan')).json
+    assert.equal(plan.month, today().slice(0, 7))
+    assert.match(plan.label, /\d{4}/)
+    const line = id => plan.lines.find(l => l.id === id)
+    assert.deepEqual(line('travel'), { id: 'travel', label: line('travel').label, custom: false, budget_cents: 30000, spent_cents: 0, suggested_cents: null })
+    assert.deepEqual([line(spent.id).budget_cents, line(spent.id).spent_cents, line(spent.id).suggested_cents], [null, 8000, 3000])
+    assert.equal(plan.lines[0].id, 'travel', 'budgeted first')
+    assert.ok(!plan.lines.some(l => l.id === 'income'), 'only spending categories')
+    assert.deepEqual([plan.planned_cents, plan.spent_budgeted_cents, plan.remaining_cents, plan.unbudgeted_cents, plan.income_cents, plan.unplanned_income_cents],
+      [30000, 0, 30000, 8000, 0, -30000])
+
+    // Another month, and its own spending; budgets repeat.
+    const before = (await c.call('GET', `/api/budgets/plan?month=${plan.prev}`)).json
+    assert.equal(before.month, plan.prev)
+    assert.deepEqual([before.planned_cents, before.unbudgeted_cents], [30000, 6000])
+
+    // Nobody else's plan has these.
+    const other = (await ready()).c
+    assert.equal((await other.call('GET', '/api/budgets/plan')).json.planned_cents, 0)
+  })
+
   test('a budgeted category with nothing spent is listed at zero', async () => {
     const { c } = await ready()
     await spendToday(c, '5')

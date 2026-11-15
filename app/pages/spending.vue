@@ -203,6 +203,7 @@ async function confirmDelete() {
 <template>
   <div>
     <AppHeader title="Spending">
+      <NuxtLink to="/budget" class="btn btn-tinted">Monthly plan</NuxtLink>
       <NuxtLink to="/cashflow" class="btn btn-tinted">Cash flow</NuxtLink>
       <button v-if="canAdd && !adding" class="btn btn-tinted" @click="adding = true">Add a transaction</button>
     </AppHeader>
@@ -406,7 +407,7 @@ async function confirmDelete() {
                 </li>
               </ul>
             </div>
-            <p class="group-footer">Something in the wrong place? Open it and pick another category; that merchant's other transactions follow. Open a category to give it a monthly budget.</p>
+            <p class="group-footer">Something in the wrong place? Open it and pick another category; that merchant's other transactions follow. Open a category to give it a monthly budget, or plan them all at once on <NuxtLink to="/budget">Monthly plan</NuxtLink>.</p>
           </section>
         </div>
 
