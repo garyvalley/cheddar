@@ -185,6 +185,13 @@ async function remove(l: BankLink) {
   emit('changed')
 }
 
+// The Accounts page's header button links another bank once there's one: it bumps this, and
+// reads whether a link is under way from 'bank-linking'.
+const asked = useState('bank-link-asked', () => 0)
+watch(asked, () => link())
+const linking = useState('bank-linking', () => false)
+watch(add.busy, (b) => { linking.value = b })
+
 const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
 const title = (l: BankLink) => (l.institutions.length ? l.institutions.join(', ') : 'Linked bank')
@@ -262,20 +269,19 @@ function when(pb: string) {
         </div>
       </div>
 
-      <div class="card">
-        <div class="field stack">
-          <p v-if="!data.links.length" class="subhead">
-            Sign in to your bank or card issuer, and Cheddar keeps your balances and transactions up to date.
-            Your bank password goes to your bank, never to Cheddar.
-          </p>
-          <!-- At a limit: say so before the person signs in to their bank, not after. -->
-          <p v-if="data.full" class="footnote">{{ data.full }}</p>
-          <div v-else class="btn-row">
-            <button class="btn btn-primary" :disabled="add.busy.value" @click="link">
-              <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
-            </button>
-          </div>
-        </div>
+      <!-- At a limit: say so before the person signs in to their bank, not after. -->
+      <p v-if="data.full" class="card card-pad footnote">{{ data.full }}</p>
+      <!-- The first link is the main way in, so it gets the page's biggest button. After that, the header has one. -->
+      <div v-else-if="!data.links.length" class="card card-pad first">
+        <p class="headline">Link your bank, card or brokerage</p>
+        <p class="footnote">
+          Sign in to it, and Cheddar brings in up to two years of transactions and keeps your balances up to date.
+          Your bank password goes to your bank, never to Cheddar.
+        </p>
+        <button class="btn btn-primary first-btn" :disabled="add.busy.value" @click="link">
+          <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
+        </button>
+        <p class="caption">No link for your bank? Add the account yourself and import its statements.</p>
       </div>
     </template>
 
@@ -295,8 +301,8 @@ function when(pb: string) {
     <p v-if="add.error.value || work.error.value" class="notice notice-error" role="alert">{{ add.error.value || work.error.value }}</p>
     <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
     <p v-if="data.enabled" class="group-footer">
-      Linked accounts update once a day on their own. Cheddar can only read them: it can't move money.
-      For history from before you linked, import a statement your bank lets you download: what the link already brought in is skipped.
+      Linked accounts update on their own: within minutes of your bank having something new, and at least once a day. Cheddar can only read them: it can't move money.
+      For history older than the link brought in, import a statement your bank lets you download: what the link already has is skipped.
     </p>
   </section>
 </template>
@@ -308,6 +314,9 @@ function when(pb: string) {
 .how summary { font-size: 0.875rem; color: var(--accent); cursor: pointer; }
 
 .link { margin-bottom: 0.75rem; }
+.first { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.first > p { margin: 0; }
+.first .first-btn { margin-top: 0.25rem; min-height: 3rem; padding-inline: 1.5rem; font-size: 1rem; }
 .actions { display: flex; margin-right: -0.5rem; }
 .editing { border-top: var(--border); }
 .badge { margin-left: 0.375rem; }

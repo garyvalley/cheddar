@@ -61,6 +61,8 @@ describe('requests', () => {
   test('a new link asks for transactions; signing in again names the link\'s token instead', () => {
     const fresh = plaid.linkTokenBody('u1')
     assert.deepEqual(fresh.products, ['transactions'])
+    // Plaid's most history, not its 90-day default: it can't be raised after linking.
+    assert.equal(fresh.transactions.days_requested, 730)
     assert.equal(fresh.user.client_user_id, 'u1')
     assert.equal(fresh.access_token, undefined)
     const again = plaid.linkTokenBody('u1', 'access-sandbox-x')

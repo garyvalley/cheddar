@@ -7,6 +7,10 @@ import { GROUPS, groupOf } from '~~/shared/overview'
 // and filled from statement files. Every other page only reads them.
 const { data, refresh } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
+// Asks BankLinks, below, to open Plaid Link.
+const askLink = useState('bank-link-asked', () => 0)
+const linking = useState('bank-linking', () => false)
+const canLinkMore = computed(() => links.value.enabled && links.value.links.length > 0 && !links.value.full)
 const linked = computed(() => new Set(links.value.links.flatMap(l => l.accounts.map(a => a.id))))
 // Closed accounts stay, for their history, out of the way until asked for.
 const showClosed = ref(false)
@@ -80,8 +84,12 @@ const detail = (a: Account) => [kindLabel(a.kind), a.institution, a.last4 && `�
 <template>
   <div>
     <AppHeader title="Accounts" sub="Every number in Cheddar comes from these accounts.">
-      <NuxtLink v-if="data.accounts.length" to="/accounts/import" class="btn btn-tinted">Import</NuxtLink>
-      <button v-if="!adding" class="btn btn-primary" @click="adding = true">Add an account…</button>
+      <NuxtLink v-if="data.accounts.length" to="/accounts/import" class="btn btn-plain">Import</NuxtLink>
+      <!-- Linking is the way in when it's on; adding by hand is the fallback. With no links yet, the card below has the button. -->
+      <button v-if="!adding" class="btn" :class="links.enabled ? 'btn-tinted' : 'btn-primary'" @click="adding = true">Add an account…</button>
+      <button v-if="canLinkMore" class="btn btn-primary" :disabled="linking" @click="askLink++">
+        <span v-if="linking" class="spinner" aria-hidden="true" /> Link a bank or card
+      </button>
     </AppHeader>
 
     <BankLinks :show-closed="showClosed" @changed="refresh()" />

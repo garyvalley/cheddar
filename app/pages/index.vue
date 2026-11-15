@@ -54,6 +54,7 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
 
 // Investment growth over the period the person picks.
 const period = ref<GrowthPeriodId>('1y')
+const invested = computed(() => ov.value?.net_worth.groups.find(g => g.id === 'investments')?.total_cents ?? null)
 const grown = computed(() => ov.value?.growth.find(g => g.period === period.value))
 const periodName = computed(() => GROWTH_PERIODS.find(p => p.id === period.value)?.name ?? '')
 // Savings goals (their own page, /goals): one line under the savings rate.
@@ -232,7 +233,11 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
                   <span class="num change" :class="moneyTone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span> over {{ periodName }}, less money moved in or out
                 </p>
               </template>
-              <p v-else class="footnote">Growth shows once Cheddar has seen your investment accounts' balances on more than one day. Bring the others up to date on <NuxtLink to="/accounts">Accounts</NuxtLink> now and then.</p>
+              <template v-else>
+                <!-- A new link has today's value and nothing to compare it with yet: show what's invested. -->
+                <p v-if="invested !== null" class="num tile-value" data-test="invested">{{ formatCents(invested) }}</p>
+                <p class="footnote">Invested today. Growth shows once Cheddar has seen these balances on more than one day.</p>
+              </template>
             </template>
             <p v-else class="footnote">Add a brokerage or retirement account on <NuxtLink to="/accounts">Accounts</NuxtLink> to see how your investments grow.</p>
           </section>
