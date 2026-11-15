@@ -250,6 +250,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 }
 .badge-on { background: color-mix(in srgb, var(--success) 18%, var(--surface)); color: var(--success); }
 .badge-off { background: var(--surface-2); color: var(--text-2); }
+.badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }
 
 .stack > * + * { margin-top: 1rem; }
 .muted { color: var(--text-2); }
