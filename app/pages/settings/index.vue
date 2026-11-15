@@ -1,25 +1,11 @@
 <script setup lang="ts">
-// Settings in categories, each opened and closed on its own heading: the
-// accounts and banks every number comes from first, then you, how Cheddar
-// looks, sign-in, and your data. A link such as /settings#export opens the
-// category it's in (SettingsCategory).
-const KEY = 'cheddar:settings-open'
+// Settings in categories, each opened and closed on its own heading, all
+// closed when the page opens: the accounts and banks every number comes from
+// first, then you, how Cheddar looks, sign-in, and your data. A link such as
+// /settings#export opens the category it's in (SettingsCategory).
 const open = useSettingsOpen()
-onMounted(() => {
-  // After hydration, so the server's page and the first paint agree. A category a link
-  // just opened stays open.
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null')
-    if (Array.isArray(saved) && saved.every(s => typeof s === 'string')) {
-      open.value = [...new Set([...saved, ...open.value.filter(id => !SETTINGS_OPEN_FIRST.includes(id))])]
-    }
-  }
-  catch { /* private window or blocked storage: the defaults stand */ }
-  watch(open, (ids) => {
-    try { localStorage.setItem(KEY, JSON.stringify(ids)) }
-    catch { /* not kept, which is fine */ }
-  })
-})
+// Closed again on every visit, before the categories mount and a link opens one.
+open.value = []
 const all = ['accounts', 'you', 'appearance', 'security', 'data']
 const allOpen = computed(() => all.every(id => open.value.includes(id)))
 </script>
