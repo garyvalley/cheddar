@@ -19,7 +19,7 @@ const about = (e: ActivityEvent) => [when(e.created), e.device, where(e.place)].
 
 <template>
   <section class="group" aria-labelledby="activity-title">
-    <h2 id="activity-title" class="group-title">Recent activity</h2>
+    <h3 id="activity-title" class="group-title">Recent activity</h3>
     <div class="card">
       <div v-for="(e, i) in data.activity" :key="i" class="row">
         <span class="row-label">

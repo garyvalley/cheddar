@@ -43,7 +43,7 @@ async function signOut(s: DeviceSession) {
 
 <template>
   <section class="group" aria-labelledby="devices-title">
-    <h2 id="devices-title" class="group-title">Your devices</h2>
+    <h3 id="devices-title" class="group-title">Your devices</h3>
     <div class="card">
       <div v-for="s in data.sessions" :key="s.id" class="row">
         <span class="row-label">

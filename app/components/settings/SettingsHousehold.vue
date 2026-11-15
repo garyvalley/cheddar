@@ -43,7 +43,7 @@ function memberAction(member: HouseholdMember) {
 
 <template>
   <section id="household" class="group" aria-labelledby="household-title">
-    <h2 id="household-title" class="group-title">Household</h2>
+    <h3 id="household-title" class="group-title">Household</h3>
     <p v-if="loadError" class="notice notice-error" role="alert">{{ errorMessage(loadError) }}</p>
 
     <div v-if="!data.household" class="card">
@@ -86,7 +86,7 @@ function memberAction(member: HouseholdMember) {
       </form>
 
       <section v-if="isOwner" class="share-list" aria-labelledby="share-title">
-        <h3 id="share-title" class="share-title">Your accounts</h3>
+        <h4 id="share-title" class="share-title">Accounts to share</h4>
         <p class="footnote">Members can edit shared transaction details. Only you can manage accounts, balances, categories, and bank links.</p>
         <label v-for="account in data.accounts" :key="account.id" class="row share-row">
           <span class="row-label">{{ account.name }}</span>

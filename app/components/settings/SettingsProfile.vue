@@ -35,7 +35,7 @@ async function save() {
 
 <template>
   <section class="group" aria-labelledby="profile-title">
-    <h2 id="profile-title" class="group-title">Profile</h2>
+    <h3 id="profile-title" class="group-title">Profile</h3>
     <form class="card" @submit.prevent="save" @input="saved = false">
       <label class="field">
         <span class="field-label">Name</span>

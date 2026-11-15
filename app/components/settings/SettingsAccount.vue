@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { MIN_LENGTH } from '~~/shared/passwords'
 
+/** Settings shows sign-in (email and password) and Delete account in different categories. */
+const props = defineProps<{ part?: 'sign-in' | 'delete' }>()
+
 const { me, signOut } = useAuth()
 const verify = useAction()
 const everywhere = useAction()
@@ -60,8 +63,8 @@ async function deleteAccount() {
 </script>
 
 <template>
-  <section class="group" aria-labelledby="account-title">
-    <h2 id="account-title" class="group-title">Account</h2>
+  <section v-if="props.part !== 'delete'" class="group" aria-labelledby="account-title">
+    <h3 id="account-title" class="group-title">Email and password</h3>
     <div class="card">
       <div class="row">
         <span class="row-label">Email</span>
@@ -138,8 +141,8 @@ async function deleteAccount() {
     </p>
   </section>
 
-  <section class="group" aria-labelledby="danger-title">
-    <h2 id="danger-title" class="group-title">Delete account</h2>
+  <section v-if="props.part !== 'sign-in'" class="group" aria-labelledby="danger-title">
+    <h3 id="danger-title" class="group-title">Delete account</h3>
     <div class="card">
       <div v-if="!deleting" class="row">
         <span class="row-label footnote">Deletes your account and everything in it. This can't be undone.</span>

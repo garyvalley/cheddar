@@ -79,7 +79,7 @@ async function doneWithCodes() {
 
 <template>
   <section class="group" aria-labelledby="twostep-title">
-    <h2 id="twostep-title" class="group-title">Two-step sign-in</h2>
+    <h3 id="twostep-title" class="group-title">Two-step sign-in</h3>
     <div class="card">
       <div class="row">
         <span class="row-label">Authenticator app</span>

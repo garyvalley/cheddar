@@ -4,7 +4,7 @@ import type { SpendingSummary } from '~~/shared/categories'
 import type { Goal } from '~~/shared/goals'
 import { GROWTH_PERIODS, groupOf, type GrowthPeriodId, type Overview } from '~~/shared/overview'
 
-// Overview only reads what the accounts hold (set up on Accounts): net worth
+// Overview only reads what the accounts hold (set up in Settings): net worth
 // from their balances, income and spending from their transactions, and the
 // investment accounts' growth from the balances seen over time.
 
@@ -24,7 +24,7 @@ const steps = computed(() => [
     done: list.value.accounts.length > 0,
     label: 'Connect your accounts',
     hint: 'Link your banks and cards, or import their statements. Everything here is worked out from them.',
-    to: '/accounts',
+    to: '/settings#accounts',
   },
 ])
 const left = computed(() => steps.value.filter(s => !s.done).length)
@@ -146,10 +146,10 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
     <!-- Worth a look: balances typed in long ago, and categories over this month's budget. -->
     <section v-if="stale.length" class="group" aria-label="Out-of-date balances">
       <div class="card">
-        <NuxtLink to="/accounts" class="row step">
+        <NuxtLink to="/settings#accounts" class="row step">
           <span class="row-label">
             <span class="step-label">{{ stale.length === 1 ? '1 balance is out of date' : `${stale.length} balances are out of date` }}</span>
-            <span class="footnote">{{ stale.map(a => a.name).join(', ') }}: net worth, growth and Projections use {{ stale.length === 1 ? 'it' : 'them' }}. Bring {{ stale.length === 1 ? 'it' : 'them' }} up to date on Accounts.</span>
+            <span class="footnote">{{ stale.map(a => a.name).join(', ') }}: net worth, growth and Projections use {{ stale.length === 1 ? 'it' : 'them' }}. Bring {{ stale.length === 1 ? 'it' : 'them' }} up to date in Settings.</span>
           </span>
           <AppIcon name="chevron" class="chev" />
         </NuxtLink>
@@ -179,7 +179,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
       <section class="card side worth-area" aria-labelledby="worth-title">
         <div class="panel-head">
           <h2 id="worth-title" class="panel-title">Net worth</h2>
-          <NuxtLink to="/accounts" class="panel-link">Accounts</NuxtLink>
+          <NuxtLink to="/settings#accounts" class="panel-link">Your accounts</NuxtLink>
         </div>
         <template v-if="worth && hasBalances">
           <div class="worth">
@@ -204,13 +204,13 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
             </ul>
           </details>
           <p v-if="worth.missing.length" class="footnote side-note">
-            Left out until it has a balance: {{ worth.missing.map(m => m.name).join(', ') }}. Enter it on <NuxtLink to="/accounts">Accounts</NuxtLink>.
+            Left out until it has a balance: {{ worth.missing.map(m => m.name).join(', ') }}. Enter it in <NuxtLink to="/settings#accounts">Settings</NuxtLink>.
           </p>
         </template>
         <div v-else class="worth">
           <p class="num worth-value muted">—</p>
-          <p v-if="!list.accounts.length" class="footnote">Connect your accounts on <NuxtLink to="/accounts">Accounts</NuxtLink>, and their balances add up to your net worth here.</p>
-          <p v-else class="footnote">None of your accounts has a balance yet. Link them to their bank, or enter what each holds, on <NuxtLink to="/accounts">Accounts</NuxtLink>.</p>
+          <p v-if="!list.accounts.length" class="footnote">Connect your accounts in <NuxtLink to="/settings#accounts">Settings</NuxtLink>, and their balances add up to your net worth here.</p>
+          <p v-else class="footnote">None of your accounts has a balance yet. Link them to their bank, or enter what each holds, in <NuxtLink to="/settings#accounts">Settings</NuxtLink>.</p>
         </div>
       </section>
 
@@ -239,7 +239,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
                 <p class="footnote">Invested today. Growth shows once Cheddar has seen these balances on more than one day.</p>
               </template>
             </template>
-            <p v-else class="footnote">Add a brokerage or retirement account on <NuxtLink to="/accounts">Accounts</NuxtLink> to see how your investments grow.</p>
+            <p v-else class="footnote">Add a brokerage or retirement account in <NuxtLink to="/settings#accounts">Settings</NuxtLink> to see how your investments grow.</p>
           </section>
 
           <section class="card tile kept-area" aria-labelledby="kept-title">

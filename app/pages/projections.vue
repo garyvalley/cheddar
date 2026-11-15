@@ -2,7 +2,7 @@
 import { formatCents } from '~~/shared/accounts'
 import { MAX_PAYOFF_MONTHS, monthsAfter, payoff, project, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
 
-// Projections only read what the accounts hold (set up on Accounts): the
+// Projections only read what the accounts hold (set up in Settings): the
 // savings rate from the last whole months, today's investments, and how fast
 // each card and loan is being paid down. The assumptions are the person's to
 // change, and this browser remembers them.
@@ -149,7 +149,7 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
             </div>
           </div>
           <div v-else class="card card-pad">
-            <p class="footnote">Your savings rate shows here once your accounts have income or spending from the last {{ months.length || 6 }} whole months. Link or import them on <NuxtLink to="/accounts">Accounts</NuxtLink>.</p>
+            <p class="footnote">Your savings rate shows here once your accounts have income or spending from the last {{ months.length || 6 }} whole months. Link or import them in <NuxtLink to="/settings#accounts">Settings</NuxtLink>.</p>
           </div>
           <p class="group-footer">From the last whole months; this month counts once it's over. Moving money between your own accounts counts as neither.</p>
         </section>
@@ -207,14 +207,14 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
                 <p class="footnote muted">
                   <template v-if="p.d.basis === 'transactions'">The pace is this account's payments less new charges, a month on average lately.</template>
                   <template v-else-if="p.d.basis === 'balances'">The pace is how fast its balance has come down since Cheddar first saw it.</template>
-                  <template v-else>Cheddar hasn't seen this balance change yet. Bring it up to date on <NuxtLink to="/accounts">Accounts</NuxtLink> now and then, or enter the payment.</template>
+                  <template v-else>Cheddar hasn't seen this balance change yet. Bring it up to date in <NuxtLink to="/settings#accounts">Settings</NuxtLink> now and then, or enter the payment.</template>
                   With no rate entered, interest isn't counted; past {{ MAX_PAYOFF_MONTHS / 12 }} years counts as never.
                 </p>
               </details>
             </div>
           </div>
           <div v-else class="card card-pad">
-            <p class="footnote">No card or loan owes anything. Cards and loans you add on <NuxtLink to="/accounts">Accounts</NuxtLink> show when they'll be paid off here.</p>
+            <p class="footnote">No card or loan owes anything. Cards and loans you add in <NuxtLink to="/settings#accounts">Settings</NuxtLink> show when they'll be paid off here.</p>
           </div>
         </section>
       </div>
@@ -294,7 +294,7 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
         </label>
       </div>
       <p class="group-footer">
-        Starts from your brokerage and retirement balances<template v-if="!pj?.has_investments"> (none yet: add them on <NuxtLink to="/accounts">Accounts</NuxtLink>)</template>, before taxes and fees. This browser remembers your assumptions.
+        Starts from your brokerage and retirement balances<template v-if="!pj?.has_investments"> (none yet: add them in <NuxtLink to="/settings#accounts">Settings</NuxtLink>)</template>, before taxes and fees. This browser remembers your assumptions.
       </p>
     </section>
   </div>

@@ -18,7 +18,7 @@ async function choose(change: Partial<Pick<Profile, 'theme' | 'appearance'>>) {
 
 <template>
   <section class="group" aria-labelledby="appearance-title">
-    <h2 id="appearance-title" class="group-title">Appearance</h2>
+    <h3 id="appearance-title" class="group-title">Appearance</h3>
     <div class="card">
       <div class="row">
         <span id="theme-label" class="row-label">Color</span>
