@@ -76,6 +76,7 @@ routerAdd("GET", "/api/bank-links", (e) => {
     enabled: enabled,
     links: links.map(function (l) { return glue.summary(e.app, l) }),
     full: hit ? hit.message : null,
+    holdings: glue.holdingsOn(),
   })
 }, $apis.requireAuth("users"))
 

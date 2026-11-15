@@ -21,6 +21,11 @@
 //                               posted, amount_cents, description, payee,
 //                               pending, bank_category, pending_of }],
 //                               removed: [external_id], cursor }
+//   holdingsOn()                whether holdings are asked for at all (optional)
+//   holdings(access)            { status: "ok" | "unsupported" | "consent",
+//                               rows: [{ account, name, ticker, type, quantity,
+//                               price_cents, value_cents, cost_basis_cents,
+//                               currency, price_as_of }] } (optional)
 //   remove(access)              tells the provider to forget the link
 //   clean(text)                 a name from the provider made safe to show
 //   webhookUrl()                where its links send webhooks, or "" for none

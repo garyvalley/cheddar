@@ -26,6 +26,8 @@ export interface BankLink {
   /** PocketBase's date format, or '' before the first sync worked. */
   last_synced: string
   accounts: LinkedAccount[]
+  /** Holdings: '' (not asked yet), ok, consent (sign in to the bank again to share them), unsupported (the bank doesn't offer them). */
+  holdings: '' | 'ok' | 'consent' | 'unsupported'
   /**
    * What the link has brought in: `count` transactions, the oldest posted
    * `from` (YYYY-MM-DD, '' with none). `history` of them are from before
@@ -40,6 +42,8 @@ export interface BankLinks {
   links: BankLink[]
   /** Why no new link can be made (this Cheddar's or the person's limit is reached), or null. */
   full?: string | null
+  /** Whether links bring in investment holdings too (PLAID_INVESTMENTS). */
+  holdings?: boolean
 }
 
 /** What a sync did. `recent`: it had just synced, so this one didn't ask Plaid again. */

@@ -79,6 +79,7 @@ describe("exporting everything", () => {
     );
     assert.equal(data.imports.length, 1);
     assert.deepEqual(data.cashflow_items, []);
+    assert.deepEqual(data.holdings, []);
     assert.ok(data.balance_history.some((p) => p.balance_cents === 123456));
     assert.ok(
       Array.isArray(data.category_rules) && Array.isArray(data.categories),

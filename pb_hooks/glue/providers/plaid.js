@@ -60,7 +60,7 @@ module.exports = {
   /** What the page opens Plaid Link with: a new link, or with `access`, signing in to that one again. */
   linkToken: function (userId, access) {
     return String(
-      call("/link/token/create", plaid.linkTokenBody(userId, access || null, plaid.webhookUrl($os.getenv("APP_URL"))))
+      call("/link/token/create", plaid.linkTokenBody(userId, access || null, plaid.webhookUrl($os.getenv("APP_URL")), cfg().investments))
         .link_token || "",
     );
   },
@@ -116,6 +116,30 @@ module.exports = {
         throw err;
       return fetchChanges(access, cursor);
     }
+  },
+  /** Whether holdings are asked for (PLAID_INVESTMENTS=true: Plaid bills Investments per link). */
+  holdingsOn: function () {
+    return cfg().investments;
+  },
+  /**
+   * What the link's investment accounts hold: { status: "ok", rows }
+   * (lib/plaid.js holdingRows), or { status: "unsupported" | "consent",
+   * rows: [] } when the bank doesn't offer them or the person hasn't shared
+   * them. Any other failure throws, as every call does.
+   */
+  holdings: function (access) {
+    var res;
+    try {
+      res = $http.send(plaid.request(cfg(), "/investments/holdings/get", { access_token: access }));
+    } catch (_) {
+      throw new errors.ProviderError(plaid.failure(0, null));
+    }
+    if (res.statusCode === 200) return { status: "ok", rows: plaid.holdingRows(res.json) };
+    var f = plaid.failure(res.statusCode, res.json);
+    var gap = plaid.holdingsGap(f.code);
+    console.log("[plaid] /investments/holdings/get: " + f.code);
+    if (gap) return { status: gap, rows: [] };
+    throw new errors.ProviderError(f);
   },
   /** Tells Plaid to forget the link, so nobody is billed for it. */
   remove: function (access) {

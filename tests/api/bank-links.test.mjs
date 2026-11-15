@@ -116,7 +116,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
 
   test('signing in to a bank links its accounts and syncs balances and every page of transactions', async () => {
     const c = await person()
-    assert.deepEqual((await c.call('GET', '/api/bank-links')).json, { enabled: true, links: [], full: null })
+    assert.deepEqual((await c.call('GET', '/api/bank-links')).json, { enabled: true, links: [], full: null, holdings: true })
 
     const r = await link(c)
     assert.deepEqual(r.sync, { ok: true, added: 4, updated: 0, removed: 0 })
@@ -221,6 +221,75 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.deepEqual(by['RENT NOVEMBER'], [true, false])
     assert.deepEqual(by['OLD DINER INC'], [false, true])
     assert.deepEqual((await c.call('GET', '/api/transactions/review')).json, { waiting: 4, history: 3 })
+  })
+
+  test('a brokerage brings in its holdings, replaced at each sync, the person\'s own; a bank without them is said so', async () => {
+    const c = await person()
+    const bank = sampleBank()
+    bank.institution = 'Platypus Invest'
+    const ira = `ira-${Date.now()}`
+    bank.accounts.push({ account_id: ira, name: 'Rollover IRA', mask: '7777', type: 'investment', subtype: 'ira', balances: { current: 10120.03, iso_currency_code: 'USD' } })
+    bank.holdings = {
+      securities: [
+        { security_id: 'vti', name: 'Vanguard Total Stock Market ETF', ticker_symbol: 'VTI', type: 'etf' },
+        { security_id: 'bnd', name: 'Vanguard Total Bond Market ETF', ticker_symbol: 'BND', type: 'fixed income' },
+        { security_id: 'usd', name: 'U S Dollar', ticker_symbol: 'CUR:USD', type: 'cash', is_cash_equivalent: true },
+      ],
+      holdings: [
+        { account_id: ira, security_id: 'vti', quantity: 20, institution_price: 300, institution_value: 6000, cost_basis: 5000, iso_currency_code: 'USD', institution_price_as_of: daysAgo(1) },
+        { account_id: ira, security_id: 'bnd', quantity: 50, institution_price: 80, institution_value: 4000, iso_currency_code: 'USD' },
+        { account_id: ira, security_id: 'usd', quantity: 120.03, institution_price: 1, institution_value: 120.03, iso_currency_code: 'USD' },
+      ],
+    }
+    const tokens = mock.linkTokens.length
+    const { link: l } = await link(c, bank)
+    assert.deepEqual(mock.linkTokens.slice(tokens).map(b => b.optional_products), [['investments']])
+    assert.equal(l.holdings, 'ok')
+
+    const inv = (await c.call('GET', '/api/investments')).json
+    const account = inv.accounts.find(a => a.name === 'Rollover IRA')
+    const mine = inv.holdings.accounts[account.id]
+    assert.equal(inv.holdings.on, true)
+    assert.deepEqual(mine.positions.map(p => [p.ticker, p.type, p.quantity, p.value_cents, p.cost_basis_cents]), [
+      ['VTI', 'etf', 20, 600000, 500000], ['BND', 'fixed income', 50, 400000, null], ['CUR:USD', 'cash', 120.03, 12003, null],
+    ])
+    assert.equal(mine.gap, '')
+    assert.deepEqual(inv.holdings.allocation.map(a => [a.label, a.value_cents]), [['ETFs', 600000], ['Bonds', 400000], ['Cash', 12003]])
+    assert.equal(inv.holdings.covered_cents, 1012003)
+
+    // Only the sync writes them, and nobody else reads them.
+    const row = (await pb('GET', '/api/collections/holdings/records', asPb(c))).json.items[0]
+    assert.ok(row)
+    assert.notEqual((await pb('POST', '/api/collections/holdings/records', asPb(c), { owner: row.owner, account: row.account, name: 'Fake', value_cents: 1 })).status, 200)
+    assert.notEqual((await pb('PATCH', `/api/collections/holdings/records/${row.id}`, asPb(c), { value_cents: 1 })).status, 200)
+    assert.notEqual((await pb('DELETE', `/api/collections/holdings/records/${row.id}`, asPb(c))).status, 204)
+    const other = await person()
+    assert.equal((await pb('GET', '/api/collections/holdings/records', asPb(other))).json.items.length, 0)
+    assert.equal((await pb('GET', `/api/collections/holdings/records/${row.id}`, asPb(other))).status, 404)
+
+    // Selling the bond fund: the next sync replaces what's held.
+    bank.holdings = { ...bank.holdings, holdings: bank.holdings.holdings.filter(h => h.security_id !== 'bnd') }
+    await allowSync(l.id)
+    await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
+    const after = (await c.call('GET', '/api/investments')).json.holdings.accounts[account.id]
+    assert.deepEqual(after.positions.map(p => p.ticker), ['VTI', 'CUR:USD'])
+
+    // A bank whose holdings the person hasn't shared: the sync works, and the page says what to do.
+    const c2 = await person()
+    const b2 = sampleBank()
+    b2.accounts.push({ account_id: `brk-${Date.now()}`, name: 'Brokerage', mask: '8888', type: 'investment', subtype: 'brokerage', balances: { current: 500, iso_currency_code: 'USD' } })
+    b2.holdings = 'ADDITIONAL_CONSENT_REQUIRED'
+    const r2 = await link(c2, b2)
+    assert.equal(r2.sync.ok, true)
+    const l2 = (await c2.call('GET', '/api/bank-links')).json.links[0]
+    assert.equal(l2.holdings, 'consent')
+    const inv2 = (await c2.call('GET', '/api/investments')).json
+    const brk = inv2.accounts.find(a => a.name === 'Brokerage')
+    assert.deepEqual([inv2.holdings.accounts[brk.id].gap, inv2.holdings.accounts[brk.id].link, inv2.holdings.uncovered_cents], ['consent', l2.id, 50000])
+    // Signing in again asks Plaid for them.
+    const again = mock.linkTokens.length
+    assert.equal((await c2.call('POST', '/api/bank-links/link-token', { link: l2.id })).status, 200)
+    assert.deepEqual(mock.linkTokens[again].additional_consented_products, ['investments'])
   })
 
   test('a linked account\'s name, kind and bank are the person\'s, and one left out keeps syncing but counts nowhere', async () => {
