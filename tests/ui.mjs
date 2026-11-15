@@ -78,8 +78,12 @@ try {
   await page.getByRole('heading', { name: 'Hi, Ui' }).waitFor()
   assert.equal(await page.getByText('Set up · 3 left').count(), 1)
 
-  // Settings opens on Accounts and banks; every other category opens on its heading.
+  // Settings opens with every category closed; each opens on its heading.
   await page.goto(`${APP}/settings`)
+  for (const title of ['Accounts and banks', 'Profile and household', 'Appearance', 'Sign-in and security', 'Your data']) {
+    assert.equal(await page.getByRole('button', { name: new RegExp(`^${title}`) }).getAttribute('aria-expanded'), 'false', `${title} starts closed`)
+  }
+  await openCategory(page, 'Accounts and banks')
   await page.getByRole('heading', { name: 'Linked banks and cards', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Link a bank or card' }).waitFor()
   assert.equal(await page.getByRole('button', { name: /^Sign-in and security/ }).getAttribute('aria-expanded'), 'false')
@@ -93,12 +97,13 @@ try {
   await page.getByLabel('Federal filing status').selectOption('single')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await page.getByText('Saved', { exact: true }).waitFor()
-  // Which categories are open is remembered.
+  // A visit later starts closed again.
   await page.reload()
-  await page.getByLabel('State you file taxes in').waitFor()
+  assert.equal(await page.getByRole('button', { name: /^Profile and household/ }).getAttribute('aria-expanded'), 'false')
 
   // Requests that succeed with 204 No Content show their success. (A 204
   // once read as a failure, so the confirm button seemed to do nothing.)
+  await openCategory(page, 'Sign-in and security')
   await page.getByRole('button', { name: 'Send confirmation email' }).click()
   await page.getByText('Sent. Check your inbox.').waitFor()
   // The emailed links carry tokens only mail delivers, so the server's
@@ -120,7 +125,7 @@ try {
   await page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Investments' }).click()
   await page.getByRole('heading', { name: 'No investment accounts yet' }).waitFor()
   assert.match(await page.getByRole('link', { name: 'Link a brokerage' }).getAttribute('href'), /^\/settings\?link=1#linked-banks$/)
-  await page.goto(`${APP}/settings`)
+  await page.goto(`${APP}/settings#accounts`)
 
   // Money: an account, a statement file previewed and imported, its
   // transactions on Spending, and the import undone.
@@ -205,7 +210,7 @@ try {
   await page.getByText('Your export is downloading.').waitFor()
 
   // Net worth: a balance entered in Settings, added up on Overview beside the month's income and spending.
-  await page.goto(`${APP}/settings`)
+  await page.goto(`${APP}/settings#accounts`)
   await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).click()
   await page.getByLabel('Balance of Everyday checking').fill('2,413.40')
   await page.locator('#your-accounts').getByRole('button', { name: 'Save' }).click()
@@ -216,7 +221,7 @@ try {
   await page.getByText('Add a brokerage or retirement account').waitFor()
 
   // An account is changed in place: closed, it leaves the list until asked for, and opens again.
-  await page.goto(`${APP}/settings`)
+  await page.goto(`${APP}/settings#accounts`)
   await page.getByRole('button', { name: 'Edit Everyday checking' }).click()
   const editor = page.getByRole('form', { name: 'Edit Everyday checking' })
   await editor.getByLabel('Bank or card issuer (optional)').fill('Big Bank')

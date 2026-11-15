@@ -103,7 +103,7 @@ tunnel, repository secrets) and day-to-day operations.
   place accounts are added; Overview, Spending, Investments, Projections and
   Taxes have no setup of their own, and are worked out from what these
   accounts hold. Settings' categories open and close on their headings, and
-  this browser remembers which are open.
+  all start closed.
 - **Link a bank or card** (Settings → Accounts and banks → Linked banks and cards), so balances
   and transactions arrive on their own:
   - Tap **Link a bank or card**, pick your bank, and sign in to it in the
