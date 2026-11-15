@@ -170,10 +170,13 @@ async function remove(l: BankLink) {
 // "Link a bank or card" elsewhere (Investments) comes here with ?link=1, and Plaid opens
 // straight away. The query goes, so a reload doesn't open it again.
 const route = useRoute()
+// Overview's "Sign in again" comes here with ?reconnect=<link id>, and that bank's sign-in opens.
 onMounted(() => {
-  if (route.query.link !== '1') return
-  navigateTo({ query: { ...route.query, link: undefined }, hash: route.hash }, { replace: true })
-  if (data.value.enabled && !data.value.full) link()
+  const again = typeof route.query.reconnect === 'string' ? data.value.links.find(l => l.id === route.query.reconnect) : undefined
+  if (route.query.link !== '1' && !again) return
+  navigateTo({ query: { ...route.query, link: undefined, reconnect: undefined }, hash: route.hash }, { replace: true })
+  if (again) reconnect(again)
+  else if (data.value.enabled && !data.value.full) link()
 })
 
 const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
@@ -313,5 +316,4 @@ function when(pb: string) {
 .badge { margin-left: 0.375rem; }
 .warn { color: var(--warning); }
 .off code { font-size: 0.75rem; }
-.badge-warn { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); color: var(--warning); }
 </style>

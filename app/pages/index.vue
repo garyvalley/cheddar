@@ -156,6 +156,9 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
       </div>
     </section>
 
+    <!-- Whether linked banks are current: quiet when they are. -->
+    <BankHealth />
+
     <!-- Categories over this month's budget. -->
     <section v-if="ov?.over_budget.length" class="group" aria-labelledby="budget-title">
       <div class="card">
