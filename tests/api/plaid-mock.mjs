@@ -32,6 +32,8 @@ export function sampleBank() {
       { kind: 'added', t: { transaction_id: `t-cafe-${id()}`, account_id: card, amount: 4.75, date: daysAgo(3), name: 'CAFE', merchant_name: 'Cafe', pending: false, personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_COFFEE' } } },
     ],
     status: null, // or a Plaid error_code every call answers with
+    // What /investments/holdings/get answers: { holdings, securities }, or an error_code string; none by default.
+    holdings: 'PRODUCTS_NOT_SUPPORTED',
     calls: [],
   }
 }
@@ -42,6 +44,7 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
   // What Plaid signs its webhooks with (webhookFor, below).
   const webhookKey = generateKeyPairSync('ec', { namedCurve: 'P-256' })
   const webhookKid = `kid-${id()}`
+  const linkTokens = [] // every /link/token/create body, newest last
 
   function answer(res, status, json) {
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(json))
@@ -57,6 +60,7 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
     if (body.client_id !== CLIENT_ID || body.secret !== SECRET) return error(res, 'INVALID_API_KEYS')
 
     if (req.url === '/link/token/create') {
+      linkTokens.push(body)
       if (!body.user?.client_user_id) return error(res, 'INVALID_FIELD')
       if (body.access_token && !items.has(body.access_token)) return error(res, 'INVALID_ACCESS_TOKEN')
       if (!body.access_token && !body.products?.includes('transactions')) return error(res, 'INVALID_FIELD')
@@ -100,6 +104,11 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
         request_id: id(),
       })
     }
+    if (req.url === '/investments/holdings/get') {
+      const h = item.bank.holdings
+      if (typeof h === 'string') return error(res, h)
+      return answer(res, 200, { accounts: item.bank.accounts, holdings: h.holdings, securities: h.securities, item: { item_id: item.itemId }, request_id: id() })
+    }
     if (req.url === '/item/webhook/update') {
       item.webhook = body.webhook
       return answer(res, 200, { item: { item_id: item.itemId, webhook: body.webhook }, request_id: id() })
@@ -113,6 +122,7 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
   await new Promise(resolve => server.listen(port, '0.0.0.0', resolve))
 
   return {
+    linkTokens,
     /** What Plaid Link hands the page once someone signs in to `bank`. */
     publicToken(bank = sampleBank()) {
       const token = `public-sandbox-${randomBytes(16).toString('hex')}`

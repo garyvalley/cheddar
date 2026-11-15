@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { formatCents, kindLabel, type AccountKind } from '~~/shared/accounts'
 import type { BankLinks } from '~~/shared/bank-links'
+import type { Portfolio } from '~~/shared/holdings'
 import type { Investments } from '~~/shared/investments'
 import { GROWTH_PERIODS, type GrowthPeriodId } from '~~/shared/overview'
 
 // The brokerage and retirement accounts on their own: what they hold, how
 // they grew, and their value month by month. Read only: they're linked in
 // Settings and added or edited there too.
-const { data, error } = await useFetch<Investments>('/api/investments')
+const { data, error } = await useFetch<Investments & { holdings: Portfolio & { on: boolean } }>('/api/investments')
 const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
 
 const period = ref<GrowthPeriodId>('1y')
@@ -36,6 +37,23 @@ const height = (cents: number | null) => `${Math.max(0, Math.min(100, ((cents ??
 const compact = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100)
 const picked = ref('')
 const shown = computed(() => months.value.find(m => m.month === picked.value) ?? months.value.at(-1))
+// Holdings (shared/holdings.ts): what each account holds and the allocation across them.
+const hold = computed(() => data.value?.holdings)
+const showHoldings = computed(() => !!hold.value && (hold.value.on || hold.value.allocation.length > 0))
+const holdingsOf = (id: string) => hold.value?.accounts[id]
+const sliceColor = (i: number) => (i < 5 ? `var(--slice-${i + 1})` : 'var(--slice-other)')
+const pct = (share: number) => `${(share * 100).toFixed(share < 0.1 ? 1 : 0)}%`
+const uncoveredCount = computed(() => Object.values(hold.value?.accounts ?? {}).filter(h => h.gap).length)
+const fetched = (pb: string) => (pb ? day(pb.slice(0, 10)) : '')
+const qty = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 4 })
+const GAP: Record<string, string> = {
+  manual: 'Added by hand, so Cheddar has its balance only.',
+  shared: 'Shared with you: only its balance is shared.',
+  pending: 'Its holdings come in with the next update.',
+  unsupported: 'Its bank doesn\'t share holdings through Plaid, so Cheddar has its balance only.',
+  consent: 'Its holdings haven\'t been shared with Cheddar yet.',
+  empty: 'Its bank reports no positions.',
+}
 const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 </script>
 
@@ -134,27 +152,80 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
         </div>
       </section>
 
+      <section v-if="showHoldings && hold" class="card panel" aria-labelledby="alloc-title">
+        <div class="panel-head">
+          <h2 id="alloc-title" class="panel-title">Allocation</h2>
+          <span class="footnote">What's held, by kind</span>
+        </div>
+        <div class="card-pad">
+          <template v-if="hold.allocation.length">
+            <div class="alloc-bar" aria-hidden="true">
+              <span v-for="(a, i) in hold.allocation" :key="a.type" :style="{ width: `${a.share * 100}%`, background: sliceColor(i) }" />
+            </div>
+            <ul class="alloc-list" data-test="allocation">
+              <li v-for="(a, i) in hold.allocation" :key="a.type">
+                <span class="key" :style="{ background: sliceColor(i) }" aria-hidden="true" />
+                <span class="alloc-label">{{ a.label }}</span>
+                <span class="num">{{ formatCents(a.value_cents) }}</span>
+                <span class="num share">{{ pct(a.share) }}</span>
+              </li>
+            </ul>
+            <p class="footnote">Of {{ formatCents(hold.covered_cents) }} in the accounts whose holdings Cheddar has.</p>
+          </template>
+          <p v-else class="footnote">No account's holdings are in yet: they come with each linked brokerage's next update.</p>
+          <p v-if="uncoveredCount && hold.uncovered_cents" class="footnote" data-test="uncovered">
+            Not broken down: {{ formatCents(hold.uncovered_cents) }} in {{ uncoveredCount === 1 ? '1 account' : `${uncoveredCount} accounts` }} without holdings. They count by their balance everywhere else; each says why below.
+          </p>
+        </div>
+      </section>
+
       <section class="card panel" aria-labelledby="accounts-title">
         <div class="panel-head">
           <h2 id="accounts-title" class="panel-title">Accounts</h2>
           <NuxtLink to="/settings#accounts" class="panel-link">Edit in Settings</NuxtLink>
         </div>
         <ul class="list">
-          <li v-for="a in accounts" :key="a.id" class="row">
-            <span class="row-label">
-              <span class="block">{{ a.name }} <span v-if="a.linked" class="badge">Linked</span></span>
-              <span class="caption">{{ detail(a) }}</span>
-            </span>
-            <span class="figures">
-              <span class="num block" :class="a.balance_cents === null ? 'muted' : ''">{{ a.balance_cents === null ? 'No balance' : formatCents(a.balance_cents) }}</span>
-              <span v-if="growthOf(a)?.rate != null" class="num caption" :class="moneyTone(growthOf(a)!.gain_cents)">{{ percent(growthOf(a)!.rate!) }} {{ GROWTH_PERIODS.find(p => p.id === period)?.label }}</span>
-            </span>
+          <li v-for="a in accounts" :key="a.id" :data-test="`account-${a.name}`">
+            <div class="row">
+              <span class="row-label">
+                <span class="block">{{ a.name }} <span v-if="a.linked" class="badge">Linked</span></span>
+                <span class="caption">{{ detail(a) }}</span>
+              </span>
+              <span class="figures">
+                <span class="num block" :class="a.balance_cents === null ? 'muted' : ''">{{ a.balance_cents === null ? 'No balance' : formatCents(a.balance_cents) }}</span>
+                <span v-if="growthOf(a)?.rate != null" class="num caption" :class="moneyTone(growthOf(a)!.gain_cents)">{{ percent(growthOf(a)!.rate!) }} {{ GROWTH_PERIODS.find(p => p.id === period)?.label }}</span>
+              </span>
+            </div>
+            <template v-if="showHoldings && holdingsOf(a.id)">
+              <details v-if="holdingsOf(a.id)!.positions.length" class="positions">
+                <summary>
+                  {{ holdingsOf(a.id)!.positions.length }} {{ holdingsOf(a.id)!.positions.length === 1 ? 'position' : 'positions' }}, {{ formatCents(holdingsOf(a.id)!.value_cents) }}
+                  <span class="caption"> · as of {{ fetched(holdingsOf(a.id)!.as_of) }}</span>
+                </summary>
+                <table class="pos-table">
+                  <thead><tr><th scope="col">Holding</th><th scope="col" class="r">Quantity</th><th scope="col" class="r">Value</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(p, i) in holdingsOf(a.id)!.positions" :key="i">
+                      <td><span class="block">{{ p.name }}</span><span class="caption">{{ [p.ticker, p.price_cents !== null && p.type !== 'cash' ? `${formatCents(p.price_cents)} each` : '', p.price_as_of && `price ${day(p.price_as_of)}`].filter(Boolean).join(' · ') }}</span></td>
+                      <td class="r num">{{ p.type === 'cash' ? '' : qty(p.quantity) }}</td>
+                      <td class="r num">{{ formatCents(p.value_cents) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </details>
+              <p v-else-if="GAP[holdingsOf(a.id)!.gap]" class="caption gap">
+                {{ GAP[holdingsOf(a.id)!.gap] }}
+                <NuxtLink v-if="holdingsOf(a.id)!.gap === 'consent'" :to="{ path: '/settings', query: { reconnect: holdingsOf(a.id)!.link }, hash: '#linked-banks' }">Share holdings</NuxtLink>
+              </p>
+            </template>
           </li>
         </ul>
       </section>
       <p class="group-footer">
-        Growth is the change in value less money moved in or out, so deposits don't count as gains.
-        Values are each account's balance as its bank reports it; Cheddar doesn't read individual holdings.
+        Growth is the change in each account's balance less money moved in or out, so deposits don't count as gains; it isn't the return on what's held.
+        Values are each account's balance as its bank reports it.
+        <template v-if="showHoldings">Holdings and allocation are as each bank last reported them, through Plaid, on the date shown. They show what's held, not what to hold.</template>
+        <template v-else>Holdings aren't switched on for this Cheddar, so each account shows its balance only.</template>
       </p>
     </template>
   </div>
@@ -196,6 +267,25 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
 .chart-note { margin: 0.75rem 0 0; }
 
 .list { list-style: none; margin: 0; padding: 0; }
+.positions { padding: 0 1.25rem 0.75rem; }
+.positions summary { cursor: pointer; font-size: 0.875rem; color: var(--accent); }
+.pos-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.875rem; }
+.pos-table th { font-size: 0.75rem; font-weight: 500; color: var(--text-2); text-align: left; padding: 0.25rem 0; }
+.pos-table td { padding: 0.375rem 0; border-top: var(--border); vertical-align: top; }
+.pos-table .r { text-align: right; padding-left: 0.75rem; white-space: nowrap; }
+.gap { margin: 0; padding: 0 1.25rem 0.75rem; }
+
+/* Kinds of security are categories, not gain or loss: the same five colors as Overview's pie. */
+.panel {
+  --slice-1: light-dark(#2a78d6, #3987e5); --slice-2: light-dark(#eb6834, #d95926); --slice-3: light-dark(#6250d6, #9085e9);
+  --slice-4: light-dark(#eda100, #c98500); --slice-5: light-dark(#e87ba4, #d55181); --slice-other: var(--text-3);
+}
+.alloc-bar { display: flex; height: 0.75rem; border-radius: 999px; overflow: hidden; gap: 2px; margin-bottom: 0.75rem; }
+.alloc-bar span { display: block; min-width: 2px; }
+.alloc-list { list-style: none; margin: 0 0 0.5rem; padding: 0; display: grid; gap: 0.375rem; }
+.alloc-list li { display: grid; grid-template-columns: auto 1fr auto 3.5rem; align-items: center; gap: 0.5rem; font-size: 0.9375rem; }
+.alloc-list .key { width: 0.625rem; height: 0.625rem; border-radius: 3px; }
+.alloc-list .share { color: var(--text-2); text-align: right; }
 .list > li + li { border-top: var(--border); }
 .figures { display: flex; flex-direction: column; align-items: flex-end; gap: 0.125rem; text-align: right; }
 

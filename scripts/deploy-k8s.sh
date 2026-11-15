@@ -58,6 +58,8 @@ apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfi
   # Plaid bills per linked bank: new links stop at these (k8s/README.md, "Who can sign up").
   echo "PLAID_LINKS_PER_PERSON=${PLAID_LINKS_PER_PERSON:-10}"
   echo "PLAID_MAX_LINKS=${PLAID_MAX_LINKS:-25}"
+  # Holdings through Plaid Investments (billed per link that has it): off unless "true".
+  echo "PLAID_INVESTMENTS=${PLAID_INVESTMENTS:-false}"
   # Production is invite-only unless the repository variable SIGNUP says otherwise:
   # only the addresses and @domains in the secret SIGNUP_ALLOW can make an account.
   # Healthchecks.io pings (pb_hooks/security_events.pb.js): off when empty.

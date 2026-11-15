@@ -103,6 +103,15 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```sh
    gh variable set PLAID_MAX_LINKS --body 40 -R garyvalley/cheddar
    ```
+
+   Holdings and allocation on Investments come from Plaid's Investments
+   product, which Plaid bills per link that has it, so they're off until
+   `PLAID_INVESTMENTS` is `true`. Then new links ask for holdings where the
+   bank offers them, and a brokerage linked before shows **Share holdings**
+   on Investments, which signs in to that bank once to add them.
+   ```sh
+   gh variable set PLAID_INVESTMENTS --body true -R garyvalley/cheddar
+   ```
 7. 👤 **Who can sign up.** Production is invite-only: only addresses on the
    `SIGNUP_ALLOW` list can make an account, so strangers who find the site
    can't create billable bank links. List whole addresses or `@domain` for

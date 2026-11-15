@@ -46,6 +46,7 @@ export async function exportData(
     budgets,
     cashflowItems,
     activity,
+    holdings,
   ] = await Promise.all([
     s.collection("users").getOne(callerId(s)),
     listAccounts(s, true),
@@ -62,6 +63,10 @@ export async function exportData(
     listBudgets(s),
     listCashflowItems(s),
     listActivity(s),
+    s.collection("holdings").getFullList({
+      sort: "account,-value_cents",
+      filter: s.filter("owner = {:owner}", { owner: callerId(s) }),
+    }),
   ]);
   const me = toMe(user);
   return {
@@ -86,6 +91,18 @@ export async function exportData(
     })),
     goals,
     budgets,
+    holdings: holdings.map((h) => ({
+      account: h.account,
+      name: h.name ?? "",
+      ticker: h.ticker ?? "",
+      type: h.type ?? "",
+      quantity: h.quantity ?? 0,
+      price_cents: h.price_cents || null,
+      value_cents: h.value_cents ?? 0,
+      cost_basis_cents: h.cost_basis_cents || null,
+      price_as_of: h.price_as_of ?? "",
+      as_of: h.as_of ?? "",
+    })),
     cashflow_items: cashflowItems,
     categories,
     category_rules,

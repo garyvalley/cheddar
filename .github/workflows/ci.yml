@@ -87,7 +87,7 @@ jobs:
           docker run -d --name cheddar-pb --network cheddar-ci -p 127.0.0.1:8095:8090 \
             -e PB_SU_EMAIL -e PB_SU_PASS -e APP_URL="$APP_URL" \
             -e BANK_LINK_KEY="$(openssl rand -hex 16)" -e PLAID_CLIENT_ID=test-client-id -e PLAID_SECRET=test-secret \
-            -e PLAID_API_URL="http://$gateway:8097" cheddar-pb:ci
+            -e PLAID_INVESTMENTS=true -e PLAID_API_URL="http://$gateway:8097" cheddar-pb:ci
           node scripts/migrate.mjs
       - name: Start the app behind nginx
         # nginx on a user-defined network, reaching the runner's Nuxt by the
@@ -252,6 +252,7 @@ jobs:
       PLAID_ENV: ${{ vars.PLAID_ENV }}
       PLAID_LINKS_PER_PERSON: ${{ vars.PLAID_LINKS_PER_PERSON }}
       PLAID_MAX_LINKS: ${{ vars.PLAID_MAX_LINKS }}
+      PLAID_INVESTMENTS: ${{ vars.PLAID_INVESTMENTS }}
       SIGNUP: ${{ vars.SIGNUP }}
       HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
       HEALTHCHECK_SYNC_URL: ${{ vars.HEALTHCHECK_SYNC_URL }}

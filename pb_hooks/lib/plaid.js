@@ -51,6 +51,9 @@ function config(getenv) {
     perPerson: whole(getenv("PLAID_LINKS_PER_PERSON"), DEFAULT_LINKS_PER_PERSON),
     // 0: no limit for the whole Cheddar.
     maxLinks: whole(getenv("PLAID_MAX_LINKS"), 0),
+    // Holdings through Plaid's Investments product (issue #90): billed per
+    // link that has it, so off unless whoever runs Cheddar says "true".
+    investments: String(getenv("PLAID_INVESTMENTS") || "").trim().toLowerCase() === "true",
   }
 }
 
@@ -101,9 +104,11 @@ function request(cfg, path, body) {
 /**
  * The /link/token/create body for a person. With `accessToken`, Link opens
  * in update mode: the person signs in to the bank again for a link that
- * stopped working, and keeps the same link.
+ * stopped working, and keeps the same link. With `investments`, a new link
+ * also asks for holdings where the bank offers them, and update mode asks
+ * the person to share them on a link made without.
  */
-function linkTokenBody(userId, accessToken, webhook) {
+function linkTokenBody(userId, accessToken, webhook, investments) {
   var body = {
     client_name: "Cheddar",
     user: { client_user_id: String(userId) },
@@ -113,10 +118,12 @@ function linkTokenBody(userId, accessToken, webhook) {
   if (webhook) body.webhook = webhook
   if (accessToken) {
     body.access_token = accessToken
+    if (investments) body.additional_consented_products = ["investments"]
   }
   else {
     body.products = ["transactions"]
     body.transactions = { days_requested: DAYS_REQUESTED }
+    if (investments) body.optional_products = ["investments"]
   }
   return body
 }
@@ -285,7 +292,64 @@ function webhookEvent(body) {
   return { itemId: /^[A-Za-z0-9_-]{1,200}$/.test(itemId) ? itemId : "", sync: codes.indexOf(String(b.webhook_code || "")) >= 0 }
 }
 
+// Answers to /investments/holdings/get that mean "no holdings for this link",
+// not a failed sync: the bank doesn't offer them, or the person hasn't shared them.
+var HOLDINGS_UNSUPPORTED = ["PRODUCTS_NOT_SUPPORTED", "NO_INVESTMENT_ACCOUNTS", "INSTITUTION_NOT_SUPPORTED", "PRODUCT_NOT_ENABLED", "INVALID_PRODUCT"]
+var HOLDINGS_CONSENT = ["ADDITIONAL_CONSENT_REQUIRED", "PRODUCT_NOT_READY", "NO_ACCOUNTS"]
+
+/** Why a holdings call failed, as bank_links.holdings holds it: "unsupported", "consent", or "" for a real failure. */
+function holdingsGap(code) {
+  if (HOLDINGS_UNSUPPORTED.indexOf(code) !== -1) return "unsupported"
+  if (HOLDINGS_CONSENT.indexOf(code) !== -1) return "consent"
+  return ""
+}
+
+var SECURITY_TYPES = ["equity", "etf", "mutual fund", "fixed income", "cash", "derivative", "cryptocurrency", "loan", "other"]
+
+/** A number from Plaid, or null. */
+function num(v) {
+  return typeof v === "number" && isFinite(v) ? v : null
+}
+
+/**
+ * /investments/holdings/get as Cheddar's rows: one per position, with the
+ * security's name, ticker and type, and its value in cents. `account` is the
+ * account's external id, as accountRows gives it.
+ */
+function holdingRows(json) {
+  var j = json || {}
+  var securities = {}
+  ;(Array.isArray(j.securities) ? j.securities : []).forEach(function (sec) {
+    if (sec && sec.security_id) securities[sec.security_id] = sec
+  })
+  var rows = []
+  ;(Array.isArray(j.holdings) ? j.holdings : []).forEach(function (h) {
+    if (!h || !h.account_id) return
+    var sec = securities[h.security_id] || {}
+    var value = toCents(num(h.institution_value))
+    if (value === null) return
+    var type = String(sec.type || "").toLowerCase()
+    var cash = !!sec.is_cash_equivalent || type === "cash"
+    var currency = /^[A-Z]{3}$/.test(String(h.iso_currency_code || "")) ? h.iso_currency_code : "USD"
+    rows.push({
+      account: (PREFIX + h.account_id).slice(0, 200),
+      name: clean(sec.name || sec.ticker_symbol).slice(0, 200) || (cash ? "Cash" : "Unnamed security"),
+      ticker: clean(sec.ticker_symbol).slice(0, 20),
+      type: cash ? "cash" : SECURITY_TYPES.indexOf(type) !== -1 ? type : "other",
+      quantity: num(h.quantity) || 0,
+      price_cents: toCents(num(h.institution_price)),
+      value_cents: value,
+      cost_basis_cents: toCents(num(h.cost_basis)),
+      currency: currency,
+      price_as_of: /^\d{4}-\d{2}-\d{2}$/.test(String(h.institution_price_as_of || "")) ? h.institution_price_as_of : "",
+    })
+  })
+  return rows
+}
+
 module.exports = {
+  holdingRows: holdingRows,
+  holdingsGap: holdingsGap,
   webhookUrl: webhookUrl,
   webhookEvent: webhookEvent,
   PREFIX: PREFIX,
