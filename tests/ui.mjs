@@ -29,6 +29,12 @@ const mm = String(now.getMonth() + 1).padStart(2, '0')
 
 const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' })
 const errors = []
+/** Opens one of Settings' categories by its heading, unless it's open already. */
+async function openCategory(pg, title) {
+  const toggle = pg.getByRole('button', { name: new RegExp(`^${title}`) })
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click()
+  await pg.locator(`#${await toggle.getAttribute('aria-controls')}`).waitFor()
+}
 const watch = (page) => {
   page.on('console', m => m.type() === 'error' && errors.push(m.text()))
   page.on('pageerror', e => errors.push(e.message))
@@ -72,18 +78,24 @@ try {
   await page.getByRole('heading', { name: 'Hi, Ui' }).waitFor()
   assert.equal(await page.getByText('Set up · 3 left').count(), 1)
 
-  // Profile: every state is offered.
+  // Settings opens on Accounts and banks; every other category opens on its heading.
   await page.goto(`${APP}/settings`)
-  await page.getByText('10 recovery codes left.').waitFor()
-  // Banks are linked here, in Settings.
-  await page.getByRole('heading', { name: 'Linked banks and cards' }).waitFor()
+  await page.getByRole('heading', { name: 'Linked banks and cards', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Link a bank or card' }).waitFor()
+  assert.equal(await page.getByRole('button', { name: /^Sign-in and security/ }).getAttribute('aria-expanded'), 'false')
+  await openCategory(page, 'Sign-in and security')
+  await page.getByText('10 recovery codes left.').waitFor()
   assert.equal(await page.getByRole('button', { name: 'Turn off' }).count(), 0)
+  // Profile: every state is offered.
+  await openCategory(page, 'Profile and household')
   assert.equal(await page.getByLabel('State you file taxes in').locator('option').count(), 52)
   await page.getByLabel('State you file taxes in').selectOption('CA')
   await page.getByLabel('Federal filing status').selectOption('single')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await page.getByText('Saved').waitFor()
+  await page.getByText('Saved', { exact: true }).waitFor()
+  // Which categories are open is remembered.
+  await page.reload()
+  await page.getByLabel('State you file taxes in').waitFor()
 
   // Requests that succeed with 204 No Content show their success. (A 204
   // once read as a failure, so the confirm button seemed to do nothing.)
@@ -97,25 +109,25 @@ try {
   await page.getByText('Your email is confirmed.').waitFor()
   await page.unroute('**/api/auth/confirm-verification')
 
-  // Accounts are set up in one place, Accounts, which the Overview's checklist leads to.
+  // Accounts are set up in Settings, which the Overview's checklist leads to; there's no Accounts tab.
+  assert.equal(await page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Accounts' }).count(), 0)
   await page.goto(`${APP}/`)
   await page.getByRole('link', { name: /Connect your accounts/ }).click()
-  await page.getByRole('heading', { name: 'Accounts', exact: true }).waitFor()
-  // With nothing set up, linking comes first: its button leads to Settings' linked banks.
-  await page.getByRole('heading', { name: 'Link your bank, card or brokerage' }).waitFor()
-  assert.equal(await page.getByRole('heading', { name: 'Linked banks and cards' }).count(), 0)
-  assert.match(await page.getByRole('link', { name: 'Link a bank or card' }).getAttribute('href'), /^\/settings\?link=1#linked-banks$/)
+  await page.waitForURL(/\/settings#accounts$/)
+  await page.getByRole('heading', { name: 'Your accounts', exact: true }).waitFor()
 
   // Investments is a section of its own, empty until there's a brokerage or retirement account.
   await page.getByRole('navigation', { name: 'Main' }).first().getByRole('link', { name: 'Investments' }).click()
   await page.getByRole('heading', { name: 'No investment accounts yet' }).waitFor()
-  await page.goto(`${APP}/accounts`)
+  assert.match(await page.getByRole('link', { name: 'Link a brokerage' }).getAttribute('href'), /^\/settings\?link=1#linked-banks$/)
+  await page.goto(`${APP}/settings`)
 
   // Money: an account, a statement file previewed and imported, its
   // transactions on Spending, and the import undone.
   await page.getByRole('button', { name: 'Add an account…' }).click()
-  await page.getByLabel('Name').fill('Everyday checking')
-  await page.getByRole('button', { name: 'Add account' }).click()
+  const adding = page.getByRole('region', { name: 'Add an account yourself' })
+  await adding.getByLabel('Name').fill('Everyday checking')
+  await adding.getByRole('button', { name: 'Add account' }).click()
   await page.getByRole('link', { name: 'Import a statement into Everyday checking' }).click()
   await page.getByRole('heading', { name: 'Import', exact: true }).waitFor()
   await page.getByLabel('PDF statements, or CSV, OFX or QFX files').setInputFiles({
@@ -184,7 +196,7 @@ try {
   const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download CSV' }).click()])
   assert.match(csv.suggestedFilename(), new RegExp(`^cheddar-transactions-${yyyy}-${mm}-01-to-${yyyy}-${mm}-\\d\\d\\.csv$`))
   assert.match(readFileSync(await csv.path(), 'utf8'), /GROCERY, INC/)
-  await page.goto(`${APP}/settings`)
+  await page.goto(`${APP}/settings#export`)
   await page.getByRole('button', { name: 'Export…' }).click()
   await page.getByLabel('Enter your password to export everything').fill(password)
   const [zip] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download', exact: true }).click()])
@@ -192,11 +204,11 @@ try {
   assert.deepEqual(Object.keys(unzip(readFileSync(await zip.path()))).sort(), ['accounts.csv', 'balance_history.csv', 'cheddar.json', 'transactions.csv'])
   await page.getByText('Your export is downloading.').waitFor()
 
-  // Net worth: a balance entered on Accounts, added up on Overview beside the month's income and spending.
-  await page.goto(`${APP}/accounts`)
+  // Net worth: a balance entered in Settings, added up on Overview beside the month's income and spending.
+  await page.goto(`${APP}/settings`)
   await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).click()
   await page.getByLabel('Balance of Everyday checking').fill('2,413.40')
-  await page.getByRole('button', { name: 'Save' }).click()
+  await page.locator('#your-accounts').getByRole('button', { name: 'Save' }).click()
   await page.getByRole('button', { name: 'Set the balance of Everyday checking' }).filter({ hasText: '$2,413.40' }).waitFor()
   await page.goto(`${APP}/`)
   assert.equal(await page.locator('[data-test="net-worth"]').textContent(), '$2,413.40')
@@ -204,7 +216,7 @@ try {
   await page.getByText('Add a brokerage or retirement account').waitFor()
 
   // An account is changed in place: closed, it leaves the list until asked for, and opens again.
-  await page.goto(`${APP}/accounts`)
+  await page.goto(`${APP}/settings`)
   await page.getByRole('button', { name: 'Edit Everyday checking' }).click()
   const editor = page.getByRole('form', { name: 'Edit Everyday checking' })
   await editor.getByLabel('Bank or card issuer (optional)').fill('Big Bank')
@@ -227,7 +239,9 @@ try {
   assert.equal(await page.locator('[data-test="federal-tax"]').textContent(), '$13,170')
   assert.equal(await page.locator('[data-test="total-tax"]').textContent(), '$18,240')
 
+  // The old Accounts address lands on Settings' accounts.
   await page.goto(`${APP}/accounts`)
+  await page.waitForURL(/\/settings#accounts$/)
   await page.getByRole('link', { name: 'Import', exact: true }).click()
   await page.getByRole('button', { name: 'Undo the import of november.csv' }).click()
   await page.getByRole('heading', { name: /^Imported into/ }).waitFor({ state: 'detached' })
@@ -305,6 +319,7 @@ try {
   await p.getByRole('heading', { name: 'Settings' }).waitFor()
 
   // Deleting the account ends on the sign-in page.
+  await openCategory(p, 'Your data')
   await p.getByRole('button', { name: 'Delete…' }).click()
   await p.getByLabel('Enter your password to delete your account for good').fill(password)
   await p.getByRole('button', { name: 'Delete my account' }).click()

@@ -2,7 +2,7 @@
 import { formatCents, type BankLink, type BankLinks, type LinkAnswer, type SyncResult } from '~~/shared/bank-links'
 
 // Settings' linked banks: link, update, sign in again, unlink. The accounts a link brings in
-// are listed, edited and imported into on Accounts, which reads the same key to mark them.
+// are listed, edited and imported into just below (SettingsAccounts), which reads the same key to mark them.
 const { data, refresh } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
 
 const add = useAction()
@@ -167,7 +167,7 @@ async function remove(l: BankLink) {
   await refresh()
 }
 
-// "Link a bank or card" elsewhere (Accounts, Investments) comes here with ?link=1, and Plaid opens
+// "Link a bank or card" elsewhere (Investments) comes here with ?link=1, and Plaid opens
 // straight away. The query goes, so a reload doesn't open it again.
 const route = useRoute()
 onMounted(() => {
@@ -189,7 +189,7 @@ function when(pb: string) {
 
 <template>
   <section id="linked-banks" class="group" aria-labelledby="links-title">
-    <h2 id="links-title" class="group-title">Linked banks and cards</h2>
+    <h3 id="links-title" class="group-title">Linked banks and cards</h3>
 
     <!-- Off until the server has its keys: say so plainly, and how it's switched on. -->
     <div v-if="!data.enabled" class="card card-pad off">
@@ -255,7 +255,7 @@ function when(pb: string) {
         <button class="btn btn-primary first-btn" :disabled="add.busy.value" @click="link">
           <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
         </button>
-        <p class="caption">No link for your bank? Add the account yourself on <NuxtLink to="/accounts">Accounts</NuxtLink> and import its statements.</p>
+        <p class="caption">No link for your bank? Add the account yourself below and import its statements.</p>
       </div>
       <div v-else class="btn-row more">
         <button class="btn btn-primary" :disabled="add.busy.value" @click="link">
@@ -281,7 +281,7 @@ function when(pb: string) {
     <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
     <p v-if="data.enabled" class="group-footer">
       Linked accounts update on their own: within minutes of your bank having something new, and at least once a day. Cheddar can only read them: it can't move money.
-      Rename, close or leave out a linked account on <NuxtLink to="/accounts">Accounts</NuxtLink>. For history older than the link brought in, import a statement there: what the link already has is skipped.
+      Rename, close or leave out a linked account under Your accounts, below. For history older than the link brought in, import a statement there: what the link already has is skipped.
     </p>
   </section>
 </template>

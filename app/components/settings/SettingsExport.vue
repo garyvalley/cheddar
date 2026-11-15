@@ -22,7 +22,7 @@ function cancel() {
 
 <template>
   <section id="export" class="group" aria-labelledby="export-title">
-    <h2 id="export-title" class="group-title">Your data</h2>
+    <h3 id="export-title" class="group-title">Your data</h3>
     <div class="card">
       <div v-if="!asking" class="row">
         <span class="row-label">

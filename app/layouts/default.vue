@@ -2,7 +2,7 @@
 const { me, signOut } = useAuth()
 const { busy, run } = useAction()
 const route = useRoute()
-// A section stays lit on its own subpages too (Accounts → Import).
+// A section stays lit on its own subpages too (Settings → Import).
 const current = (to: string) => (to === '/' ? route.path === '/' : route.path === to || route.path.startsWith(`${to}/`))
 </script>
 
@@ -48,7 +48,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
         :class="{ on: current(item.to) }" :aria-current="current(item.to) ? 'page' : undefined"
       >
         <AppIcon :name="item.icon" />
-        <span>{{ 'short' in item ? item.short : item.label }}</span>
+        <span>{{ item.label }}</span>
       </NuxtLink>
     </nav>
   </div>
@@ -97,7 +97,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
 
 .tabbar { display: none; }
 
-/* Seven sections leave room for Settings' icon only (its label is aria-label). */
+/* Six sections and Sign out leave room for Settings' icon only (its label is aria-label). */
 @media (max-width: 1159px) {
   .bar-link > .wide-only { display: none; }
   .bar-link { white-space: nowrap; }
@@ -115,11 +115,6 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
   .bar-link > .wide-only { display: none; }
   .bar-link { white-space: nowrap; }
   .main { padding: 1.5rem 1.25rem 3rem; }
-}
-
-@media (max-width: 939px) {
-  /* Seven sections: the mark alone names Cheddar here, so Sign out keeps its place. */
-  .brand > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 @media (max-width: 839px) {
@@ -141,7 +136,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
     backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-top: 1px solid var(--separator);
   }
-  /* Seven tabs: each as wide as its label needs, the room left shared out. */
+  /* Each tab as wide as its label needs, the room left shared out. */
   .tab {
     flex: 1 1 auto; min-width: 0; padding: 0 0.125rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem;
     min-height: var(--tabbar-h); color: var(--text-3); font-size: 0.6875rem; font-weight: 500;

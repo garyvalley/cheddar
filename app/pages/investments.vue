@@ -6,7 +6,7 @@ import { GROWTH_PERIODS, type GrowthPeriodId } from '~~/shared/overview'
 
 // The brokerage and retirement accounts on their own: what they hold, how
 // they grew, and their value month by month. Read only: they're linked in
-// Settings and added or edited on Accounts.
+// Settings and added or edited there too.
 const { data, error } = await useFetch<Investments>('/api/investments')
 const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
 
@@ -49,11 +49,11 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
       <h2 id="none-title" class="headline">No investment accounts yet</h2>
       <p class="footnote">
         Link your brokerage or retirement account, and what it holds and how it grows show up here.
-        For one that can't be linked, add it on <NuxtLink to="/accounts">Accounts</NuxtLink> and enter its balance now and then.
+        For one that can't be linked, add it in <NuxtLink to="/settings#accounts">Settings</NuxtLink> and enter its balance now and then.
       </p>
       <div class="btn-row">
         <NuxtLink v-if="links.enabled && !links.full" :to="{ path: '/settings', query: { link: '1' }, hash: '#linked-banks' }" class="btn btn-primary">Link a brokerage</NuxtLink>
-        <NuxtLink to="/accounts" class="btn btn-tinted">Go to Accounts</NuxtLink>
+        <NuxtLink to="/settings#accounts" class="btn btn-tinted">Go to your accounts</NuxtLink>
       </div>
     </section>
 
@@ -137,7 +137,7 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
       <section class="card panel" aria-labelledby="accounts-title">
         <div class="panel-head">
           <h2 id="accounts-title" class="panel-title">Accounts</h2>
-          <NuxtLink to="/accounts" class="panel-link">Edit on Accounts</NuxtLink>
+          <NuxtLink to="/settings#accounts" class="panel-link">Edit in Settings</NuxtLink>
         </div>
         <ul class="list">
           <li v-for="a in accounts" :key="a.id" class="row">

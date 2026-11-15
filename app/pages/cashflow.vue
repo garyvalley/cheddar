@@ -99,7 +99,7 @@ const eventsByDate = computed(() => Array.from(data.value.events.reduce((groups,
       <div class="card card-pad stack">
         <p class="headline">No counted accounts yet</p>
         <p class="muted">Add an account with a current balance before planning its future cash flow.</p>
-        <NuxtLink to="/accounts" class="btn btn-primary">Go to Accounts</NuxtLink>
+        <NuxtLink to="/settings#accounts" class="btn btn-primary">Go to your accounts</NuxtLink>
       </div>
     </section>
 

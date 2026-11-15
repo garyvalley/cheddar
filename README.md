@@ -92,22 +92,24 @@ tunnel, repository secrets) and day-to-day operations.
     is available, and tax features use your choice. Your time zone is taken
     from your device the first time you sign in, and can be changed there too:
     it decides when your day, month and tax year roll over.
-  - **Connect your accounts** on Accounts (below).
+  - **Connect your accounts** in Settings → Accounts and banks (below).
 - **Pick how it looks** (Settings → Appearance): violet, blue, rose, mint or the original
   Cheddar orange, and light, dark or automatic. It's saved to your account,
   so every device you sign in on matches.
 - **Install it on a phone:**
   - In Safari, tap Share, then Add to Home Screen.
   - In Chrome on Android, tap ⋮, then Install app.
-- **Set up your accounts** (Accounts). It's the only place accounts are
-  added; Overview, Spending, Projections and Taxes have no setup of their
-  own, and are worked out from what these accounts hold.
-- **Link a bank or card** (Accounts → Linked banks and cards), so balances
+- **Set up your accounts** (Settings → Accounts and banks). It's the only
+  place accounts are added; Overview, Spending, Investments, Projections and
+  Taxes have no setup of their own, and are worked out from what these
+  accounts hold. Settings' categories open and close on their headings, and
+  this browser remembers which are open.
+- **Link a bank or card** (Settings → Accounts and banks → Linked banks and cards), so balances
   and transactions arrive on their own:
   - Tap **Link a bank or card**, pick your bank, and sign in to it in the
     window that opens (Plaid Link). Your password goes to your bank, never
     to Cheddar; Cheddar keeps only a read-only access token, encrypted.
-    The first sync brings 90 days of transactions.
+    The first sync brings up to two years of transactions.
   - Each link then syncs within minutes of the bank having something new
     (Plaid tells Cheddar), once a day regardless, and when you tap **Update
     now**. Pending charges are replaced once they post.
@@ -117,12 +119,12 @@ tunnel, repository secrets) and day-to-day operations.
     the accounts and transactions.
   - With `PLAID_ENV=sandbox`, try it with Plaid's test bank: any bank, user
     `user_good`, password `pass_good`.
-- **Or add an account yourself** (Accounts), for one you'd rather not link:
+- **Or add an account yourself** (Settings → Your accounts), for one you'd rather not link:
   a name, the kind (checking, savings, credit card, loan…), and optionally
   the bank and the last four digits. Then import its statements. Click its
   balance to bring it up to date: one more than 30 days old (180 for
   property) is marked **Out of date**, and Overview says how many are.
-- **Import a statement** (Import, on Accounts):
+- **Import a statement** (Import, under Settings → Your accounts):
   - On your bank's website, download your transactions as CSV, or as
     Quicken (QFX) or Money (OFX).
   - Choose the account and the file. Cheddar shows what it read before
@@ -138,7 +140,7 @@ tunnel, repository secrets) and day-to-day operations.
   week (Monday to Sunday), a month, a year or a range of dates you pick, for
   one account or all, against the span before. Tap a category for its
   transactions. Spending only shows what your accounts hold: to add more, go
-  to Accounts.
+  to Settings.
   - **Budgets:** open a spending category to give it a monthly budget. Its
     bar then shows what's spent against it (red once over), scaled to the
     span shown (a year is twelve months' worth, a week its share by days),

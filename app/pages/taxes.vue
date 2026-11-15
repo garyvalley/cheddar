@@ -5,7 +5,7 @@ import { stateEstimate, stateTableYear } from '~~/shared/state-taxes'
 import { stateByCode } from '~~/shared/states'
 import { estimate, federalFor, ideas, type TaxYear } from '~~/shared/taxes'
 
-// Taxes only reads what the accounts hold (set up on Accounts): this year's
+// Taxes only reads what the accounts hold (set up in Settings): this year's
 // income and tax payments from their categorized transactions, and money
 // moved into retirement accounts. The person's state and filing status come
 // from Settings; the yearly income can be changed here to try another figure,
@@ -101,7 +101,7 @@ const iraLeft = computed(() => Math.max(0, LIMITS.value.ira * 100 - (ty.value?.r
         </div>
       </div>
       <div v-else class="card card-pad">
-        <p class="footnote">Connect your accounts on <NuxtLink to="/accounts">Accounts</NuxtLink>. Your income this year, and the tax on it, are worked out from their transactions.</p>
+        <p class="footnote">Connect your accounts in <NuxtLink to="/settings#accounts">Settings</NuxtLink>. Your income this year, and the tax on it, are worked out from their transactions.</p>
       </div>
     </section>
 

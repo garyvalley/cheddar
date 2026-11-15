@@ -2,7 +2,7 @@
 import { formatCents, type Account, type Transaction } from '~~/shared/accounts'
 import { BUILT_IN, categoryOf, isCategoryRef, isPeriodKind, parseRange, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
 
-// Spending only reads the accounts set up on Accounts. Every transaction is
+// Spending only reads the accounts set up in Settings. Every transaction is
 // sorted into a category on its own; what a person does here is move one
 // that landed in the wrong place (the rest of that merchant's follow), make
 // categories of their own to move them into, search, add one by hand, and
@@ -198,8 +198,8 @@ async function confirmDelete() {
     <section v-if="!list.accounts.length" class="group">
       <div class="card card-pad stack">
         <p class="headline">No accounts yet</p>
-        <p class="muted">Link your banks and cards, or add accounts and import their statements, on Accounts. Their transactions show up here, sorted into categories.</p>
-        <NuxtLink to="/accounts" class="btn btn-primary">Set up accounts</NuxtLink>
+        <p class="muted">Link your banks and cards, or add accounts and import their statements, in Settings. Their transactions show up here, sorted into categories.</p>
+        <NuxtLink to="/settings#accounts" class="btn btn-primary">Set up accounts</NuxtLink>
       </div>
     </section>
 
@@ -365,8 +365,8 @@ async function confirmDelete() {
                 <h2 id="cats-title" class="panel-title">Categories</h2>
               </div>
               <div v-if="!spending.some(c => c.count)" class="card-pad stack">
-                <p class="muted">No spending in {{ period.label }}. Transactions arrive when a linked bank syncs, or when you import a statement on Accounts.</p>
-                <NuxtLink to="/accounts" class="btn btn-tinted">Go to Accounts</NuxtLink>
+                <p class="muted">No spending in {{ period.label }}. Transactions arrive when a linked bank syncs, or when you import a statement in Settings.</p>
+                <NuxtLink to="/settings#accounts" class="btn btn-tinted">Go to your accounts</NuxtLink>
               </div>
               <ul v-else class="list">
                 <li v-for="c in spending" :key="c.id">
