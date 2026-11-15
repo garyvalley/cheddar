@@ -180,6 +180,15 @@ const closedDay = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateSt
 
 const title = (l: BankLink) => (l.institutions.length ? l.institutions.join(', ') : 'Linked bank')
 
+/** "Brought in 1,234 transactions, back to Jan 3, 2025. The 1,100 from before Oct 16, 2026 stay out of Needs review." */
+function broughtIn(l: BankLink) {
+  const b = l.brought_in
+  const n = (x: number) => `${x.toLocaleString()} ${x === 1 ? 'transaction' : 'transactions'}`
+  let text = `Brought in ${n(b.count)}, back to ${closedDay(b.from)}.`
+  if (b.history) text += ` ${b.history === 1 ? 'The one' : `The ${b.history.toLocaleString()}`} from before ${closedDay(b.review_from)} ${b.history === 1 ? 'stays' : 'stay'} out of Needs review.`
+  return text
+}
+
 function when(pb: string) {
   if (!pb) return 'Not synced yet'
   const d = new Date(pb.replace(' ', 'T'))
@@ -223,6 +232,10 @@ function when(pb: string) {
           <span class="row-value num" :class="a.balance_cents === null ? '' : moneyTone(a.balance_cents)">{{ formatCents(a.balance_cents) }}</span>
         </div>
         <p v-if="l.message" class="field footnote" :class="{ warn: l.status !== 'ok' }">{{ l.message }}</p>
+        <p v-if="l.brought_in?.count" class="field footnote">
+          {{ broughtIn(l) }}
+          <NuxtLink v-if="l.brought_in.history" to="/spending?review=true&history=true">Review them anyway</NuxtLink>
+        </p>
         <div v-if="removingId === l.id" class="field stack">
           <p class="footnote">Unlink {{ title(l) }}? Cheddar stops reading it and deletes its access. Its accounts and transactions stay.</p>
           <div class="btn-row">
