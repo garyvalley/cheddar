@@ -46,6 +46,12 @@ export interface Debt {
   paydown_cents: number | null
   /** Where the pace comes from: the account's transactions, or its balances over time. */
   basis: 'transactions' | 'balances' | null
+  /**
+   * Since when the pace is measured: the first month ("YYYY-MM") of the
+   * transactions it's from, or the day (YYYY-MM-DD) of the balance it's
+   * measured from; '' with no pace.
+   */
+  pace_since: string
 }
 
 const DAY = 86_400_000
@@ -70,13 +76,14 @@ export function debts(
   const out: Debt[] = []
   for (const a of accounts) {
     if (!isLiability(a.kind) || a.balance_cents === null || a.balance_cents >= 0) continue
-    const debt: Debt = { id: a.id, name: a.name, kind: a.kind, owed_cents: -a.balance_cents, paydown_cents: null, basis: null }
+    const debt: Debt = { id: a.id, name: a.name, kind: a.kind, owed_cents: -a.balance_cents, paydown_cents: null, basis: null, pace_since: '' }
     const mine = rows.filter(r => r.account === a.id && months.includes(r.posted.slice(0, 7)))
     if (mine.length) {
       const first = mine.reduce((m, r) => (r.posted.slice(0, 7) < m ? r.posted.slice(0, 7) : m), months.at(-1)!)
       const span = months.length - months.indexOf(first)
       debt.paydown_cents = Math.round(mine.reduce((s, r) => s + r.amount_cents, 0) / span)
       debt.basis = 'transactions'
+      debt.pace_since = first
     }
     else {
       const then = history
@@ -85,6 +92,7 @@ export function debts(
       if (then) {
         debt.paydown_cents = Math.round((a.balance_cents - then.balance_cents) / (days(then.date, a.balance_date) / MONTH_DAYS))
         debt.basis = 'balances'
+        debt.pace_since = then.date
       }
     }
     out.push(debt)
@@ -126,6 +134,52 @@ export function payoff(owed_cents: number, payment_cents: number, apr = 0): Payo
     left = left + charged - payment_cents
   }
   return { months, interest_cents: Math.round(interest) }
+}
+
+/** What the person typed for a debt, each null when they haven't (or it isn't a number). */
+export interface DebtInput {
+  payment_cents: number | null
+  /** 0.2 for 20%. */
+  apr: number | null
+}
+
+export interface DebtPlan {
+  /** The payment the estimate uses, a month; 0 with none. */
+  payment_cents: number
+  /** Whose the payment is: the person's, Cheddar's from the account's pace, or nobody's. */
+  payment_source: 'entered' | 'inferred' | null
+  /** The rate the estimate charges; null when nobody entered one, so interest is left out. */
+  apr: number | null
+  /**
+   * paid: nothing owed. estimate: a payoff date, with `apr` or (null) none.
+   * no_pace: no payment to go by. not_shrinking: the balance isn't coming
+   * down lately. outpaced: the payment doesn't outrun the interest (or
+   * would take past MAX_PAYOFF_MONTHS).
+   */
+  status: 'paid' | 'estimate' | 'no_pace' | 'not_shrinking' | 'outpaced'
+  payoff: Payoff | null
+  /** The payoff month, "YYYY-MM", or ''. */
+  when: string
+}
+
+/**
+ * A debt's payoff estimate, with what it rests on: the payment (the
+ * person's, else the pace Cheddar measured) and the APR (only the person's:
+ * without one, interest is left out and the page says so). No date when
+ * there's no payment to go by or the balance isn't coming down.
+ */
+export function debtPlan(d: Debt, input: DebtInput, today: string): DebtPlan {
+  const entered = input.payment_cents !== null && input.payment_cents > 0
+  const inferred = !entered && d.paydown_cents !== null && d.paydown_cents > 0
+  const payment_cents = entered ? input.payment_cents! : inferred ? d.paydown_cents! : 0
+  const payment_source = entered ? 'entered' : inferred ? 'inferred' : null
+  const apr = input.apr
+  const base = { payment_cents, payment_source, apr, payoff: null, when: '' } as const
+  if (d.owed_cents <= 0) return { ...base, status: 'paid', payoff: { months: 0, interest_cents: 0 }, when: monthsAfter(today, 0) }
+  if (!payment_source) return { ...base, status: d.paydown_cents === null ? 'no_pace' : 'not_shrinking' }
+  const p = payoff(d.owed_cents, payment_cents, apr ?? 0)
+  if (!p) return { ...base, status: 'outpaced' }
+  return { ...base, status: 'estimate', payoff: p, when: monthsAfter(today, p.months) }
 }
 
 /** The month a number of months after `today`'s, as "YYYY-MM". */

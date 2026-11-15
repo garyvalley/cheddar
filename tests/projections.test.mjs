@@ -3,7 +3,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { debts, invested, monthsAfter, payoff, project, savings } from '../shared/projections.ts'
+import { debtPlan, debts, invested, monthsAfter, payoff, project, savings } from '../shared/projections.ts'
 
 const acct = (id, kind, balance_cents, balance_date = '2026-11-09') => ({ id, name: id, kind, balance_cents, balance_date })
 const month = (m, income_cents, spent_cents) => ({ month: m, label: m, income_cents, spent_cents })
@@ -33,7 +33,7 @@ describe('debts', () => {
       { account: 'chk', posted: '2026-10-03', amount_cents: -50000 },
     ]
     const [d] = debts([acct('visa', 'credit_card', -300000), acct('chk', 'checking', 100)], rows, [], months)
-    assert.deepEqual(d, { id: 'visa', name: 'visa', kind: 'credit_card', owed_cents: 300000, paydown_cents: 40000, basis: 'transactions' })
+    assert.deepEqual(d, { id: 'visa', name: 'visa', kind: 'credit_card', owed_cents: 300000, paydown_cents: 40000, basis: 'transactions', pace_since: '2026-09' })
   })
 
   test('without transactions, are paced by balances at least four weeks apart', () => {
@@ -44,6 +44,7 @@ describe('debts', () => {
     ]
     const [d] = debts([acct('car', 'loan', -1000000)], [], history, months)
     assert.equal(d.basis, 'balances')
+    assert.equal(d.pace_since, '2026-08-11')
     assert.ok(Math.abs(d.paydown_cents - 20000) < 300, String(d.paydown_cents))
     assert.equal(debts([acct('car', 'loan', -1000000)], [], history.slice(1), months)[0].paydown_cents, null)
   })
@@ -51,6 +52,37 @@ describe('debts', () => {
   test('leave out what owes nothing, and come biggest first', () => {
     const list = debts([acct('a', 'credit_card', 0), acct('b', 'loan', -100), acct('c', 'loan', -900), acct('d', 'loan', null, '')], [], [], ['2026-10'])
     assert.deepEqual(list.map(d => d.id), ['c', 'b'])
+  })
+})
+
+describe('a debt\'s plan', () => {
+  const debt = (paydown_cents, owed_cents = 120000) => ({ id: 'v', name: 'Visa', kind: 'credit_card', owed_cents, paydown_cents, basis: paydown_cents === null ? null : 'transactions', pace_since: '' })
+  const none = { payment_cents: null, apr: null }
+  const today = '2026-11-15'
+
+  test('uses the inferred pace and says so, leaving interest out when no APR is entered', () => {
+    const p = debtPlan(debt(40000), none, today)
+    assert.deepEqual([p.status, p.payment_cents, p.payment_source, p.apr, p.when, p.payoff.interest_cents], ['estimate', 40000, 'inferred', null, '2027-02', 0])
+  })
+
+  test('an entered payment and APR win, and recalculate the date and the interest', () => {
+    const p = debtPlan(debt(40000), { payment_cents: 20000, apr: 0.24 }, today)
+    assert.deepEqual([p.status, p.payment_source, p.apr, p.payoff.months], ['estimate', 'entered', 0.24, 7])
+    assert.ok(p.payoff.interest_cents > 0)
+    assert.equal(p.when, '2027-06')
+  })
+
+  test('gives no date when there is no pace, or the balance isn\'t coming down', () => {
+    assert.deepEqual([debtPlan(debt(null), none, today).status, debtPlan(debt(null), none, today).when], ['no_pace', ''])
+    const growing = debtPlan(debt(-5000), none, today)
+    assert.deepEqual([growing.status, growing.payment_source, growing.when, growing.payoff], ['not_shrinking', null, '', null])
+    // A typed payment still gives one.
+    assert.equal(debtPlan(debt(-5000), { payment_cents: 30000, apr: null }, today).status, 'estimate')
+  })
+
+  test('says when the payment doesn\'t outrun the interest', () => {
+    const p = debtPlan(debt(1000), { payment_cents: null, apr: 0.3 }, today)
+    assert.deepEqual([p.status, p.when, p.apr], ['outpaced', '', 0.3])
   })
 })
 
