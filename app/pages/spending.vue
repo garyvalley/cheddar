@@ -18,6 +18,8 @@ const today = useToday()
 const period = computed(() => periodOf(kind.value, text(route.query.at) || undefined, today))
 const account = computed(() => text(route.query.account))
 const reviewMode = computed(() => route.query.review === 'true')
+// Needs review leaves out what new bank links brought in from before they were made, unless asked (shared/review.ts).
+const withHistory = computed(() => reviewMode.value && route.query.history === 'true')
 // A category's id, "all" for every transaction, or "" for the categories.
 const category = computed(() => (route.query.category === 'all' || isCategoryRef(route.query.category) ? route.query.category as string : ''))
 const page = computed(() => Math.max(1, Number.parseInt(text(route.query.page), 10) || 1))
@@ -31,7 +33,7 @@ function go(change: Record<string, string | undefined>) {
   const query: Record<string, string> = {}
   const next = {
     period: kind.value === 'month' ? undefined : kind.value, at: text(route.query.at) || undefined, account: account.value || undefined, category: category.value || undefined,
-    q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, review: reviewMode.value ? 'true' : undefined, page: undefined, ...change,
+    q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, review: reviewMode.value ? 'true' : undefined, history: withHistory.value ? 'true' : undefined, page: undefined, ...change,
   }
   for (const [k, v] of Object.entries(next)) if (v) query[k] = v
   return router.push({ query })
@@ -60,7 +62,10 @@ const count = computed(() => summary.value.categories.reduce((n, c) => n + c.cou
 const listQuery = computed(() => {
   const query: Record<string, string> = {}
   if (account.value) query.account = account.value
-  if (reviewMode.value) query.reviewed = 'false'
+  if (reviewMode.value) {
+    query.reviewed = 'false'
+    if (!withHistory.value) query.history = 'false'
+  }
   else if (searching.value) Object.assign(query, { q: q.value, min: min.value, max: max.value })
   else {
     Object.assign(query, { from: period.value.from, to: period.value.to })
@@ -76,6 +81,13 @@ const { data: txs, pending, error: txError, refresh: refreshTxs } = await useFet
   watch: false,
 })
 watch([listQuery, page], () => { if (listing.value) refreshTxs() })
+const { data: waiting, refresh: refreshWaiting } = await useFetch<{ waiting: number, history: number }>('/api/transactions/review', {
+  query: computed(() => (account.value ? { account: account.value } : {})),
+  default: () => ({ waiting: 0, history: 0 }),
+  immediate: reviewMode.value,
+  watch: false,
+})
+watch([reviewMode, account], () => { if (reviewMode.value) refreshWaiting() })
 
 // What's shown, as a spreadsheet: the search, or the period, account and category picked.
 const csvHref = computed(() => `/api/transactions/csv?${new URLSearchParams(Object.entries(listQuery.value).filter(([, v]) => v))}`)
@@ -92,15 +104,15 @@ const sizing = ref(!!(min.value || max.value))
 function find() {
   const words = search.q.trim()
   if (!words && !search.min.trim() && !search.max.trim()) return clearSearch()
-  return go({ q: words || undefined, min: search.min.trim() || undefined, max: search.max.trim() || undefined, category: undefined, review: undefined })
+  return go({ q: words || undefined, min: search.min.trim() || undefined, max: search.max.trim() || undefined, category: undefined, review: undefined, history: undefined })
 }
 function clearSearch() {
   Object.assign(search, { q: '', min: '', max: '' })
   sizing.value = false
-  return go({ q: undefined, min: undefined, max: undefined, review: undefined })
+  return go({ q: undefined, min: undefined, max: undefined, review: undefined, history: undefined })
 }
 function showReview(value: boolean) {
-  return go({ review: value ? 'true' : undefined, category: undefined, q: undefined, min: undefined, max: undefined, page: undefined })
+  return go({ review: value ? 'true' : undefined, history: undefined, category: undefined, q: undefined, min: undefined, max: undefined, page: undefined })
 }
 const found = computed(() => {
   const size = min.value && max.value ? `$${min.value} to $${max.value}` : min.value ? `$${min.value} or more` : max.value ? `up to $${max.value}` : ''
@@ -115,7 +127,7 @@ const canAdd = computed(() => list.value.accounts.some(a => a.owned !== false &&
 const adding = ref(false)
 async function changed(message: string) {
   notice.value = ''
-  await Promise.all([refreshSummary(), refreshTxs()])
+  await Promise.all([refreshSummary(), refreshTxs(), reviewMode.value ? refreshWaiting() : undefined])
   notice.value = message
 }
 async function markReviewed(ids: string[]) {
@@ -263,6 +275,13 @@ async function confirmDelete() {
               <template v-if="reviewMode">{{ txs.total.toLocaleString() }} {{ txs.total === 1 ? 'transaction' : 'transactions' }} to review<template v-if="account"> in {{ names.get(account) }}</template></template>
               <template v-else>{{ found }}<template v-if="account"> in {{ names.get(account) }}</template></template>
             </p>
+            <template v-if="reviewMode && waiting.history">
+              <p class="footnote">
+                <template v-if="withHistory">Including {{ waiting.history.toLocaleString() }} older {{ waiting.history === 1 ? 'one' : 'ones' }} your bank links brought in from before you linked them.</template>
+                <template v-else>Not counting {{ waiting.history.toLocaleString() }} older {{ waiting.history === 1 ? 'one' : 'ones' }} your bank links brought in from before you linked them. They're already in every total and search.</template>
+              </p>
+              <p><button class="btn btn-plain clear" @click="go({ history: withHistory ? undefined : 'true' })">{{ withHistory ? 'Leave those out' : 'Review those too' }}</button></p>
+            </template>
             <p v-if="!reviewMode"><button class="btn btn-plain clear" @click="clearSearch">Clear search</button></p>
           </div>
         </section>

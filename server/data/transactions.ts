@@ -26,6 +26,7 @@ export const toTransaction = (r: RecordModel, person: string): Transaction => ({
   note: r.note ?? "",
   excluded: !!r.excluded,
   reviewed: !!r.reviewed,
+  history: !!r.history,
   shared: r.owner !== person,
   splits: partsOf(r.splits),
 });
@@ -50,6 +51,8 @@ export interface TransactionQuery {
   counted?: boolean;
   /** Whether the person has reviewed the transaction. */
   reviewed?: boolean;
+  /** Whether it came in with a bank link's history (shared/review.ts). */
+  history?: boolean;
   /** Only rows owned by the caller, for personal exports. */
   ownedOnly?: boolean;
 }
@@ -89,6 +92,10 @@ export function transactionFilter(s: Session, q: TransactionQuery): string {
   if (q.reviewed !== undefined) {
     parts.push("reviewed = {:reviewed}");
     params.reviewed = q.reviewed;
+  }
+  if (q.history !== undefined) {
+    parts.push("history = {:history}");
+    params.history = q.history;
   }
   if (q.ownedOnly) {
     parts.push("owner = {:owner}");
@@ -201,6 +208,26 @@ export async function editTransaction(
     await s.collection("transactions").update(id, body),
     callerId(s),
   );
+}
+
+/**
+ * How many transactions wait for review, in `account` or every counted one:
+ * `waiting` in the inbox, and `history`, what new links brought in from
+ * before they were made, which the inbox leaves out unless asked.
+ */
+export async function reviewCounts(
+  s: Session,
+  account?: string,
+): Promise<{ waiting: number; history: number }> {
+  const count = async (history: boolean) =>
+    (
+      await s.collection("transactions").getList(1, 1, {
+        fields: "id",
+        filter: transactionFilter(s, { account, reviewed: false, history }),
+      })
+    ).totalItems;
+  const [waiting, history] = await Promise.all([count(false), count(true)]);
+  return { waiting, history };
 }
 
 export async function markTransactionsReviewed(

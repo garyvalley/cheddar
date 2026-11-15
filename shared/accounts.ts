@@ -70,6 +70,8 @@ export interface Transaction {
   excluded: boolean;
   /** Whether the person has reviewed this transaction. */
   reviewed: boolean;
+  /** Came in with a new bank link's history, so it waits outside the review inbox (shared/review.ts). */
+  history: boolean;
   /** The transaction belongs to an account shared by another household member. */
   shared?: boolean;
   /** Its parts when it's split across categories (shared/splits.ts), else none. */

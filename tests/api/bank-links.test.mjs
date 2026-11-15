@@ -174,6 +174,55 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
       [['PAYROLL ACME', 320000, false], ['RENT NOVEMBER', -180000, false], ['GROCER', -4310, false]])
   })
 
+  test('a new link\'s history waits outside Needs review; what arrives later goes in, and review state outlasts syncs', async () => {
+    const c = await person()
+    const bank = sampleBank()
+    const chk = bank.accounts[0].account_id
+    // Two years back, as a first link brings in: before the 30 days, history.
+    bank.events.unshift(
+      { kind: 'added', t: { transaction_id: `t-old1-${Date.now()}`, account_id: chk, amount: 12.5, date: daysAgo(400), name: 'OLD DINER', merchant_name: null, pending: false } },
+      { kind: 'added', t: { transaction_id: `t-old2-${Date.now()}`, account_id: chk, amount: 60, date: daysAgo(45), name: 'OLD GAS', merchant_name: null, pending: false } },
+    )
+    const { link: l } = await link(c, bank)
+    assert.deepEqual(l.brought_in, { count: 6, from: daysAgo(400), history: 2, review_from: daysAgo(30) })
+
+    const inbox = (await c.call('GET', '/api/transactions?reviewed=false&history=false')).json
+    assert.deepEqual(inbox.items.map(t => t.description).sort(), ['CAFE', 'GROCER', 'PAYROLL ACME', 'RENT'])
+    assert.ok(inbox.items.every(t => !t.history))
+    const old = (await c.call('GET', '/api/transactions?reviewed=false&history=true')).json
+    assert.deepEqual(old.items.map(t => [t.description, t.history, t.reviewed]), [['OLD GAS', true, false], ['OLD DINER', true, false]])
+    assert.deepEqual((await c.call('GET', '/api/transactions/review')).json, { waiting: 4, history: 2 })
+    // History is still found and counted like anything else.
+    assert.equal((await c.call('GET', '/api/transactions?q=diner')).json.total, 1)
+    assert.equal((await c.call('GET', '/api/transactions?history=maybe')).status, 400)
+
+    // Only the sync says what's history: the record API's writes to it are dropped.
+    const rent = inbox.items.find(t => t.description === 'RENT')
+    assert.equal((await pb('PATCH', `/api/collections/transactions/records/${rent.id}`, asPb(c), { history: true })).json.history, false)
+    const diner = old.items.find(t => t.description === 'OLD DINER')
+    assert.equal((await pb('PATCH', `/api/collections/transactions/records/${diner.id}`, asPb(c), { history: false })).json.history, true)
+
+    // Reviewing one, and later syncs: a new charge goes to review, a late
+    // historical one (Plaid's history can come in after the first sync) does not,
+    // and a change from the bank keeps both the review and the history.
+    assert.equal((await c.call('POST', '/api/transactions/review', { ids: [rent.id], reviewed: true })).status, 200)
+    bank.events.push(
+      { kind: 'added', t: { transaction_id: `t-new-${Date.now()}`, account_id: chk, amount: 9, date: daysAgo(0), name: 'NEW BAKERY', merchant_name: null, pending: false } },
+      { kind: 'added', t: { transaction_id: `t-late-${Date.now()}`, account_id: chk, amount: 33, date: daysAgo(300), name: 'LATE HISTORY', merchant_name: null, pending: false } },
+      { kind: 'modified', t: { ...bank.events[3].t, name: 'RENT NOVEMBER' } },
+      { kind: 'modified', t: { ...bank.events[0].t, name: 'OLD DINER INC' } },
+    )
+    await allowSync(l.id)
+    assert.deepEqual((await c.call('POST', `/api/bank-links/${l.id}/sync`, {})).json.sync, { ok: true, added: 2, updated: 2, removed: 0 })
+    const after = (await c.call('GET', '/api/transactions?account=' + rent.account)).json.items
+    const by = Object.fromEntries(after.map(t => [t.description, [t.reviewed, t.history]]))
+    assert.deepEqual(by['NEW BAKERY'], [false, false])
+    assert.deepEqual(by['LATE HISTORY'], [false, true])
+    assert.deepEqual(by['RENT NOVEMBER'], [true, false])
+    assert.deepEqual(by['OLD DINER INC'], [false, true])
+    assert.deepEqual((await c.call('GET', '/api/transactions/review')).json, { waiting: 4, history: 3 })
+  })
+
   test('a linked account\'s name, kind and bank are the person\'s, and one left out keeps syncing but counts nowhere', async () => {
     const c = await person()
     const { link: l, bank } = await link(c)

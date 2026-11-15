@@ -15,6 +15,7 @@
 var plaid = require(`${__hooks}/lib/plaid.js`);
 var dates = require(`${__hooks}/lib/dates.js`);
 var overlap = require(`${__hooks}/lib/gen/overlap.js`);
+var review = require(`${__hooks}/lib/gen/review.js`);
 var providers = require(`${__hooks}/glue/providers.js`);
 
 var ProviderError = providers.ProviderError;
@@ -125,6 +126,7 @@ function summary(app, link) {
   return {
     id: link.id,
     provider: link.getString("provider"),
+    brought_in: broughtIn(app, link, accounts),
     institutions: link.get("institutions") || [],
     status: link.getString("status"),
     message: link.getString("message"),
@@ -143,6 +145,33 @@ function summary(app, link) {
       };
     }),
   };
+}
+
+/**
+ * What the link has brought in, for Settings to explain: how many
+ * transactions and from when, and how many of them are its history, from
+ * before `review_from`, which wait outside the review inbox (shared/review.ts).
+ */
+function broughtIn(app, link, accounts) {
+  var out = { count: 0, from: "", history: 0, review_from: review.reviewFrom(link.getString("created")) };
+  if (!accounts.length) return out;
+  var ids = accounts.map(function (a) {
+    return a.id;
+  });
+  var synced = $dbx.and($dbx.in.apply(null, ["account"].concat(ids)), $dbx.hashExp({ source: "sync" }));
+  out.count = app.countRecords("transactions", synced);
+  if (!out.count) return out;
+  var params = {};
+  var filter = ids
+    .map(function (id, i) {
+      params["a" + i] = id;
+      return "account = {:a" + i + "}";
+    })
+    .join(" || ");
+  var first = app.findRecordsByFilter("transactions", "(" + filter + ") && source = 'sync'", "posted", 1, 0, params);
+  out.from = first.length ? first[0].getString("posted").slice(0, 10) : "";
+  out.history = app.countRecords("transactions", synced, $dbx.hashExp({ history: true }));
+  return out;
 }
 
 /** The account a Plaid account syncs into, made the first time it's seen. */
@@ -243,8 +272,10 @@ function carryOver(txApp, account, t, rec) {
 /**
  * Adds or brings up to date one transaction, or takes over the row a
  * statement already brought in for it; answers "added", "updated" or "".
+ * A new one posted long before the link was made (`linkedAt`) is the link's
+ * history, kept out of the review inbox (shared/review.ts).
  */
-function upsert(txApp, collection, account, t) {
+function upsert(txApp, collection, account, t, linkedAt) {
   var rec;
   try {
     rec = txApp.findFirstRecordByFilter(
@@ -282,6 +313,7 @@ function upsert(txApp, collection, account, t) {
     rec.set("external_id", t.external_id);
     // The bank's own words; the person's edits to these later stay theirs.
     rec.set("payee", t.payee);
+    rec.set("history", review.isHistory(t.posted, linkedAt));
     carryOver(txApp, account, t, rec);
     outcome = "added";
   }
@@ -357,7 +389,7 @@ function sync(app, link, today) {
     changes.added.concat(changes.modified).forEach(function (t) {
       var account = byPlaidId[t.account];
       if (!account) return;
-      var outcome = upsert(txApp, collection, account, t);
+      var outcome = upsert(txApp, collection, account, t, link.getString("created"));
       if (outcome === "added") result.added++;
       else if (outcome === "updated") result.updated++;
     });

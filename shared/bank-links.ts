@@ -26,6 +26,12 @@ export interface BankLink {
   /** PocketBase's date format, or '' before the first sync worked. */
   last_synced: string
   accounts: LinkedAccount[]
+  /**
+   * What the link has brought in: `count` transactions, the oldest posted
+   * `from` (YYYY-MM-DD, '' with none). `history` of them are from before
+   * `review_from`, so they wait outside Needs review (shared/review.ts).
+   */
+  brought_in: { count: number, from: string, history: number, review_from: string }
 }
 
 export interface BankLinks {
