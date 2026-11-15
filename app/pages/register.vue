@@ -60,6 +60,7 @@ async function create() {
     <button class="btn btn-primary btn-block" :disabled="busy">
       <span v-if="busy" class="spinner" aria-hidden="true" /> Create account
     </button>
+    <p class="center caption">Creating an account means you agree to how Cheddar keeps your data: <NuxtLink to="/privacy">Privacy</NuxtLink>.</p>
     <p class="center footnote">Already have one? <NuxtLink to="/login">Sign in</NuxtLink></p>
   </form>
 </template>

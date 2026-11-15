@@ -268,6 +268,11 @@ function when(pb: string) {
           Sign in to it, and Cheddar brings in up to two years of transactions and keeps your balances up to date.
           Your bank password goes to your bank, never to Cheddar.
         </p>
+        <p class="caption">
+          Cheddar connects through Plaid, which handles your information under its
+          <a href="https://plaid.com/legal/#end-user-privacy-policy" target="_blank" rel="noopener">End User Privacy Policy</a>.
+          How Cheddar keeps it: <NuxtLink to="/privacy">Privacy</NuxtLink>.
+        </p>
         <button class="btn btn-primary first-btn" :disabled="add.busy.value" @click="link">
           <span v-if="add.busy.value" class="spinner" aria-hidden="true" /> Link a bank or card
         </button>
@@ -296,7 +301,7 @@ function when(pb: string) {
     <p v-if="add.error.value || work.error.value" class="notice notice-error" role="alert">{{ add.error.value || work.error.value }}</p>
     <p v-else-if="notice" class="notice notice-success" role="status">{{ notice }}</p>
     <p v-if="data.enabled" class="group-footer">
-      Linked accounts update on their own: within minutes of your bank having something new, and at least once a day. Cheddar can only read them: it can't move money.
+      Linked accounts update on their own: within minutes of your bank having something new, and at least once a day. Cheddar can only read them: it can't move money. They connect through Plaid (<a href="https://plaid.com/legal/#end-user-privacy-policy" target="_blank" rel="noopener">its privacy policy</a>, <NuxtLink to="/privacy">Cheddar's</NuxtLink>).
       Rename, close or leave out a linked account under Your accounts, below. For history older than the link brought in, import a statement there: what the link already has is skipped.
     </p>
   </section>
