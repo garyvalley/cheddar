@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCents } from '~~/shared/accounts'
-import { MAX_PAYOFF_MONTHS, monthsAfter, payoff, project, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
+import { debtPlan, MAX_PAYOFF_MONTHS, project, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
 
 // Projections only read what the accounts hold (set up in Settings): the
 // savings rate from the last whole months, today's investments, and how fast
@@ -80,21 +80,28 @@ const worthLine = computed(() => points.value.map((p, i) => xy(i, p.balance_cent
 const putLine = computed(() => points.value.map((p, i) => xy(i, p.put_in_cents)).join(' '))
 const worthArea = computed(() => `0,${H} ${worthLine.value} ${W},${H}`)
 
-// Debts
-function debtPlan(d: Debt) {
+// Debts: each estimate shows the payment and APR it rests on, and whose they are (shared/projections.ts debtPlan).
+const plans = computed(() => (pj.value?.debts ?? []).map((d) => {
   const mine = saved.debts[d.id] ?? {}
-  const typed = dollars(mine.payment)
-  const payment = typed ?? d.paydown_cents ?? 0
-  const apr = rate(mine.apr) ?? 0
-  const p = payoff(d.owed_cents, payment, apr)
-  return { payment, apr, typed: typed !== null, plan: p, when: p ? monthsAfter(today, p.months) : '' }
-}
-const plans = computed(() => (pj.value?.debts ?? []).map(d => ({ d, ...debtPlan(d) })))
+  return { d, ...debtPlan(d, { payment_cents: dollars(mine.payment), apr: rate(mine.apr) }, today) }
+}))
+const dated = (p: { status: string }) => p.status === 'estimate' || p.status === 'paid'
 const debtFree = computed(() => {
   const all = plans.value
-  if (!all.length || all.some(p => !p.plan)) return null
+  if (!all.length || !all.every(dated)) return null
   return all.reduce((m, p) => (p.when > m ? p.when : m), '')
 })
+// Estimates that leave interest out, because no APR was entered.
+const noRate = computed(() => plans.value.filter(p => p.status === 'estimate' && p.apr === null).map(p => p.d.name))
+const names = (list: string[]) => (list.length < 3 ? list.join(' and ') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`)
+const aprText = (apr: number) => `${Number((apr * 100).toFixed(2))}%`
+const dayName = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+/** Where an inferred pace comes from, in words. */
+function paceFrom(d: Debt) {
+  if (d.basis === 'transactions') return `payments less new charges since ${monthName(d.pace_since.slice(0, 7))}, a month on average`
+  if (d.basis === 'balances') return `how fast its balance has come down since ${dayName(d.pace_since)}`
+  return ''
+}
 function setDebt(id: string, field: 'payment' | 'apr', value: string) {
   saved.debts[id] = { ...saved.debts[id], [field]: value }
 }
@@ -162,56 +169,61 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
               <p v-if="debtFree" class="num large-title" data-test="debt-free">{{ monthName(debtFree, true) }}</p>
               <p v-else class="num large-title loss" data-test="debt-free">Not yet</p>
               <p class="footnote">
-                <template v-if="debtFree">is when you're debt free at this pace, from {{ formatCents(plans.reduce((s, p) => s + p.d.owed_cents, 0)) }} owed today.</template>
-                <template v-else>At this pace, not everything gets paid off. The debts below say which.</template>
+                <template v-if="debtFree">is when you'd be debt free at these payments, from {{ formatCents(plans.reduce((s, p) => s + p.d.owed_cents, 0)) }} owed today. An estimate.</template>
+                <template v-else>Not every debt below has a payoff date at its payment. Each says why.</template>
+              </p>
+              <p v-if="noRate.length" class="footnote warn-text" data-test="no-apr">
+                Interest isn't included for {{ names(noRate) }}: no APR entered, so {{ noRate.length === 1 ? 'its date is' : 'their dates are' }} sooner than it would really be. Enter the APR below.
               </p>
             </div>
             <div v-for="p in plans" :key="p.d.id" class="debt" :data-test="`debt-${p.d.name}`">
               <div class="row">
                 <span class="row-label">
-                  <span class="block">{{ p.d.name }}</span>
-                  <span class="footnote">
-                    <template v-if="p.payment > 0">Paying down {{ formatCents(p.payment) }} a month{{ p.typed ? ' (yours)' : '' }}</template>
-                    <template v-else-if="p.d.paydown_cents !== null">Growing by {{ formatCents(-p.d.paydown_cents) }} a month lately</template>
-                    <template v-else>No pace yet: enter what you pay</template>
+                  <span class="block headline">{{ p.d.name }}</span>
+                  <span class="footnote block" data-test="debt-estimate">
+                    <template v-if="p.status === 'paid'">Paid off.</template>
+                    <template v-else-if="p.status === 'estimate' && p.apr !== null">Estimated payoff {{ monthName(p.when, true) }} ({{ span(p.payoff!.months) }}), {{ formatCents(p.payoff!.interest_cents) }} in interest</template>
+                    <template v-else-if="p.status === 'estimate'">Estimated payoff {{ monthName(p.when, true) }} ({{ span(p.payoff!.months) }}) <strong class="warn-text">if no interest is charged</strong></template>
+                    <template v-else-if="p.status === 'outpaced'"><span class="loss">No payoff date:</span> {{ formatCents(p.payment_cents) }} a month <template v-if="p.apr">doesn't outrun {{ aprText(p.apr) }} interest.</template><template v-else>would take over {{ MAX_PAYOFF_MONTHS / 12 }} years.</template></template>
+                    <template v-else-if="p.status === 'not_shrinking'"><span class="loss">No payoff date:</span> it's grown by {{ formatCents(-(p.d.paydown_cents ?? 0)) }} a month lately. Enter what you plan to pay.</template>
+                    <template v-else>No payoff date: Cheddar hasn't seen this balance change yet. Enter what you pay, or bring the balance up to date in <NuxtLink to="/settings#accounts">Settings</NuxtLink> now and then.</template>
                   </span>
                 </span>
-                <span class="row-value">
-                  <span class="num block loss">{{ formatCents(-p.d.owed_cents) }}</span>
-                  <span v-if="p.plan" class="footnote gain">Paid off {{ monthName(p.when) }}</span>
-                  <span v-else class="footnote loss">{{ p.payment > 0 ? 'Doesn\'t outrun the interest' : 'Not shrinking' }}</span>
-                </span>
+                <span class="row-value"><span class="num block loss">{{ formatCents(-p.d.owed_cents) }}</span></span>
               </div>
-              <details class="debt-more">
-                <summary>
-                  <template v-if="p.plan">{{ span(p.plan.months) }}<template v-if="p.plan.interest_cents">, {{ formatCents(p.plan.interest_cents) }} in interest</template></template>
-                  <template v-else>Change the payment or interest rate</template>
-                </summary>
-                <div class="debt-fields">
-                  <label>
-                    <span class="field-label">Monthly payment</span>
-                    <input
-                      class="input num" inputmode="decimal" :value="saved.debts[p.d.id]?.payment ?? ''"
-                      :placeholder="p.d.paydown_cents && p.d.paydown_cents > 0 ? formatCents(p.d.paydown_cents) : '$0.00'"
-                      @input="setDebt(p.d.id, 'payment', ($event.target as HTMLInputElement).value)"
-                    >
-                  </label>
-                  <label>
-                    <span class="field-label">Interest rate (APR %)</span>
-                    <input
-                      class="input num" inputmode="decimal" placeholder="0" :value="saved.debts[p.d.id]?.apr ?? ''"
-                      @input="setDebt(p.d.id, 'apr', ($event.target as HTMLInputElement).value)"
-                    >
-                  </label>
-                </div>
-                <p class="footnote muted">
-                  <template v-if="p.d.basis === 'transactions'">The pace is this account's payments less new charges, a month on average lately.</template>
-                  <template v-else-if="p.d.basis === 'balances'">The pace is how fast its balance has come down since Cheddar first saw it.</template>
-                  <template v-else>Cheddar hasn't seen this balance change yet. Bring it up to date in <NuxtLink to="/settings#accounts">Settings</NuxtLink> now and then, or enter the payment.</template>
-                  With no rate entered, interest isn't counted; past {{ MAX_PAYOFF_MONTHS / 12 }} years counts as never.
-                </p>
-              </details>
+              <div class="debt-fields">
+                <label>
+                  <span class="field-label">Monthly payment</span>
+                  <input
+                    class="input num" inputmode="decimal" :value="saved.debts[p.d.id]?.payment ?? ''"
+                    :placeholder="p.d.paydown_cents && p.d.paydown_cents > 0 ? formatCents(p.d.paydown_cents) : 'Enter it'"
+                    :aria-describedby="`pay-${p.d.id}`" data-test="debt-payment"
+                    @input="setDebt(p.d.id, 'payment', ($event.target as HTMLInputElement).value)"
+                  >
+                  <span :id="`pay-${p.d.id}`" class="footnote source">
+                    <template v-if="p.payment_source === 'entered'">Yours. <button class="link" type="button" @click="setDebt(p.d.id, 'payment', '')">{{ p.d.paydown_cents && p.d.paydown_cents > 0 ? `Use the pace (${formatCents(p.d.paydown_cents)})` : 'Clear' }}</button></template>
+                    <template v-else-if="p.payment_source === 'inferred'">Inferred: {{ paceFrom(p.d) }}.</template>
+                    <template v-else>Unknown.</template>
+                  </span>
+                </label>
+                <label>
+                  <span class="field-label">Interest rate (APR %)</span>
+                  <input
+                    class="input num" inputmode="decimal" placeholder="Unknown" :value="saved.debts[p.d.id]?.apr ?? ''"
+                    :aria-describedby="`apr-${p.d.id}`" data-test="debt-apr"
+                    @input="setDebt(p.d.id, 'apr', ($event.target as HTMLInputElement).value)"
+                  >
+                  <span :id="`apr-${p.d.id}`" class="footnote source">
+                    <template v-if="p.apr !== null">Yours.</template>
+                    <template v-else><span class="warn-text">Unknown, so interest isn't included.</span> It's on your statement.</template>
+                  </span>
+                </label>
+              </div>
             </div>
+            <p class="footnote card-pad note">
+              Estimates, not promises: they assume the same payment every month, no new charges, and the APR above.
+              Past {{ MAX_PAYOFF_MONTHS / 12 }} years counts as never. This browser remembers what you enter.
+            </p>
           </div>
           <div v-else class="card card-pad">
             <p class="footnote">No card or loan owes anything. Cards and loans you add in <NuxtLink to="/settings#accounts">Settings</NuxtLink> show when they'll be paid off here.</p>
@@ -356,7 +368,10 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
 
 .debt + .debt { border-top: var(--border); }
 .debt .row-value { display: flex; flex-direction: column; align-items: flex-end; }
-.debt-more { padding: 0 1rem 0.75rem; }
-.debt-more summary { font-size: 0.8125rem; color: var(--accent); cursor: pointer; }
-.debt-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 0.75rem 0 0.5rem; }
+.debt-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; padding: 0 1rem 0.875rem; }
+.debt-fields label { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.source { color: var(--text-2); }
+.warn-text { color: var(--warning); font-weight: 600; }
+.note { border-top: 0.5px solid var(--separator); color: var(--text-2); margin: 0; }
+@media (max-width: 30rem) { .debt-fields { grid-template-columns: 1fr; } }
 </style>
