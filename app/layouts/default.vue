@@ -48,7 +48,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
         :class="{ on: current(item.to) }" :aria-current="current(item.to) ? 'page' : undefined"
       >
         <AppIcon :name="item.icon" />
-        <span>{{ 'short' in item ? item.short : item.label }}</span>
+        <span>{{ item.label }}</span>
       </NuxtLink>
     </nav>
   </div>
@@ -115,11 +115,6 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
   .bar-link > .wide-only { display: none; }
   .bar-link { white-space: nowrap; }
   .main { padding: 1.5rem 1.25rem 3rem; }
-}
-
-@media (max-width: 939px) {
-  /* Seven sections: the mark alone names Cheddar here, so Sign out keeps its place. */
-  .brand > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 @media (max-width: 839px) {
