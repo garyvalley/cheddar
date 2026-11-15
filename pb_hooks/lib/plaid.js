@@ -27,6 +27,14 @@ var MIN_SYNC_GAP_MS = 2 * 60 * 1000
 /** /transactions/sync pages per sync (500 transactions each); the next sync carries on from the cursor. */
 var MAX_PAGES = 40
 
+/**
+ * How far back a new link's transactions go: Plaid's most, about two years
+ * (its default is 90 days). It's fixed when the link is made, so a link made
+ * with less keeps less until it's unlinked and linked again. Plaid bills the
+ * same either way.
+ */
+var DAYS_REQUESTED = 730
+
 var BASES = { sandbox: "https://sandbox.plaid.com", production: "https://production.plaid.com" }
 
 /** Bank linking's settings, from `getenv` (an environment reader such as $os.getenv). */
@@ -108,7 +116,7 @@ function linkTokenBody(userId, accessToken, webhook) {
   }
   else {
     body.products = ["transactions"]
-    body.transactions = { days_requested: 90 }
+    body.transactions = { days_requested: DAYS_REQUESTED }
   }
   return body
 }
@@ -283,6 +291,7 @@ module.exports = {
   PREFIX: PREFIX,
   MIN_SYNC_GAP_MS: MIN_SYNC_GAP_MS,
   MAX_PAGES: MAX_PAGES,
+  DAYS_REQUESTED: DAYS_REQUESTED,
   config: config,
   isEnabled: isEnabled,
   linkLimit: linkLimit,
