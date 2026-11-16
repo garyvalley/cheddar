@@ -60,7 +60,7 @@ describe('splitting a transaction', () => {
 
     // The download says how it's split.
     const csv = (await c.call('GET', '/api/transactions/csv')).json
-    assert.match(csv, /WHOLE FOODS MARKET,,Groceries,no,,no,Groceries -80\.00; Shopping -40\.00/)
+    assert.match(csv, /WHOLE FOODS MARKET,,Groceries,no,,,no,Groceries -80\.00; Shopping -40\.00/)
 
     assert.deepEqual((await split(c, shop, [])).json.transaction.splits, [])
     assert.equal(totalOf(await spending(c), 'groceries'), totalOf(before, 'groceries'))

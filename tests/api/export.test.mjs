@@ -92,7 +92,7 @@ describe("exporting everything", () => {
     const tx = files["transactions.csv"].split("\r\n");
     assert.equal(
       tx[0],
-      "﻿Date,Account,Amount,Description,Payee,Category,Pending,Note,Left out,Split",
+      "﻿Date,Account,Amount,Description,Payee,Category,Pending,Note,Tags,Left out,Split",
     );
     assert.ok(
       tx.includes(

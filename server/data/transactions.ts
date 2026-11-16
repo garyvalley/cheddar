@@ -2,6 +2,7 @@ import type { RecordModel } from "pocketbase";
 import type { Transaction } from "~~/shared/accounts";
 import type { BalancePoint } from "~~/shared/overview";
 import { partsOf, type SplitPart } from "~~/shared/splits";
+import { tagNeedle, tagsOf } from "~~/shared/tags";
 import type { EditFields, ManualFields } from "~~/shared/transactions";
 import { COUNTED, TX_COUNTED } from "./accounts";
 import { callerId, type Session } from "./session";
@@ -29,6 +30,7 @@ export const toTransaction = (r: RecordModel, person: string): Transaction => ({
   history: !!r.history,
   shared: r.owner !== person,
   splits: partsOf(r.splits),
+  tags: tagsOf(r.tags),
 });
 
 export const PAGE_SIZE = 50;
@@ -44,6 +46,10 @@ export interface TransactionQuery {
   uncounted?: boolean;
   /** Words its description, name or note contain. */
   q?: string;
+  /** One of its tags (shared/tags.ts), whatever its case. */
+  tag?: string;
+  /** Only transactions with a tag. */
+  tagged?: boolean;
   /** Its size in whole cents, money in or out alike; both ends included. */
   min?: number | null;
   max?: number | null;
@@ -89,6 +95,12 @@ export function transactionFilter(s: Session, q: TransactionQuery): string {
     parts.push("(description ~ {:q} || payee ~ {:q} || note ~ {:q})");
     params.q = q.q;
   }
+  if (q.tag) {
+    // Each tag is a JSON string in the stored list, quotes and all.
+    parts.push("tags ~ {:tag}");
+    params.tag = tagNeedle(q.tag);
+  }
+  if (q.tagged) parts.push("tags ~ '\"'");
   if (q.reviewed !== undefined) {
     parts.push("reviewed = {:reviewed}");
     params.reviewed = q.reviewed;
@@ -140,7 +152,7 @@ export async function allTransactions(
   const rows = await s.collection("transactions").getFullList({
     sort: "posted,created",
     fields:
-      "id,owner,account,import,posted,amount_cents,description,payee,category,category_by,pending,source,note,excluded,splits",
+      "id,owner,account,import,posted,amount_cents,description,payee,category,category_by,pending,source,note,excluded,splits,tags",
     ...(filter ? { filter } : {}),
   });
   return rows.map((r) => ({
@@ -191,7 +203,7 @@ export async function editTransaction(
   id: string,
   change: EditFields & { splits?: SplitPart[] },
 ): Promise<Transaction> {
-  const { payee, note, excluded, posted, amount_cents, description } = change;
+  const { payee, note, excluded, posted, amount_cents, description, tags } = change;
   const body: Record<string, unknown> = Object.fromEntries(
     Object.entries({
       payee,
@@ -200,6 +212,7 @@ export async function editTransaction(
       posted,
       amount_cents,
       description,
+      tags,
     }).filter(([, v]) => v !== undefined),
   );
   // An empty list undoes a split (pb_hooks/splits.pb.js checks the parts).

@@ -76,6 +76,8 @@ export interface Transaction {
   shared?: boolean;
   /** Its parts when it's split across categories (shared/splits.ts), else none. */
   splits: SplitPart[];
+  /** Labels across categories (shared/tags.ts), none when it has none. */
+  tags: string[];
 }
 
 export interface Import {

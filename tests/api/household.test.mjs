@@ -132,6 +132,18 @@ describe("household sharing", () => {
         .json.items[0].note,
       "Shared shopping",
     );
+    // Members may tag a shared transaction too (G's choice, issue #106).
+    const tagged = await member.c.call(
+      "PATCH",
+      `/api/transactions/${transaction.json.transaction.id}`,
+      { tags: ["Groceries split", "Reimbursable"] },
+    );
+    assert.equal(tagged.status, 200, JSON.stringify(tagged.json));
+    assert.deepEqual(
+      (await owner.c.call("GET", `/api/transactions?tag=reimbursable`)).json
+        .items.map((t) => t.tags),
+      [["Groceries split", "Reimbursable"]],
+    );
     const token = asPb(member.c);
     const directRead = await fetch(
       `${PB}/api/collections/transactions/records/${transaction.json.transaction.id}`,
