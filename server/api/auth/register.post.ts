@@ -4,14 +4,19 @@ import { passwordProblem } from '~~/shared/passwords'
 import { NAME_MAX } from '~~/shared/profile'
 
 /**
- * POST /api/auth/register { email, password, name }: a new account, and the
- * email that confirms its address. The browser signs in next.
+ * POST /api/auth/register { email, password, name, agree }: a new account, and
+ * the email that confirms its address. `agree` must be true: the person ticked
+ * that they agree to the Terms of Use and the Privacy Notice (shared/legal.ts).
+ * The browser signs in next.
  */
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
-  const { email, password, name } = await readFields<{ email: string, password: string, name: string }>(event, ['email', 'password', 'name'])
+  const { email, password, name, agree } = await readFields<{ email: string, password: string, name: string, agree: boolean }>(event, ['email', 'password', 'name', 'agree'])
   if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
     throw createError({ statusCode: 400, statusMessage: 'Email and password are required' })
+  }
+  if (agree !== true) {
+    throw createError({ statusCode: 400, statusMessage: 'Agree to the Terms of Use and the Privacy Notice to create an account.' })
   }
   const problem = passwordProblem(password)
   if (problem) throw createError({ statusCode: 400, statusMessage: problem })

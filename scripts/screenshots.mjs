@@ -21,7 +21,7 @@ try {
   const page = await desktop.newPage()
   await page.goto(`${APP}/login`)
   await page.screenshot({ path: `${out}sign-in.png` })
-  await page.request.post(`${APP}/api/auth/register`, { data: { email, password, name: 'Alex Rivera' }, headers: { origin: APP } })
+  await page.request.post(`${APP}/api/auth/register`, { data: { email, password, name: 'Alex Rivera', agree: true }, headers: { origin: APP } })
   await page.request.post(`${APP}/api/auth/login`, { data: { email, password }, headers: { origin: APP } })
   await page.goto(`${APP}/setup`)
   await page.screenshot({ path: `${out}setup.png` })

@@ -14,6 +14,7 @@ useHead({ title: unavailable.value ? 'Updating' : 'Not found' })
     <button class="btn btn-primary" @click="clearError({ redirect: unavailable ? undefined : '/' })">
       {{ unavailable ? 'Try again' : 'Go to Overview' }}
     </button>
+    <AppFooter />
   </main>
 </template>
 

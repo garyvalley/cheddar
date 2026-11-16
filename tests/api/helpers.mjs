@@ -79,7 +79,7 @@ export async function superuser() {
 export async function signedIn() {
   const c = client()
   const address = email()
-  assert.equal((await c.call('POST', '/api/auth/register', { email: address, password: PASSWORD, name: 'Test' })).status, 201)
+  assert.equal((await c.call('POST', '/api/auth/register', { email: address, password: PASSWORD, name: 'Test', agree: true })).status, 201)
   made.push(address)
   const r = await c.call('POST', '/api/auth/login', { email: address, password: PASSWORD })
   assert.equal(r.status, 200)

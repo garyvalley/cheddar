@@ -55,6 +55,7 @@ try {
   await page.getByLabel('Name').fill('Ui Test')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
+  await page.getByLabel('I agree to the Terms of Use and the Privacy Notice.').check()
   await page.getByRole('button', { name: 'Create account' }).click()
 
   // Two-step sign-in comes first: every other page sends a new account back here.

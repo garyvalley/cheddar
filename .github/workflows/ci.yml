@@ -257,6 +257,7 @@ jobs:
       HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
       HEALTHCHECK_SYNC_URL: ${{ vars.HEALTHCHECK_SYNC_URL }}
       SIGNUP_ALLOW: ${{ secrets.SIGNUP_ALLOW }}
+      CONTACT_TO: ${{ secrets.CONTACT_TO }}
       # Backups (k8s/README.md "Backups"): off until LITESTREAM_REPLICA_URL is set.
       LITESTREAM_REPLICA_URL: ${{ secrets.LITESTREAM_REPLICA_URL }}
       LITESTREAM_ENDPOINT: ${{ vars.LITESTREAM_ENDPOINT }}

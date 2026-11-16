@@ -123,6 +123,13 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```
    Deploy again after a change. Refused sign-ups log `[signup] refused a new account`.
    A superuser can still make an account for anyone in the admin UI.
+   **Contact form (optional).** Messages from `/contact` are kept in the
+   admin UI's `contact_messages` for a year. To have each one emailed too
+   (Reply-To is the sender), name a private address; it never appears on
+   the site:
+   ```sh
+   gh secret set CONTACT_TO --env production -R garyvalley/cheddar
+   ```
 8. 👤 **Route,** once the tunnel shows **Healthy**: delete any DNS record for
    the host, then add the tunnel's public hostname
    `cheddar.poweredbycheese.com` → `http://nginx.cheddar.svc.cluster.local:80`.

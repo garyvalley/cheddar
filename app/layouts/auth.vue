@@ -3,6 +3,7 @@
     <div class="auth-box">
       <div class="auth-brand"><AppMark /> <span class="title-3">Cheddar</span></div>
       <slot />
+      <AppFooter />
     </div>
   </main>
 </template>

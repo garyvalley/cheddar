@@ -43,6 +43,13 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Server-only: the browser never talks to PocketBase.
     pocketbaseUrl: 'http://127.0.0.1:8095',
+    // Who runs this Cheddar, as the Terms, the Privacy Notice and the footer
+    // name them, and whose state's law the Terms follow. Another operator
+    // sets NUXT_PUBLIC_OPERATOR_NAME and NUXT_PUBLIC_OPERATOR_STATE.
+    public: {
+      operatorName: 'Powered by Cheese',
+      operatorState: 'California',
+    },
   },
 
   // Security headers come from nuxt-security: script-src needs a per-request

@@ -20,6 +20,8 @@ export interface Me extends Profile {
   email: string
   verified: boolean
   mfa_enabled: boolean
+  /** The Terms of Use they agreed to (shared/legal.ts); '' if none yet. */
+  terms_version: string
 }
 
 export const NAME_MAX = 100

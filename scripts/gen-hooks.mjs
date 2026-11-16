@@ -17,7 +17,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const OUT = `${ROOT}pb_hooks/lib/gen/`
 
 /** pb_hooks/lib/gen/<name>.js from shared/<name>.ts. */
-export const MODULES = ['categories', 'overlap', 'review', 'splits']
+export const MODULES = ['categories', 'contact', 'legal', 'overlap', 'review', 'splits']
 
 const HEADER = name => `/// <reference path="../../../pb_data/types.d.ts" />
 // GENERATED from shared/${name}.ts by scripts/gen-hooks.mjs. Don't edit:
