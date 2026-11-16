@@ -63,7 +63,12 @@ Done on 2026-11-08; kept for a rebuild. Steps a person must do are marked 👤
    ```
 3. **Repository settings:** variable `CLUSTER_HOST` =
    `cheddar.poweredbycheese.com`, and an environment `production` limited to
-   the `main` branch.
+   the `main` branch. If Actions permissions are narrowed to your own actions,
+   CI won't start at all ("startup failure"): also allow actions created by
+   GitHub and `docker/build-push-action@*, docker/login-action@*,
+   docker/setup-buildx-action@*, docker/setup-qemu-action@*,
+   pnpm/action-setup@*, aquasecurity/trivy-action@*,
+   gitleaks/gitleaks-action@*` (every `uses:` in `.github/workflows/`).
 4. 👤 **Tunnel.** Cloudflare → **Networking → Tunnels → Create Tunnel**
    (`cloudflared`), named `cheddar`. Copy the token from the install command
    (the long value after `--token`, not the tunnel ID); don't run the
