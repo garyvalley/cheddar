@@ -39,7 +39,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
     </header>
 
     <main id="main" class="main">
-      <slot />
+      <div class="page"><slot /></div>
       <AppFooter />
     </main>
 
@@ -95,6 +95,9 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
 .topbar :focus-visible { outline-color: var(--on-bar); }
 
 .main { max-width: var(--page-w); margin: 0 auto; padding: 2rem 2rem 4rem; }
+/* A short page still puts the footer at the bottom of the window, not halfway up it. */
+.main { display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h)); }
+.page { flex: 1 0 auto; }
 
 .tabbar { display: none; }
 
@@ -129,7 +132,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
   .topbar-in { padding: 0 0.5rem 0 1rem; min-height: 3.25rem; }
   .brand { font-size: 1.0625rem; }
   .brand :deep(svg) { width: 24px; height: 24px; border-radius: 7px; }
-  .main { padding: 1.25rem 1rem calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1.5rem); }
+  .main { padding: 1.25rem 1rem calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1.5rem); min-height: calc(100dvh - 3.25rem); }
   .tabbar {
     position: fixed; inset: auto 0 0 0; z-index: 5;
     display: flex; padding-bottom: env(safe-area-inset-bottom);
