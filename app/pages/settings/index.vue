@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // Settings in categories, each opened and closed on its own heading, all
 // closed when the page opens: the accounts and banks every number comes from
-// first, then you, how Cheddar looks, sign-in, and your data. A link such as
+// first, then the rules that sort their transactions, you, how Cheddar looks, sign-in, and your data. A link such as
 // /settings#export opens the category it's in (SettingsCategory).
 const open = useSettingsOpen()
 // Closed again on every visit, before the categories mount and a link opens one.
 open.value = []
-const all = ['accounts', 'you', 'appearance', 'security', 'data']
+const all = ['accounts', 'rules', 'you', 'appearance', 'security', 'data']
 const allOpen = computed(() => all.every(id => open.value.includes(id)))
 </script>
 
@@ -19,6 +19,10 @@ const allOpen = computed(() => all.every(id => open.value.includes(id)))
     <SettingsCategory id="accounts" title="Accounts and banks" sub="Bank links, every account, and statement imports">
       <BankLinks />
       <SettingsAccounts />
+    </SettingsCategory>
+
+    <SettingsCategory id="rules" title="Rules" sub="How your transactions are sorted, renamed and left out">
+      <SettingsRules />
     </SettingsCategory>
 
     <SettingsCategory id="you" title="Profile and household" sub="Your name, state and filing status, and who you share with">

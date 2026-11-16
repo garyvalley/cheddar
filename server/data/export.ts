@@ -18,6 +18,7 @@ import { toMe } from "./profile";
 import { todayIn } from "~~/shared/time-zone";
 import { zip } from "./zip";
 import { callerId, type Session } from "./session";
+import type { RuleFields } from "~~/shared/rules";
 
 /**
  * Everything the person has, read as them: PocketBase's rules let each read
@@ -30,7 +31,7 @@ export async function exportData(
   password: string,
   now = new Date(),
 ): Promise<ExportData> {
-  const { category_rules } = await s.send<{ category_rules: CategoryRule[] }>(
+  const { category_rules, rules } = await s.send<{ category_rules: CategoryRule[]; rules: RuleFields[] }>(
     "/api/export",
     { method: "POST", body: { password } },
   );
@@ -106,6 +107,7 @@ export async function exportData(
     cashflow_items: cashflowItems,
     categories,
     category_rules,
+    rules,
     bank_links: links.links.map((l) => ({
       institutions: l.institutions,
       status: l.status,

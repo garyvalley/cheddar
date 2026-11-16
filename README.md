@@ -167,6 +167,13 @@ tunnel, repository secrets) and day-to-day operations.
   - **In the wrong place?** Open the category, or All transactions, and pick
     another category on the transaction. The merchant's other transactions
     move with it, unless you moved one by hand, and its new ones follow.
+  - **Rules** (Settings → Rules): write your own, such as "has *venmo*, in
+    Everyday checking: leave it out" or "has *blue bottle*, up to $10:
+    Dining, renamed Blue Bottle". A rule matches words in the description or
+    payee, an amount's size and an account, and sorts, renames or leaves out
+    what it matches, as transactions arrive and, if you ask, the ones you
+    already have. The merchant rules Cheddar learned from your changes are
+    listed there too, to change or forget.
   - **Your own categories.** Pick "New category…" on any transaction to make
     one and move it there; Cheddar remembers it for that merchant like any
     other. Rename or delete it on its own page; deleting one sorts its
@@ -190,7 +197,7 @@ tunnel, repository secrets) and day-to-day operations.
 - **Export your data** (Settings → Your data): a zip of `accounts.csv`,
   `transactions.csv` and `balance_history.csv`, and `cheddar.json` with
   everything you own, including goals and planned cash flow, your categories
-  and merchant rules too. Shared accounts owned by someone else are not in
+  and rules too. Shared accounts owned by someone else are not in
   your export. It asks for your
   password, and never holds a bank link's token or a two-step secret. A
   cell a spreadsheet would run as a formula (`=`, `+`, `-`, `@`) starts
