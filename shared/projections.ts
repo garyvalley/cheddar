@@ -240,3 +240,85 @@ export interface Projections {
 
 /** The investment accounts' total, from those with a balance. */
 export const invested = (accounts: Holding[]) => accounts.reduce((s, a) => (isInvestment(a.kind) && a.balance_cents !== null ? s + a.balance_cents : s), 0)
+
+export type Strategy = 'snowball' | 'avalanche'
+
+export const STRATEGIES: { id: Strategy, label: string, rule: string }[] = [
+  { id: 'avalanche', label: 'Avalanche', rule: 'Highest rate first: the least interest.' },
+  { id: 'snowball', label: 'Snowball', rule: 'Smallest balance first: a debt gone soonest.' },
+]
+
+/** A debt as a combined plan takes it: what's owed, its own monthly payment (0 with none), and its rate (null for unknown, charged as 0). */
+export interface PlanDebt {
+  id: string
+  name: string
+  owed_cents: number
+  payment_cents: number
+  apr: number | null
+}
+
+export interface StrategyPlan {
+  strategy: Strategy
+  /** Months until the last debt is paid; null when it never is at these payments (or past MAX_PAYOFF_MONTHS). */
+  months: number | null
+  /** The payoff month, "YYYY-MM", or ''. */
+  when: string
+  interest_cents: number
+  /** Each debt in the order it's paid off, with the month it goes. */
+  order: { id: string, name: string, months: number, when: string }[]
+}
+
+/**
+ * Every debt paid together (issue #112): each gets its own payment every
+ * month, and `extra_cents` a month, plus the payment of each debt already
+ * paid off, goes to one debt at a time: the highest rate first (avalanche;
+ * then the smaller balance) or the smallest balance first (snowball). Interest
+ * is charged monthly on what's left, at each debt's rate.
+ */
+export function strategyPlan(list: PlanDebt[], extra_cents: number, strategy: Strategy, today: string): StrategyPlan {
+  const debts = list
+    .filter(d => d.owed_cents > 0)
+    .map(d => ({ ...d, left: d.owed_cents, rate: Math.max(0, d.apr ?? 0) / 12, paid: 0 }))
+  const ranked = [...debts].sort((a, b) => strategy === 'avalanche'
+    ? b.rate - a.rate || a.owed_cents - b.owed_cents || a.name.localeCompare(b.name)
+    : a.owed_cents - b.owed_cents || b.rate - a.rate || a.name.localeCompare(b.name))
+  const budget = debts.reduce((s, d) => s + Math.max(0, d.payment_cents), 0) + Math.max(0, extra_cents)
+  let interest = 0
+  let month = 0
+  const order: StrategyPlan['order'] = []
+  while (debts.some(d => d.left > 0)) {
+    if (month >= MAX_PAYOFF_MONTHS) return { strategy, months: null, when: '', interest_cents: Math.round(interest), order }
+    month++
+    for (const d of debts) {
+      if (d.left <= 0) continue
+      const charged = d.left * d.rate
+      interest += charged
+      d.left += charged
+    }
+    // Each debt's own payment, then whatever's left of the month's money to the first in line.
+    let pool = budget
+    for (const d of debts) {
+      if (d.left <= 0) continue
+      const pay = Math.min(d.left, Math.max(0, d.payment_cents), pool)
+      d.left -= pay
+      pool -= pay
+    }
+    for (const d of ranked) {
+      if (pool <= 0) break
+      if (d.left <= 0) continue
+      const pay = Math.min(d.left, pool)
+      d.left -= pay
+      pool -= pay
+    }
+    for (const d of ranked) {
+      if (d.left <= 0.5 && !d.paid) {
+        d.left = 0
+        d.paid = month
+        order.push({ id: d.id, name: d.name, months: month, when: monthsAfter(today, month) })
+      }
+    }
+    // Nothing went anywhere this month and the debts only grow: it never ends.
+    if (budget <= 0) return { strategy, months: null, when: '', interest_cents: Math.round(interest), order }
+  }
+  return { strategy, months: month, when: monthsAfter(today, month), interest_cents: Math.round(interest), order }
+}
