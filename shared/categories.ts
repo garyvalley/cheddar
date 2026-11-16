@@ -72,8 +72,10 @@ export interface CategoryTotal {
   /** Spending: what went out, less refunds (positive is spent). Income and transfers: the net in. */
   total_cents: number;
   count: number;
-  /** The person's budget for this category, scaled to the span shown (shared/budgets.ts). */
+  /** The person's budget for this category, scaled to the span shown (shared/budgets.ts), with any carry. */
   budget_cents?: number;
+  /** For a budget that rolls over, shown for a whole month: what carried in from the months before (negative when they went over). */
+  carry_cents?: number;
 }
 
 export interface SpendingSummary {

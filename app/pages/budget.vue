@@ -15,11 +15,15 @@ const { data: plan, error, refresh } = await useFetch<BudgetPlan & { label: stri
   query: computed(() => (month.value ? { month: month.value } : {})),
 })
 
-// What's typed in each budget box, as dollars; '' for none.
+// What's typed in each budget box, as dollars; '' for none. And whether each rolls over.
 const typed = reactive<Record<string, string>>({})
+const rolls = reactive<Record<string, boolean>>({})
 const asTyped = (cents: number | null) => (cents ? (cents / 100).toFixed(2).replace(/\.00$/, '') : '')
 function reset() {
-  for (const l of plan.value?.lines ?? []) typed[l.id] = asTyped(l.budget_cents)
+  for (const l of plan.value?.lines ?? []) {
+    typed[l.id] = asTyped(l.budget_cents)
+    rolls[l.id] = l.rollover
+  }
 }
 watch(plan, reset, { immediate: true })
 
@@ -28,8 +32,14 @@ const cents = (id: string) => {
   const c = checked(id)
   return 'ok' in c ? c.ok : null
 }
-const lines = computed(() => (plan.value?.lines ?? []).map(l => ({ ...l, draft: cents(l.id), bad: 'problem' in checked(l.id), changed: cents(l.id) !== l.budget_cents && !('problem' in checked(l.id)) })))
-const totals = computed(() => planTotals(lines.value.map(l => ({ budget_cents: l.draft, spent_cents: l.spent_cents })), plan.value?.income_cents ?? 0))
+const lines = computed(() => (plan.value?.lines ?? []).map((l) => {
+  const draft = cents(l.id)
+  const bad = 'problem' in checked(l.id)
+  // A budget being removed can't roll over; what carries is the saved budget's until it's saved.
+  const roll = !!draft && !!rolls[l.id]
+  return { ...l, draft, bad, roll, carry: roll ? l.carry_cents : 0, changed: !bad && (draft !== l.budget_cents || (!!draft && roll !== l.rollover)) }
+}))
+const totals = computed(() => planTotals(lines.value.map(l => ({ budget_cents: l.draft, spent_cents: l.spent_cents, carry_cents: l.carry })), plan.value?.income_cents ?? 0))
 const changed = computed(() => lines.value.filter(l => l.changed))
 const suggestable = computed(() => lines.value.filter(l => !l.draft && l.suggested_cents))
 const suggestedNow = ref(new Set<string>())
@@ -48,7 +58,7 @@ async function saveAll() {
   notice.value = ''
   const list = changed.value
   if (!await save.succeed(async () => {
-    for (const l of list) await $fetch(`/api/budgets/${l.id}`, { method: 'PUT', body: { amount: l.draft ? (l.draft / 100).toFixed(2) : '' } })
+    for (const l of list) await $fetch(`/api/budgets/${l.id}`, { method: 'PUT', body: { amount: l.draft ? (l.draft / 100).toFixed(2) : '', ...(l.draft ? { rollover: l.roll } : {}) } })
   })) return
   suggestedNow.value = new Set()
   await refresh()
@@ -87,7 +97,8 @@ function doMove() {
 }
 
 const go = (m: string) => router.push({ query: { ...route.query, month: m } })
-const left = (l: { draft: number | null, spent_cents: number }) => (l.draft ?? 0) - l.spent_cents
+const left = (l: { draft: number | null, carry: number, spent_cents: number }) => (l.draft ?? 0) + l.carry - l.spent_cents
+const available = (l: { draft: number | null, carry: number }) => Math.max(1, (l.draft ?? 0) + l.carry)
 </script>
 
 <template>
@@ -112,6 +123,7 @@ const left = (l: { draft: number | null, spent_cents: number }) => (l.draft ?? 0
         <div class="card card-pad">
           <dl class="figures" data-test="plan-totals">
             <div><dt>Planned</dt><dd class="num" data-test="planned">{{ formatCents(totals.planned_cents) }}</dd></div>
+            <div v-if="totals.carry_cents"><dt>Rolled over</dt><dd class="num" :class="moneyTone(totals.carry_cents)" data-test="carried">{{ totals.carry_cents > 0 ? '+' : '−' }}{{ formatCents(Math.abs(totals.carry_cents)) }}</dd></div>
             <div><dt>Spent in budgeted</dt><dd class="num" :class="spendTone(totals.spent_budgeted_cents)">{{ formatCents(totals.spent_budgeted_cents) }}</dd></div>
             <div>
               <dt>{{ totals.remaining_cents >= 0 ? 'Left in the plan' : 'Over the plan' }}</dt>
@@ -127,6 +139,7 @@ const left = (l: { draft: number | null, spent_cents: number }) => (l.draft ?? 0
           <p class="footnote muted">
             A plan is what your spending should come to. It doesn't set money aside or move any: your accounts hold what they hold.
             Budgets repeat every month; savings goals are on <NuxtLink to="/goals">Goals</NuxtLink>.
+            Tick Roll over on a budget for something that doesn't come every month, such as car repairs or gifts: what a month leaves carries into the next, from the month you tick it, and overspending comes off the next one.
           </p>
         </div>
       </section>
@@ -170,7 +183,11 @@ const left = (l: { draft: number | null, spent_cents: number }) => (l.draft ?? 0
                   · <span v-if="left(l) < 0" class="loss">{{ formatCents(-left(l)) }} over</span><template v-else>{{ formatCents(left(l)) }} left</template>
                 </template>
               </span>
-              <span v-if="l.draft" class="bar" aria-hidden="true"><span class="bar-fill" :class="left(l) < 0 ? 'over' : 'under'" :style="{ width: `${Math.min(100, Math.max(0, l.spent_cents / l.draft * 100)).toFixed(1)}%` }" /></span>
+              <span v-if="l.carry" class="footnote block" data-test="carry">
+                <template v-if="l.carry > 0"><span class="gain">{{ formatCents(l.carry) }}</span> rolled over from earlier months</template>
+                <template v-else><span class="loss">{{ formatCents(-l.carry) }}</span> overspent in earlier months comes off this one</template>
+              </span>
+              <span v-if="l.draft" class="bar" aria-hidden="true"><span class="bar-fill" :class="left(l) < 0 ? 'over' : 'under'" :style="{ width: `${Math.min(100, Math.max(0, l.spent_cents / available(l) * 100)).toFixed(1)}%` }" /></span>
               <span v-if="suggestedNow.has(l.id) && l.changed" class="footnote block hint">Suggested from the last 3 months. Change it or clear it before you save.</span>
               <button v-else-if="!l.draft && l.suggested_cents" class="btn btn-plain suggest" type="button" @click="useSuggestion(l.id, l.suggested_cents)">
                 Suggested: {{ formatCents(l.suggested_cents) }} (3-month average)
@@ -181,6 +198,10 @@ const left = (l: { draft: number | null, spent_cents: number }) => (l.draft ?? 0
               <input v-model="typed[l.id]" class="input num" inputmode="decimal" placeholder="No budget" :aria-invalid="l.bad" data-test="budget">
               <span v-if="l.bad" class="footnote loss">Enter an amount, like 250.</span>
               <span v-else-if="l.changed" class="footnote changed">Not saved</span>
+            </label>
+            <label v-if="l.draft" class="roll" :title="`Carry what ${l.label} leaves each month, or overspends, into the next`">
+              <input v-model="rolls[l.id]" type="checkbox" data-test="rollover">
+              <span class="footnote">Roll over</span>
             </label>
           </div>
         </div>
@@ -222,6 +243,8 @@ const left = (l: { draft: number | null, spent_cents: number }) => (l.draft ?? 0
 .name { color: var(--text); font-weight: 500; }
 .amount { flex: 0 0 9rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .amount .input { text-align: right; }
+.roll { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 0.125rem; min-width: 4.5rem; padding-top: 0.625rem; }
+.roll input { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); }
 .changed { color: var(--warning); font-weight: 600; text-align: right; }
 .hint { color: var(--warning); }
 .suggest { min-height: 2rem; padding: 0; font-size: 0.875rem; font-weight: 500; }
