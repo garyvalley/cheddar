@@ -2,12 +2,13 @@
 import { formatCents, type Transaction } from '~~/shared/accounts'
 import { categoryOf, type Category } from '~~/shared/categories'
 import { leftOver } from '~~/shared/splits'
+import { sameTag, TAG_MAX, TAGS_MAX } from '~~/shared/tags'
 import { DESCRIPTION_MAX, NOTE_MAX, PAYEE_MAX, checkEdit, shownName, type Direction } from '~~/shared/transactions'
 
 // A list of transactions on Spending (a category's, every one, or a
 // search's). Each can move to another category (the rest of that merchant's
 // follow), and can be opened to give it a name of the person's own, a note,
-// or to leave it out of the totals, or split across categories
+// tags, or to leave it out of the totals, or split across categories
 // (SpendingSplit.vue). One added by hand can change entirely, or be deleted.
 
 const props = defineProps<{
@@ -18,6 +19,8 @@ const props = defineProps<{
   showAccount: boolean
   busy: boolean
   reviewMode?: boolean
+  /** Every tag the person has used, offered as they tag one. */
+  knownTags?: string[]
 }>()
 // What changed, said once the page has the new totals (the list may no longer hold it).
 const emit = defineEmits<{ changed: [message: string], reviewed: [ids: string[]] }>()
@@ -70,24 +73,24 @@ async function createFor(t: Transaction) {
   await recategorize(t, r.category.id)
 }
 
-// Changing one: its name, a note, leaving it out; all of it for one added by hand.
+// Changing one: its name, a note, tags, leaving it out; all of it for one added by hand.
 const edit = useAction()
 const editing = ref('')
 const deleting = ref(false)
-const form = reactive({ payee: '', note: '', excluded: false, posted: '', amount: '', direction: 'out' as Direction, description: '' })
+const form = reactive({ payee: '', note: '', tags: '', excluded: false, posted: '', amount: '', direction: 'out' as Direction, description: '' })
 function open(t: Transaction) {
   splitting.value = ''
   edit.error.value = ''
   deleting.value = false
   Object.assign(form, {
-    payee: t.payee, note: t.note, excluded: t.excluded, posted: t.posted,
+    payee: t.payee, note: t.note, tags: t.tags.join(', '), excluded: t.excluded, posted: t.posted,
     amount: (Math.abs(t.amount_cents) / 100).toFixed(2), direction: t.amount_cents > 0 ? 'in' : 'out', description: t.description,
   })
   editing.value = editing.value === t.id ? '' : t.id
 }
 async function save(t: Transaction) {
   const manual = t.source === 'manual' && !t.shared
-  const change: Record<string, unknown> = { payee: form.payee, note: form.note, excluded: form.excluded }
+  const change: Record<string, unknown> = { payee: form.payee, note: form.note, tags: form.tags, excluded: form.excluded }
   if (manual) Object.assign(change, { posted: form.posted, amount: form.amount, direction: form.direction, description: form.description })
   const checked = checkEdit(change, manual)
   if ('problem' in checked) {
@@ -100,6 +103,12 @@ async function save(t: Transaction) {
   emit('changed', form.excluded && !t.excluded
     ? `${name} is left out of spending and taxes now. It stays listed here.`
     : !form.excluded && t.excluded ? `${name} counts again.` : `Saved ${name}.`)
+}
+// Tags used before that this one hasn't got yet, to add with a tap.
+const typedTags = computed(() => form.tags.split(',').map(t => t.trim()).filter(Boolean))
+const offered = computed(() => (props.knownTags ?? []).filter(k => !typedTags.value.some(t => sameTag(t, k))).slice(0, 12))
+function addTag(tag: string) {
+  form.tags = [...typedTags.value, tag].join(', ')
 }
 // Splitting one across categories: in place of the form, from it or from the row's chip.
 const splitting = ref('')
@@ -144,6 +153,7 @@ watch(() => props.items, () => {
             <span v-else-if="t.splits.length" class="footnote block parts">{{ partsText(t) }}</span>
             <span v-if="leftOver(t)" class="badge badge-warn">Split needs fixing</span>
             <span v-if="t.excluded" class="badge badge-off">Left out</span>
+            <span v-if="t.tags.length" class="block tags"><span v-for="tag in t.tags" :key="tag" class="tag">{{ tag }}</span></span>
             <span v-if="t.note" class="footnote block note">{{ t.note }}</span>
           </button>
           <span class="tx-side">
@@ -210,12 +220,22 @@ watch(() => props.items, () => {
             <span class="field-label">Note (optional)</span>
             <textarea v-model="form.note" class="input note-input" :maxlength="NOTE_MAX" rows="2" />
           </label>
+          <div class="field">
+            <label>
+              <span class="field-label">Tags (optional)</span>
+              <input v-model="form.tags" class="input" :maxlength="TAGS_MAX * (TAG_MAX + 2)" placeholder="Vacation 2026, Reimbursable" autocomplete="off">
+            </label>
+            <span class="footnote block">Separate them with commas. Tags cut across categories, and Spending totals each one.</span>
+            <span v-if="offered.length" class="offered">
+              <button v-for="k in offered" :key="k" type="button" class="tag add" :aria-label="`Add the tag ${k}`" @click="addTag(k)">+ {{ k }}</button>
+            </span>
+          </div>
           <label class="check">
             <input v-model="form.excluded" type="checkbox">
             <span>Leave out of spending, Overview, Projections and Taxes</span>
           </label>
           <p class="footnote">
-            <template v-if="t.shared">Shared by another household member. You can change its name, note, or whether it counts.</template>
+            <template v-if="t.shared">Shared by another household member. You can change its name, note, tags, or whether it counts.</template>
             <template v-else-if="t.source === 'manual'">You added this one by hand.</template>
             <template v-else>Its date, amount and description are what your {{ t.source === 'sync' ? 'bank sent' : 'statement says' }}. A name you give it groups it with that merchant.</template>
           </p>
@@ -255,6 +275,14 @@ watch(() => props.items, () => {
 .opener .badge { margin-left: 0; margin-top: 0.25rem; display: inline-block; }
 .parts { color: var(--text-2); margin-top: 0.125rem; }
 .badge-warn { background: color-mix(in srgb, var(--warning) 16%, var(--surface)); color: var(--warning); }
+.tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; }
+.tag {
+  display: inline-block; padding: 0.0625rem 0.5rem; border-radius: 999px; border: 1px solid var(--separator);
+  font-size: 0.75rem; line-height: 1.4; color: var(--text-2); background: var(--surface);
+}
+.offered { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
+.tag.add { min-height: 2rem; padding: 0.125rem 0.625rem; font: inherit; font-size: 0.8125rem; color: var(--accent); cursor: pointer; }
+.tag.add:hover { background: var(--accent-soft); }
 .note { color: var(--text-2); font-style: italic; white-space: pre-line; margin-top: 0.125rem; }
 .out .amount { opacity: 0.55; text-decoration: line-through; }
 .tx-side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }

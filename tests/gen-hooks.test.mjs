@@ -18,7 +18,7 @@ test('every generated file is fresh: run pnpm gen:hooks after changing shared/',
 })
 
 test('each loads as the hooks require it, with the exports they use', () => {
-  const uses = { categories: ['CATEGORIES', 'isCategory', 'isCustomId'], contact: ['checkContact', 'topicLabel', 'KEEP_DAYS'], legal: ['hasAgreed'], overlap: ['around', 'nearest'], review: ['isHistory', 'reviewFrom'], rules: ['checkRule', 'actionsFor', 'RULES_MAX'], splits: ['checkStored', 'moveParts'] }
+  const uses = { categories: ['CATEGORIES', 'isCategory', 'isCustomId'], contact: ['checkContact', 'topicLabel', 'KEEP_DAYS'], legal: ['hasAgreed'], overlap: ['around', 'nearest'], review: ['isHistory', 'reviewFrom'], rules: ['checkRule', 'actionsFor', 'RULES_MAX'], splits: ['checkStored', 'moveParts'], tags: ['checkTags'] }
   for (const name of MODULES) {
     const m = loadHookModule(`pb_hooks/lib/gen/${name}.js`)
     for (const fn of uses[name]) assert.ok(m[fn], `${name}.${fn}`)

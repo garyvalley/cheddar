@@ -1,14 +1,16 @@
 import type { H3Event } from "h3";
 import { isCategoryRef } from "~~/shared/categories";
+import { cleanTag, tagProblem } from "~~/shared/tags";
 import { amountRange } from "~~/shared/transactions";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The filters a list or download of transactions takes from the query
- * (?account=&category=&from=&to=&q=&min=&max=&reviewed=&history=), each optional, or a 400/404
+ * (?account=&category=&from=&to=&q=&tag=&min=&max=&reviewed=&history=), each optional, or a 400/404
  * for one that isn't right. `q` is words the description, name or note
- * contain; `min` and `max` are an amount's size in dollars, in or out.
+ * contain; `tag` one of its tags; `min` and `max` are an amount's size in
+ * dollars, in or out.
  */
 export function readTransactionQuery(event: H3Event) {
   const q = getQuery(event);
@@ -51,6 +53,11 @@ export function readTransactionQuery(event: H3Event) {
       statusCode: 400,
       statusMessage: "Search for at most 100 characters",
     });
+  if (q.tag !== undefined && typeof q.tag !== "string")
+    throw createError({ statusCode: 400, statusMessage: "Pick one tag" });
+  const tag = cleanTag(q.tag);
+  if (tag && tagProblem(tag))
+    throw createError({ statusCode: 400, statusMessage: tagProblem(tag) });
   const range = amountRange(q.min, q.max);
   if ("problem" in range)
     throw createError({ statusCode: 400, statusMessage: range.problem });
@@ -60,6 +67,7 @@ export function readTransactionQuery(event: H3Event) {
     from: date(q.from),
     to: date(q.to),
     q: words || undefined,
+    tag: tag || undefined,
     reviewed: q.reviewed === undefined ? undefined : q.reviewed === "true",
     history: q.history === undefined ? undefined : q.history === "true",
     ...range.ok,

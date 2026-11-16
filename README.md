@@ -181,8 +181,12 @@ tunnel, repository secrets) and day-to-day operations.
     one and move it there; Cheddar remembers it for that merchant like any
     other. Rename or delete it on its own page; deleting one sorts its
     transactions again on their own.
+  - **Tags** cut across categories: "Vacation 2026", "Reimbursable",
+    "Tax-deductible". Open a transaction to tag it (a few per transaction).
+    Spending lists each tag's total for the period, and the search can find
+    every transaction with one tag, on any date.
   - **Download CSV** saves the transactions for the period, account and
-    category you're looking at as a spreadsheet.
+    category you're looking at as a spreadsheet, tags included.
 - **Plan ahead.** Goals (linked from Overview) track a target, an earmarked
   amount and an optional date. Cash flow (linked from Spending) combines the
   current balances of your own accounts with planned income and expenses and
@@ -194,7 +198,7 @@ tunnel, repository secrets) and day-to-day operations.
 - **Share selected accounts with a household** (Settings → Household). The
   owner invites verified Cheddar users; an invite must be accepted before
   access is granted. Household members can see selected accounts and their
-  transactions, and edit transaction names, notes and exclusions. Only the
+  transactions, and edit transaction names, notes, tags and exclusions. Only the
   owner can manage accounts, balances, bank links, categories and merchant
   rules. Unshared accounts, tax settings, Projections, cash-flow schedules and
   personal exports remain private. Removing a member or unsharing an account

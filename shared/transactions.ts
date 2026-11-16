@@ -7,10 +7,12 @@
  *   keeps up to date) is the person's own: every field can change, and it can
  *   be deleted.
  * - One from a bank or a statement keeps the bank's date, amount and words;
- *   only the payee (the name it's shown and grouped by), a note and whether
- *   it's left out can change.
+ *   only the payee (the name it's shown and grouped by), a note, its tags and
+ *   whether it's left out can change.
  * - Its category is never set here: pb_hooks/categories.pb.js alone sorts it.
  */
+
+import { checkTags } from './tags.ts'
 
 export const NOTE_MAX = 1000
 export const DESCRIPTION_MAX = 500
@@ -58,6 +60,8 @@ export interface EditFields {
   posted?: string
   amount_cents?: number
   description?: string
+  /** Its tags (shared/tags.ts); null takes them all off. */
+  tags?: string[] | null
 }
 
 type Checked<T> = { ok: T } | { problem: string }
@@ -121,6 +125,11 @@ export function checkEdit(input: Record<string, unknown>, manual: boolean): Chec
     const note = textField(input.note, NOTE_MAX, 'note')
     if ('problem' in note) return note
     out.note = note.ok
+  }
+  if (input.tags !== undefined) {
+    const tags = checkTags(input.tags)
+    if ('problem' in tags) return tags
+    out.tags = tags.tags
   }
   if (input.excluded !== undefined) {
     if (typeof input.excluded !== 'boolean') return { problem: 'Say whether to leave it out.' }

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { formatCents, type Account, type Transaction } from '~~/shared/accounts'
 import { BUILT_IN, categoryOf, isCategoryRef, isPeriodKind, parseRange, periodOf, type Category, type SpendingSummary } from '~~/shared/categories'
+import type { TagTotal } from '~~/shared/tags'
 
 // Spending only reads the accounts set up in Settings. Every transaction is
 // sorted into a category on its own; what a person does here is move one
 // that landed in the wrong place (the rest of that merchant's follow), make
 // categories of their own to move them into, search, add one by hand, and
-// change or leave out one (components/spending/SpendingTransactions.vue).
+// change, tag or leave out one (components/spending/SpendingTransactions.vue).
 
 const route = useRoute()
 const router = useRouter()
@@ -27,13 +28,14 @@ const page = computed(() => Math.max(1, Number.parseInt(text(route.query.page), 
 const q = computed(() => text(route.query.q))
 const min = computed(() => text(route.query.min))
 const max = computed(() => text(route.query.max))
-const searching = computed(() => !!(q.value || min.value || max.value))
+const tag = computed(() => text(route.query.tag))
+const searching = computed(() => !!(q.value || min.value || max.value || tag.value))
 
 function go(change: Record<string, string | undefined>) {
   const query: Record<string, string> = {}
   const next = {
     period: kind.value === 'month' ? undefined : kind.value, at: text(route.query.at) || undefined, account: account.value || undefined, category: category.value || undefined,
-    q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, review: reviewMode.value ? 'true' : undefined, history: withHistory.value ? 'true' : undefined, page: undefined, ...change,
+    q: q.value || undefined, min: min.value || undefined, max: max.value || undefined, tag: tag.value || undefined, review: reviewMode.value ? 'true' : undefined, history: withHistory.value ? 'true' : undefined, page: undefined, ...change,
   }
   for (const [k, v] of Object.entries(next)) if (v) query[k] = v
   return router.push({ query })
@@ -66,7 +68,7 @@ const listQuery = computed(() => {
     query.reviewed = 'false'
     if (!withHistory.value) query.history = 'false'
   }
-  else if (searching.value) Object.assign(query, { q: q.value, min: min.value, max: max.value })
+  else if (searching.value) Object.assign(query, { q: q.value, min: min.value, max: max.value, tag: tag.value })
   else {
     Object.assign(query, { from: period.value.from, to: period.value.to })
     if (category.value && category.value !== 'all') query.category = category.value
@@ -97,27 +99,33 @@ const csvWhat = computed(() => {
   return category.value && category.value !== 'all' ? `${label(category.value)} for ${period.value.label}` : `every transaction for ${period.value.label}`
 })
 
-// Searching by words and an amount's size.
-const search = reactive({ q: q.value, min: min.value, max: max.value })
-watch([q, min, max], () => Object.assign(search, { q: q.value, min: min.value, max: max.value }))
+// Searching by words, an amount's size and a tag.
+const search = reactive({ q: q.value, min: min.value, max: max.value, tag: tag.value })
+watch([q, min, max, tag], () => Object.assign(search, { q: q.value, min: min.value, max: max.value, tag: tag.value }))
 const sizing = ref(!!(min.value || max.value))
 function find() {
   const words = search.q.trim()
-  if (!words && !search.min.trim() && !search.max.trim()) return clearSearch()
-  return go({ q: words || undefined, min: search.min.trim() || undefined, max: search.max.trim() || undefined, category: undefined, review: undefined, history: undefined })
+  if (!words && !search.min.trim() && !search.max.trim() && !search.tag) return clearSearch()
+  return go({ q: words || undefined, min: search.min.trim() || undefined, max: search.max.trim() || undefined, tag: search.tag || undefined, category: undefined, review: undefined, history: undefined })
 }
 function clearSearch() {
-  Object.assign(search, { q: '', min: '', max: '' })
+  Object.assign(search, { q: '', min: '', max: '', tag: '' })
   sizing.value = false
-  return go({ q: undefined, min: undefined, max: undefined, review: undefined, history: undefined })
+  return go({ q: undefined, min: undefined, max: undefined, tag: undefined, review: undefined, history: undefined })
 }
 function showReview(value: boolean) {
-  return go({ review: value ? 'true' : undefined, history: undefined, category: undefined, q: undefined, min: undefined, max: undefined, page: undefined })
+  return go({ review: value ? 'true' : undefined, history: undefined, category: undefined, q: undefined, min: undefined, max: undefined, tag: undefined, page: undefined })
 }
 const found = computed(() => {
   const size = min.value && max.value ? `$${min.value} to $${max.value}` : min.value ? `$${min.value} or more` : max.value ? `up to $${max.value}` : ''
   const what = [q.value && `“${q.value}”`, size].filter(Boolean).join(', ')
-  return `${txs.value.total.toLocaleString()} ${txs.value.total === 1 ? 'transaction' : 'transactions'} for ${what}, any date`
+  return `${txs.value.total.toLocaleString()} ${txs.value.total === 1 ? 'transaction' : 'transactions'}${what ? ` for ${what}` : ''}${tag.value ? ` tagged ${tag.value}` : ''}, any date`
+})
+
+// Tags: each one's total for the period, and every one used, to offer when tagging.
+const { data: tagData, refresh: refreshTags } = await useFetch<{ totals: TagTotal[], known: string[] }>('/api/tags', {
+  query: { from: computed(() => period.value.from), to: computed(() => period.value.to), account },
+  default: () => ({ totals: [], known: [] }),
 })
 
 // Something changed (moved, edited, added, deleted): the totals follow, then it's said.
@@ -127,7 +135,7 @@ const canAdd = computed(() => list.value.accounts.some(a => a.owned !== false &&
 const adding = ref(false)
 async function changed(message: string) {
   notice.value = ''
-  await Promise.all([refreshSummary(), refreshTxs(), reviewMode.value ? refreshWaiting() : undefined])
+  await Promise.all([refreshSummary(), refreshTxs(), refreshTags(), reviewMode.value ? refreshWaiting() : undefined])
   notice.value = message
 }
 async function markReviewed(ids: string[]) {
@@ -144,7 +152,7 @@ const comparison = computed(() => {
   return `${formatCents(Math.abs(now - was))} ${now > was ? 'more' : 'less'} than ${before}.`
 })
 
-watch([category, q, min, max], () => { renaming.value = false; deleting.value = false; notice.value = ''; budgeting.value = false })
+watch([category, q, min, max, tag], () => { renaming.value = false; deleting.value = false; notice.value = ''; budgeting.value = false })
 
 // A custom range: two dates, kept in the address as "from~to".
 const range = reactive({ from: period.value.from, to: period.value.to })
@@ -256,6 +264,14 @@ async function confirmDelete() {
             <label class="size"><span class="visually-hidden">Amount from</span><input v-model="search.min" class="input num" inputmode="decimal" placeholder="From $0"></label>
             <label class="size"><span class="visually-hidden">to</span><input v-model="search.max" class="input num" inputmode="decimal" placeholder="To any"></label>
           </template>
+          <label v-if="tagData.known.length || search.tag" class="tag-pick">
+            <span class="visually-hidden">Tag</span>
+            <select v-model="search.tag" class="select">
+              <option value="">Any tag</option>
+              <option v-for="k in tagData.known" :key="k" :value="k">{{ k }}</option>
+              <option v-if="search.tag && !tagData.known.includes(search.tag)" :value="search.tag">{{ search.tag }}</option>
+            </select>
+          </label>
           <button class="btn btn-tinted">Search</button>
           <button v-if="!sizing" type="button" class="link" @click="sizing = true">By amount</button>
           <a class="link csv" :href="csvHref" :title="`Download ${csvWhat} as a spreadsheet`" download>Download CSV</a>
@@ -291,13 +307,13 @@ async function confirmDelete() {
           <div v-else-if="!txs.items.length" class="card card-pad">
             <p class="muted">Nothing matches. Try fewer words, or a wider amount.</p>
           </div>
-          <SpendingTransactions v-else :items="txs.items" :categories="all" :names="names" :show-account="!account" :busy="pending" :review-mode="reviewMode" @changed="changed" @reviewed="markReviewed" />
+          <SpendingTransactions v-else :items="txs.items" :categories="all" :names="names" :show-account="!account" :busy="pending" :review-mode="reviewMode" :known-tags="tagData.known" @changed="changed" @reviewed="markReviewed" />
           <div v-if="txs.pages > 1" class="btn-row pager">
             <button class="btn btn-plain" :disabled="page <= 1" @click="go({ page: String(page - 1) })">Newer</button>
             <span class="footnote">Page {{ txs.page }} of {{ txs.pages }}</span>
             <button class="btn btn-plain" :disabled="page >= txs.pages" @click="go({ page: String(page + 1) })">Older</button>
           </div>
-          <p class="group-footer">Open one to give it a name of your own, add a note, split it across categories, or leave it out of spending and taxes.</p>
+          <p class="group-footer">Open one to give it a name of your own, add a note or tags, split it across categories, or leave it out of spending and taxes.</p>
         </section>
       </template>
 
@@ -364,7 +380,7 @@ async function confirmDelete() {
           <div v-else-if="!txs.items.length" class="card card-pad">
             <p class="muted">{{ category === 'all' ? 'No transactions' : `Nothing in ${label(category)}` }} for {{ period.label }}.</p>
           </div>
-          <SpendingTransactions v-else :items="txs.items" :categories="all" :names="names" :show-account="!account" :busy="pending" @changed="changed" />
+          <SpendingTransactions v-else :items="txs.items" :categories="all" :names="names" :show-account="!account" :busy="pending" :known-tags="tagData.known" @changed="changed" />
           <div v-if="txs.pages > 1" class="btn-row pager">
             <button class="btn btn-plain" :disabled="page <= 1" @click="go({ page: String(page - 1) })">Newer</button>
             <span class="footnote">Page {{ txs.page }} of {{ txs.pages }}</span>
@@ -444,6 +460,22 @@ async function confirmDelete() {
             <p class="group-footer">Neither counts as spending, nor does paying off a card: its purchases already count.</p>
           </section>
 
+          <section v-if="tagData.totals.length" class="group" aria-labelledby="tags-title">
+            <h2 id="tags-title" class="group-title">Tags</h2>
+            <ul class="card list">
+              <li v-for="t in tagData.totals" :key="t.tag">
+                <NuxtLink :to="{ query: { account: account || undefined, tag: t.tag } }" class="row cat">
+                  <span class="row-label">
+                    <span class="cat-head"><span class="cat-name">{{ t.tag }}</span><span class="num" :class="spendTone(t.out_cents)">{{ formatCents(t.out_cents) }}</span></span>
+                    <span class="caption">{{ t.count.toLocaleString() }} {{ t.count === 1 ? 'transaction' : 'transactions' }} in {{ period.label }}<template v-if="t.in_cents"> · {{ formatCents(t.in_cents) }} came in</template></span>
+                  </span>
+                  <AppIcon name="chevron" class="chev" />
+                </NuxtLink>
+              </li>
+            </ul>
+            <p class="group-footer">Money out for each tag in {{ period.label }}. Open one to see everything with that tag, on any date. Tag a transaction by opening it.</p>
+          </section>
+
           <SpendingRecurring :account="account" :names="names" />
         </div>
       </div>
@@ -462,6 +494,7 @@ async function confirmDelete() {
 .pick .select { width: auto; min-width: 12rem; max-width: 100%; background: var(--surface); border-color: var(--separator); }
 .search .input { flex: 1 1 14rem; width: auto; min-width: 0; background: var(--surface); border-color: var(--separator); }
 .search .size { flex: 0 1 8rem; min-width: 0; }
+.tag-pick .select { width: auto; max-width: 12rem; background: var(--surface); border-color: var(--separator); }
 .search .size .input { width: 100%; }
 .csv { margin-left: auto; }
 .search .link { display: inline-flex; align-items: center; min-height: 2.75rem; font-size: 0.9375rem; }
