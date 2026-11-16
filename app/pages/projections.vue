@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCents } from '~~/shared/accounts'
-import { debtPlan, MAX_PAYOFF_MONTHS, project, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
+import { debtPlan, MAX_PAYOFF_MONTHS, project, STRATEGIES, strategyPlan, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
 
 // Projections only read what the accounts hold (set up in Settings): the
 // savings rate from the last whole months, today's investments, and how fast
@@ -23,9 +23,9 @@ const span = (months: number) => {
 }
 
 // Assumptions, kept in this browser for this person.
-interface Saved { years: number, returnPct: number, monthly: string, debts: Record<string, { payment?: string, apr?: string }> }
+interface Saved { years: number, returnPct: number, monthly: string, extra: string, debts: Record<string, { payment?: string, apr?: string }> }
 const key = computed(() => `cheddar:projections:${me.value?.id ?? ''}`)
-const saved = reactive<Saved>({ years: 25, returnPct: 5, monthly: '', debts: {} })
+const saved = reactive<Saved>({ years: 25, returnPct: 5, monthly: '', extra: '', debts: {} })
 onMounted(() => {
   try {
     const raw = localStorage.getItem(key.value)
@@ -102,6 +102,24 @@ function paceFrom(d: Debt) {
   if (d.basis === 'balances') return `how fast its balance has come down since ${dayName(d.pace_since)}`
   return ''
 }
+// Every debt together (issue #112): an extra amount a month to one debt at a time, avalanche against snowball.
+const extra = computed(() => dollars(saved.extra) ?? 0)
+const extraBad = computed(() => saved.extra.trim() !== '' && dollars(saved.extra) === null)
+const owing = computed(() => plans.value.filter(p => p.status !== 'paid'))
+const strategies = computed(() => {
+  const list = owing.value.map(p => ({ id: p.d.id, name: p.d.name, owed_cents: p.d.owed_cents, payment_cents: p.payment_cents, apr: p.apr }))
+  const base = strategyPlan(list, 0, 'avalanche', today)
+  return { base, plans: STRATEGIES.map(s => ({ ...s, ...strategyPlan(list, extra.value, s.id, today) })) }
+})
+const sameOrder = computed(() => {
+  const [a, b] = strategies.value.plans
+  return !!a && !!b && a.order.map(d => d.id).join() === b.order.map(d => d.id).join()
+})
+const cheaper = computed(() => {
+  const [a, b] = strategies.value.plans
+  if (!a || !b || a.months === null || b.months === null) return null
+  return a.interest_cents === b.interest_cents ? null : a.interest_cents < b.interest_cents ? { by: a, other: b } : { by: b, other: a }
+})
 function setDebt(id: string, field: 'payment' | 'apr', value: string) {
   saved.debts[id] = { ...saved.debts[id], [field]: value }
 }
@@ -225,7 +243,40 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
               Past {{ MAX_PAYOFF_MONTHS / 12 }} years counts as never. This browser remembers what you enter.
             </p>
           </div>
-          <div v-else class="card card-pad">
+          <div v-if="owing.length > 1" class="card strategies" data-test="strategies">
+            <div class="card-pad">
+              <h3 class="headline">Pay them off together</h3>
+              <p class="footnote">
+                Keep paying each its own payment, add an extra amount a month, and send it, with each paid-off debt's payment, to one debt at a time.
+              </p>
+              <label class="extra">
+                <span class="field-label">Extra each month</span>
+                <input v-model="saved.extra" class="input num" inputmode="decimal" placeholder="$0" :aria-invalid="extraBad" data-test="extra">
+                <span v-if="extraBad" class="footnote loss">Enter an amount, like 200.</span>
+              </label>
+            </div>
+            <div class="compare">
+              <div v-for="sp in strategies.plans" :key="sp.id" class="plan" :data-test="`strategy-${sp.id}`">
+                <p class="headline">{{ sp.label }}</p>
+                <p class="footnote">{{ sp.rule }}</p>
+                <template v-if="sp.months !== null">
+                  <p class="num title-2">{{ monthName(sp.when, true) }}</p>
+                  <p class="footnote">Debt free in {{ span(sp.months) }} · <span class="num">{{ formatCents(sp.interest_cents) }}</span> interest</p>
+                  <ol class="order footnote">
+                    <li v-for="d in sp.order" :key="d.id">{{ d.name }} <span class="muted">· {{ monthName(d.when, true) }}</span></li>
+                  </ol>
+                </template>
+                <p v-else class="footnote"><span class="loss">Never:</span> these payments don't outrun the interest. Add more each month.</p>
+              </div>
+            </div>
+            <p class="footnote card-pad note">
+              <template v-if="sameOrder">Both pay them off in the same order here. </template>
+              <template v-if="cheaper">{{ cheaper.by.label }} saves {{ formatCents(cheaper.other.interest_cents - cheaper.by.interest_cents) }} in interest over {{ cheaper.other.label.toLowerCase() }}. </template>
+              <template v-if="strategies.base.months !== null && extra > 0">Without the extra: {{ monthName(strategies.base.when, true) }}, {{ formatCents(strategies.base.interest_cents) }} interest. </template>
+              Uses each debt's payment and APR above{{ noRate.length ? '; interest is left out where there is no APR' : '' }}.
+            </p>
+          </div>
+          <div v-else-if="!plans.length" class="card card-pad">
             <p class="footnote">No card or loan owes anything. Cards and loans you add in <NuxtLink to="/settings#accounts">Settings</NuxtLink> show when they'll be paid off here.</p>
           </div>
         </section>
@@ -367,6 +418,14 @@ function setDebt(id: string, field: 'payment' | 'apr', value: string) {
 .link:hover { text-decoration: underline; }
 
 .debt + .debt { border-top: var(--border); }
+.strategies { margin-top: 1rem; }
+.extra { display: flex; flex-direction: column; gap: 0.25rem; max-width: 12rem; margin-top: 0.75rem; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; border-top: var(--border); }
+.compare .plan { padding: 0.875rem 1rem; }
+.compare .plan + .plan { border-left: var(--border); }
+.compare p { margin: 0 0 0.25rem; }
+.order { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+@media (max-width: 30rem) { .compare { grid-template-columns: 1fr; } .compare .plan + .plan { border-left: 0; border-top: var(--border); } }
 .debt .row-value { display: flex; flex-direction: column; align-items: flex-end; }
 .debt-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; padding: 0 1rem 0.875rem; }
 .debt-fields label { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
