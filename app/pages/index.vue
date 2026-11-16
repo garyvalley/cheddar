@@ -172,6 +172,9 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
       </div>
     </section>
 
+    <!-- The next week's bills and planned money, and price rises (shared/upcoming.ts). -->
+    <OverviewUpcoming />
+
     <p v-if="error" class="notice notice-error group" role="alert">{{ errorMessage(error) }}</p>
 
     <div class="dash">

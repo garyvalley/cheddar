@@ -188,7 +188,9 @@ tunnel, repository secrets) and day-to-day operations.
   current balances of your own accounts with planned income and expenses and
   detected regular charges over 30, 60 or 90 days. Forecasts are estimates:
   Cheddar never schedules or makes payments. Goals and forecasts do not change
-  account balances or net worth.
+  account balances or net worth. Overview's **Coming up this week** lists
+  the next seven days of it, and warns when a subscription's latest charge
+  cost more than before.
 - **Share selected accounts with a household** (Settings → Household). The
   owner invites verified Cheddar users; an invite must be accepted before
   access is granted. Household members can see selected accounts and their
