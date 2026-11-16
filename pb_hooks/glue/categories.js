@@ -7,6 +7,7 @@
 
 var cats = require(`${__hooks}/lib/categories.js`);
 var splits = require(`${__hooks}/lib/gen/splits.js`);
+var rules = require(`${__hooks}/lib/gen/rules.js`);
 
 /** The person's custom category with this id ("c-..."), or null. */
 function customOf(app, owner, id) {
@@ -41,6 +42,44 @@ function ruleFor(app, owner, merchant) {
   }
 }
 
+/** A transaction_rules record as shared/rules.ts's Rule. */
+function ruleOf(r) {
+  // JSON fields, so "no limit" can be null: read as their raw text.
+  var num = function (f) {
+    var v = null;
+    try {
+      v = JSON.parse(r.getString(f) || "null");
+    } catch (_) {
+      /* not a number: no limit */
+    }
+    return typeof v === "number" ? v : null;
+  };
+  return {
+    id: r.id,
+    text: r.getString("text"),
+    min_cents: num("min_cents"),
+    max_cents: num("max_cents"),
+    account: r.getString("account"),
+    category: r.getString("category"),
+    rename: r.getString("rename"),
+    exclude: r.getBool("exclude"),
+  };
+}
+
+/** The person's own rules (shared/rules.ts), oldest first. */
+function rulesOf(app, owner) {
+  return app
+    .findRecordsByFilter(
+      "transaction_rules",
+      "owner = {:owner}",
+      "created,id",
+      0,
+      0,
+      { owner: owner },
+    )
+    .map(ruleOf);
+}
+
 function isLiability(app, accountId) {
   try {
     var kind = app.findRecordById("accounts", accountId).getString("kind");
@@ -52,9 +91,20 @@ function isLiability(app, accountId) {
 
 /**
  * Sets a transaction's merchant and, unless the person chose it by hand,
- * its category. Doesn't save: the hooks call it as the record saves.
+ * its category: a rule of theirs that matches first, then the merchant's
+ * learned rule, then the bank's and the words'. A new transaction also
+ * takes a matching rule's new name and leave-out (shared/rules.ts). Doesn't
+ * save: the hooks call it as the record saves.
  */
-function sort(app, rec) {
+function sort(app, rec, isNew) {
+  var mine = rules.actionsFor(rulesOf(app, rec.getString("owner")), {
+    description: rec.getString("description"),
+    payee: rec.getString("payee"),
+    amount_cents: rec.getInt("amount_cents"),
+    account: rec.getString("account"),
+  });
+  if (isNew && mine.rename) rec.set("payee", mine.rename);
+  if (isNew && mine.exclude) rec.set("excluded", true);
   var merchant = cats.merchantKey(
     rec.getString("payee"),
     rec.getString("description"),
@@ -65,6 +115,11 @@ function sort(app, rec) {
     usable(app, rec.getString("owner"), rec.getString("category"))
   )
     return;
+  if (mine.category && usable(app, rec.getString("owner"), mine.category)) {
+    rec.set("category", mine.category);
+    rec.set("category_by", "rule");
+    return;
+  }
   var r = cats.categorize(
     {
       amount_cents: rec.getInt("amount_cents"),
@@ -258,6 +313,8 @@ function remove(app, owner, custom) {
 
 module.exports = {
   sort: sort,
+  ruleOf: ruleOf,
+  rulesOf: rulesOf,
   recategorize: recategorize,
   customOf: customOf,
   usable: usable,

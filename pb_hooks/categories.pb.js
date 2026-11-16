@@ -46,12 +46,12 @@ onRecordUpdateRequest((e) => {
 }, "transactions");
 
 onRecordCreate((e) => {
-  require(`${__hooks}/glue/categories.js`).sort(e.app, e.record);
+  require(`${__hooks}/glue/categories.js`).sort(e.app, e.record, true);
   e.next();
 }, "transactions");
 
 onRecordUpdate((e) => {
-  require(`${__hooks}/glue/categories.js`).sort(e.app, e.record);
+  require(`${__hooks}/glue/categories.js`).sort(e.app, e.record, false);
   e.next();
 }, "transactions");
 

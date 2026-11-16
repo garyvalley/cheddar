@@ -33,7 +33,7 @@ const { operatorName: name } = useRuntimeConfig().public
       <ul class="footnote">
         <li>Your name, email address and password (stored only as a hash), and your two-step sign-in app's secret, encrypted.</li>
         <li>The accounts you add or link, their balances, transactions and, for brokerage accounts, holdings.</li>
-        <li>What you add yourself: categories, notes, budgets, goals, and statements you import (only the transactions read from them, not the file).</li>
+        <li>What you add yourself: categories, rules, notes, budgets, goals, and statements you import (only the transactions read from them, not the file).</li>
         <li>Your signed-in devices and 90 days of security activity, such as sign-ins: the kind of device and the country, not the IP address.</li>
         <li>Which version of the Terms of Use you agreed to, and when.</li>
         <li>Messages you send through the contact form, for {{ KEEP_DAYS / 365 }} year, then deleted.</li>

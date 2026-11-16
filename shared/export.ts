@@ -6,6 +6,7 @@ import type { ActivityEvent } from "./activity.ts";
 import type { CashflowItem } from "./cashflow.ts";
 import { kindLabel } from "./accounts.ts";
 import { categoryLabel, type Category } from "./categories.ts";
+import type { RuleFields } from "./rules.ts";
 
 /**
  * What an export holds, and the spreadsheets (CSV) made from it: Settings'
@@ -51,6 +52,8 @@ export interface ExportData {
   cashflow_items: CashflowItem[];
   categories: Category[];
   category_rules: CategoryRule[];
+  /** The rules the person wrote (Settings → Rules). */
+  rules: RuleFields[];
   bank_links: {
     institutions: string[];
     status: string;
