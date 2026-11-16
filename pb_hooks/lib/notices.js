@@ -92,8 +92,27 @@ function recoveryCodesNew() {
   }
 }
 
+/**
+ * To whoever runs Cheddar (CONTACT_TO), for a message from the contact form
+ * (pb_hooks/contact.pb.js). Everything the sender typed is escaped; replying
+ * goes to their address (the hook sets Reply-To).
+ */
+function contactMessage(msg, topicLabel, accountEmail) {
+  var who = (msg.name ? escapeHtml(msg.name) + " " : "") + "&lt;" + escapeHtml(msg.email) + "&gt;"
+  return {
+    subject: "Cheddar contact form: " + topicLabel,
+    html: shell("A message from the contact form", [
+      "From " + who + (accountEmail ? ", signed in to Cheddar as " + escapeHtml(accountEmail) + "." : ", not signed in, so the address is unconfirmed."),
+      "About: " + escapeHtml(topicLabel),
+      escapeHtml(msg.message).replace(/\r?\n/g, "<br>"),
+      "Reply to this email to answer them.",
+    ]),
+  }
+}
+
 module.exports = {
   escapeHtml: escapeHtml,
+  contactMessage: contactMessage,
   emailChangeAsked: emailChangeAsked,
   emailChanged: emailChanged,
   codesLocked: codesLocked,

@@ -35,7 +35,18 @@ function isConfigured(cfg) {
   return !!(cfg.apiKey && cfg.secretKey && cfg.senderEmail)
 }
 
-/** The Mailjet REST request for one message (`opts`: to, toName, subject, html), as $http.send takes it. */
+function message(cfg, opts) {
+  var m = {
+    From: { Email: cfg.senderEmail, Name: cfg.senderName },
+    To: [{ Email: opts.to, Name: opts.toName || "" }],
+    Subject: opts.subject,
+    HTMLPart: opts.html,
+  }
+  if (opts.replyTo) m.ReplyTo = { Email: opts.replyTo, Name: opts.replyToName || "" }
+  return m
+}
+
+/** The Mailjet REST request for one message (`opts`: to, toName, subject, html, and optionally replyTo), as $http.send takes it. */
 function request(cfg, opts) {
   return {
     method: "POST",
@@ -45,12 +56,7 @@ function request(cfg, opts) {
       "Authorization": "Basic " + base64(cfg.apiKey + ":" + cfg.secretKey),
     },
     body: JSON.stringify({
-      Messages: [{
-        From: { Email: cfg.senderEmail, Name: cfg.senderName },
-        To: [{ Email: opts.to, Name: opts.toName || "" }],
-        Subject: opts.subject,
-        HTMLPart: opts.html,
-      }],
+      Messages: [message(cfg, opts)],
     }),
     timeout: 15,
   }

@@ -40,6 +40,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
 
     <main id="main" class="main">
       <slot />
+      <AppFooter />
     </main>
 
     <nav class="tabbar" aria-label="Main">

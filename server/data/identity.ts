@@ -1,4 +1,5 @@
 import type { RecordAuthResponse, RecordModel } from 'pocketbase'
+import { TERMS_VERSION } from '~~/shared/legal'
 import { asSignUpMode, type SignUpMode } from '~~/shared/sign-up'
 import { anonymous, type Session } from './session'
 
@@ -50,9 +51,12 @@ export async function signUpMode(): Promise<SignUpMode> {
   return asSignUpMode(mode)
 }
 
+/** A new account that has agreed to the Terms of Use in force (shared/legal.ts; pb_hooks/terms.pb.js refuses any other). */
 export async function register(input: { email: string, password: string, name: string }): Promise<void> {
-  await anonymous().collection('users').create(
-    { email: input.email, password: input.password, passwordConfirm: input.password, name: input.name })
+  await anonymous().collection('users').create({
+    email: input.email, password: input.password, passwordConfirm: input.password, name: input.name,
+    terms_version: TERMS_VERSION,
+  })
 }
 
 export async function requestVerification(email: string): Promise<void> {

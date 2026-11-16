@@ -152,6 +152,13 @@ server {
         include snippets/proxy-to-nuxt.conf;
     }
 
+    # The contact form sends an email to whoever runs Cheddar: as tight as
+    # the other routes that send mail.
+    location = /api/contact {
+        limit_req zone=mail burst=3 nodelay;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
     # A statement file of up to 4 MB, sent as JSON text: escaping quotes and
     # line breaks makes it larger (shared/statements.ts MAX_FILE_BYTES).
     location = /api/imports {

@@ -1,4 +1,5 @@
 import type { RecordModel } from 'pocketbase'
+import { TERMS_VERSION } from '~~/shared/legal'
 import type { Me, Profile } from '~~/shared/profile'
 import { DEFAULT_APPEARANCE, DEFAULT_THEME, isAppearance, isTheme } from '~~/shared/theme'
 import { isTimeZone, todayIn } from '~~/shared/time-zone'
@@ -16,7 +17,13 @@ export function toMe(r: RecordModel): Me {
     theme: isTheme(r.theme) ? r.theme : DEFAULT_THEME,
     appearance: isAppearance(r.appearance) ? r.appearance : DEFAULT_APPEARANCE,
     time_zone: isTimeZone(r.time_zone) ? r.time_zone : '',
+    terms_version: typeof r.terms_version === 'string' ? r.terms_version : '',
   }
+}
+
+/** The caller agrees to the Terms of Use in force; pb_hooks/terms.pb.js stamps the time. */
+export async function agreeToTerms(s: Session): Promise<Me> {
+  return toMe(await s.collection('users').update(callerId(s), { terms_version: TERMS_VERSION }))
 }
 
 /** Saves the caller's own profile fields (already checked by checkProfile()). */

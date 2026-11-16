@@ -81,6 +81,10 @@ tunnel, repository secrets) and day-to-day operations.
   who may sign up with `SIGNUP`: `open` (anyone; the default locally),
   `invite` (only the addresses and `@domains` in `SIGNUP_ALLOW`; the
   default in production) or `closed` (k8s/README.md, "First deploy").
+  Signing up means ticking that you agree to the Terms of Use (`/terms`)
+  and the Privacy Notice (`/privacy`), linked in the footer of every page
+  beside the contact form (`/contact`); when the terms change, everyone is
+  asked to agree again at their next visit.
 - **Turn on two-step sign-in.** Every account must, before anything else:
   scan the QR code with an authenticator app (Passwords on iPhone, Google
   Authenticator, 1Password…), and save the ten recovery codes. It can't be

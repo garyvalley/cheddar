@@ -41,3 +41,14 @@ test('a new app and new recovery codes each say what to do if it wasn\'t you', (
     assert.match(html, /If it wasn't, someone is signed in as you: change your password now/)
   }
 })
+
+// pb_hooks/contact.pb.js sends this one to CONTACT_TO, whoever runs Cheddar.
+test('a contact message is escaped, keeps its lines, and says whether it was signed in', () => {
+  const msg = { name: '<b>Sam</b>', email: 'sam@example.com', topic: 'security', message: 'Line one\n<script>x</script>' }
+  const out = notices.contactMessage(msg, 'A security problem', '')
+  assert.match(out.subject, /A security problem/)
+  assert.doesNotMatch(out.html, /<script>|<b>Sam/)
+  assert.match(out.html, /Line one<br>&lt;script&gt;/)
+  assert.match(out.html, /not signed in/)
+  assert.match(notices.contactMessage(msg, 'A security problem', 'acct@example.com').html, /signed in to Cheddar as acct@example\.com/)
+})

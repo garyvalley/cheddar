@@ -67,6 +67,9 @@ apply_secret ghcr --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfi
   echo "HEALTHCHECK_SYNC_URL=${HEALTHCHECK_SYNC_URL:-}"
   echo "SIGNUP=${SIGNUP:-invite}"
   echo "SIGNUP_ALLOW=${SIGNUP_ALLOW:-}"
+  # Where contact-form messages are emailed (pb_hooks/contact.pb.js); empty
+  # keeps them in the admin UI only. A secret, so the address stays private.
+  echo "CONTACT_TO=${CONTACT_TO:-}"
 } > "$tmp/pocketbase.env"
 apply_secret pocketbase-env --from-env-file="$tmp/pocketbase.env"
 

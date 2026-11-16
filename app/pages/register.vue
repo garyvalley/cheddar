@@ -13,9 +13,10 @@ const { busy, error, run } = useAction()
 const name = ref('')
 const email = ref('')
 const password = ref('')
+const agree = ref(false)
 
 async function create() {
-  const body = { name: name.value, email: email.value, password: password.value }
+  const body = { name: name.value, email: email.value, password: password.value, agree: agree.value }
   const made = await run(async () => {
     await $fetch('/api/auth/register', { method: 'POST', body })
     return $fetch('/api/auth/login', { method: 'POST', body: { email: email.value, password: password.value } })
@@ -55,12 +56,15 @@ async function create() {
         <input v-model="password" class="input" type="password" autocomplete="new-password" :minlength="MIN_LENGTH" required aria-describedby="pw-hint">
         <span id="pw-hint" class="caption">At least {{ MIN_LENGTH }} characters. A short sentence is easy to remember and hard to guess.</span>
       </label>
+      <label class="field agree">
+        <input v-model="agree" type="checkbox" required>
+        <span class="footnote">I agree to the <NuxtLink to="/terms" target="_blank">Terms of Use</NuxtLink> and the <NuxtLink to="/privacy" target="_blank">Privacy Notice</NuxtLink>.</span>
+      </label>
     </div>
     <p v-if="error" class="notice notice-error" role="alert">{{ error }}</p>
     <button class="btn btn-primary btn-block" :disabled="busy">
       <span v-if="busy" class="spinner" aria-hidden="true" /> Create account
     </button>
-    <p class="center caption">Creating an account means you agree to how Cheddar keeps your data: <NuxtLink to="/privacy">Privacy</NuxtLink>.</p>
     <p class="center footnote">Already have one? <NuxtLink to="/login">Sign in</NuxtLink></p>
   </form>
 </template>
@@ -68,4 +72,6 @@ async function create() {
 <style scoped>
 .card-pad > p { margin: 0; }
 .card-pad > .footnote { margin-top: 0.25rem; }
+.agree { display: flex; flex-direction: row; align-items: flex-start; gap: 0.625rem; }
+.agree input { width: 1.125rem; height: 1.125rem; margin: 0.125rem 0 0; flex: none; accent-color: var(--accent); }
 </style>
