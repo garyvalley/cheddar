@@ -1,7 +1,7 @@
 import { budgetPlan, SUGGEST_MONTHS, type BudgetPlan } from "~~/shared/budget-plan";
 import { periodOf, summarize } from "~~/shared/categories";
 import { expandSplits } from "~~/shared/splits";
-import { listBudgets } from "../budgets";
+import { budgetsForMonth } from "../budgets";
 import { listCategories } from "../categories";
 import { transactionsBetween } from "../transactions";
 import type { Session } from "../session";
@@ -23,7 +23,7 @@ export async function budgetPlanFor(
   const [rows, list, budgets] = await Promise.all([
     transactionsBetween(s, first, p.to, { counted: true }),
     listCategories(s),
-    listBudgets(s),
+    budgetsForMonth(s, p.at),
   ]);
   const flat = expandSplits(rows);
   const of = (from: string, to: string) => summarize(flat.filter((r) => r.posted >= from && r.posted <= to), list);

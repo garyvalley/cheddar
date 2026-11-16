@@ -3,7 +3,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { budgetFor, checkBudget, overBudget } from '../shared/budgets.ts'
+import { budgetFor, carryInto, checkBudget, isWholeMonth, monthsBefore, nextMonth, overBudget } from '../shared/budgets.ts'
 
 describe('checkBudget', () => {
   test('an amount in dollars, or nothing to remove it', () => {
@@ -49,5 +49,31 @@ describe('overBudget', () => {
       { category: 'health', budget_cents: 5000 },
     ]
     assert.deepEqual(overBudget(categories, budgets).map(b => [b.id, b.spent_cents - b.budget_cents]), [['dining', 20000], ['groceries', 1000]])
+  })
+})
+
+describe('rollover', () => {
+  test('months run on, across the year', () => {
+    assert.equal(nextMonth('2026-12'), '2027-01')
+    assert.deepEqual(monthsBefore('2026-11', '2027-02'), ['2026-11', '2026-12', '2027-01'])
+    assert.deepEqual(monthsBefore('2026-11', '2026-11'), [])
+  })
+
+  test('each month before carries what it left, or overspent, from the month it began', () => {
+    const spent = new Map([['2026-08', 99999], ['2026-09', 15000], ['2026-10', 32000]])
+    // $200 a month from September: +$50 left, then $120 over.
+    assert.equal(carryInto(20000, '2026-09', '2026-11', spent), 5000 - 12000)
+    assert.equal(carryInto(20000, '2026-09', '2026-10', spent), 5000)
+    assert.equal(carryInto(20000, '2026-09', '2026-09', spent), 0, 'nothing carries into the first month')
+    assert.equal(carryInto(20000, '2026-11', '2026-09', spent), 0, 'or a month before it began')
+    assert.equal(carryInto(20000, '2026-10', '2027-01', spent), (20000 - 32000) + 20000 + 20000, 'a month with nothing spent leaves it all')
+    assert.equal(carryInto(20000, '', '2026-11', spent), 0)
+  })
+
+  test('only applies to a whole month', () => {
+    assert.ok(isWholeMonth('2026-02-01', '2026-02-28'))
+    assert.ok(!isWholeMonth('2026-02-01', '2026-03-31'))
+    assert.ok(!isWholeMonth('2026-02-02', '2026-02-28'))
+    assert.ok(!isWholeMonth('2026-11-09', '2026-11-15'))
   })
 })

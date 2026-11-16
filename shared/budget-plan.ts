@@ -17,6 +17,10 @@ export interface PlanLine {
   custom: boolean
   /** The monthly budget, or null with none. */
   budget_cents: number | null
+  /** Whether the budget rolls over (shared/budgets.ts). */
+  rollover: boolean
+  /** What rolled over into this month: left from the months before, negative when they went over. 0 when it doesn't roll over. */
+  carry_cents: number
   /** What the category came to in the month (spending is positive; a refund-heavy month can be negative). */
   spent_cents: number
   /** The months before's average, rounded up to whole $10; null with nothing spent then. A suggestion only. */
@@ -28,7 +32,9 @@ export interface PlanTotals {
   planned_cents: number
   /** What the budgeted categories came to. */
   spent_budgeted_cents: number
-  /** planned − spent in budgeted categories; negative when over. */
+  /** What rolled over into the budgeted categories (negative when they went over before). */
+  carry_cents: number
+  /** planned + carry − spent in budgeted categories; negative when over. */
   remaining_cents: number
   /** What categories without a budget came to. */
   unbudgeted_cents: number
@@ -52,21 +58,24 @@ export function suggestion(months: number[]): number | null {
 }
 
 /** The plan's totals for its lines (as typed, before they're saved) and the month's income. */
-export function planTotals(lines: Pick<PlanLine, 'budget_cents' | 'spent_cents'>[], income_cents: number): PlanTotals {
+export function planTotals(lines: (Pick<PlanLine, 'budget_cents' | 'spent_cents'> & { carry_cents?: number })[], income_cents: number): PlanTotals {
   let planned = 0
+  let carry = 0
   let spentBudgeted = 0
   let unbudgeted = 0
   for (const l of lines) {
     if (l.budget_cents) {
       planned += l.budget_cents
+      carry += l.carry_cents ?? 0
       spentBudgeted += l.spent_cents
     }
     else unbudgeted += l.spent_cents
   }
   return {
     planned_cents: planned,
+    carry_cents: carry,
     spent_budgeted_cents: spentBudgeted,
-    remaining_cents: planned - spentBudgeted,
+    remaining_cents: planned + carry - spentBudgeted,
     unbudgeted_cents: unbudgeted,
     unplanned_income_cents: income_cents - planned,
   }
@@ -83,18 +92,20 @@ export function budgetPlan(q: {
   month: string
   income_cents: number
   categories: { id: string, label: string, spending: boolean, custom: boolean, shared?: boolean }[]
-  budgets: { category: string, amount_cents: number }[]
+  budgets: { category: string, amount_cents: number, rollover?: boolean, carry_cents?: number }[]
   spent: Map<string, number>
   before: Map<string, number>[]
 }): BudgetPlan {
-  const budget = new Map(q.budgets.map(b => [b.category, b.amount_cents]))
+  const budget = new Map(q.budgets.map(b => [b.category, b]))
   const lines: PlanLine[] = q.categories
     .filter(c => c.spending && !c.shared)
     .map(c => ({
       id: c.id,
       label: c.label,
       custom: c.custom,
-      budget_cents: budget.get(c.id) || null,
+      budget_cents: budget.get(c.id)?.amount_cents || null,
+      rollover: !!budget.get(c.id)?.rollover,
+      carry_cents: budget.get(c.id)?.carry_cents ?? 0,
       spent_cents: q.spent.get(c.id) ?? 0,
       suggested_cents: suggestion(q.before.map(m => m.get(c.id) ?? 0)),
     }))

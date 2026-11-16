@@ -320,6 +320,9 @@ async function confirmDelete() {
                   {{ formatCents(current.budget_cents) }} budget for {{ period.label }} ·
                   <span v-if="overBy(current) < 0" class="loss">{{ formatCents(-overBy(current)) }} over</span>
                   <span v-else>{{ formatCents(overBy(current)) }} left</span>
+                  <template v-if="current.carry_cents">
+                    · includes {{ current.carry_cents > 0 ? `${formatCents(current.carry_cents)} rolled over` : `${formatCents(-current.carry_cents)} taken off for overspending` }} from earlier months
+                  </template>
                 </p>
               </template>
               <form v-if="budgeting" class="inline-form" @submit.prevent="saveBudget(budgetInput)">
@@ -399,6 +402,7 @@ async function confirmDelete() {
                         {{ c.count.toLocaleString() }} {{ c.count === 1 ? 'transaction' : 'transactions' }}<template v-if="c.budget_cents"> ·
                           <span v-if="overBy(c) < 0" class="loss">{{ formatCents(-overBy(c)) }} over its {{ formatCents(c.budget_cents) }} budget</span>
                           <template v-else>{{ formatCents(overBy(c)) }} left of {{ formatCents(c.budget_cents) }}</template>
+                          <template v-if="c.carry_cents"> (rolled over {{ c.carry_cents > 0 ? '+' : '−' }}{{ formatCents(Math.abs(c.carry_cents)) }})</template>
                         </template>
                       </span>
                     </span>

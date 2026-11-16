@@ -35,7 +35,12 @@ describe('budget plan', () => {
 
   test('totals follow budgets as they are typed', () => {
     const t = planTotals([{ budget_cents: 50000, spent_cents: 42000 }, { budget_cents: 30000, spent_cents: 35000 }, { budget_cents: null, spent_cents: 1000 }], 60000)
-    assert.deepEqual(t, { planned_cents: 80000, spent_budgeted_cents: 77000, remaining_cents: 3000, unbudgeted_cents: 1000, unplanned_income_cents: -20000 })
+    assert.deepEqual(t, { planned_cents: 80000, carry_cents: 0, spent_budgeted_cents: 77000, remaining_cents: 3000, unbudgeted_cents: 1000, unplanned_income_cents: -20000 })
+  })
+
+  test('what rolled over counts toward what\'s left, but not toward the plan', () => {
+    const t = planTotals([{ budget_cents: 50000, spent_cents: 42000, carry_cents: 12000 }, { budget_cents: 30000, spent_cents: 35000, carry_cents: -2000 }, { budget_cents: null, spent_cents: 1000, carry_cents: 900 }], 60000)
+    assert.deepEqual(t, { planned_cents: 80000, carry_cents: 10000, spent_budgeted_cents: 77000, remaining_cents: 13000, unbudgeted_cents: 1000, unplanned_income_cents: -20000 })
   })
 
   test('suggestions round the average up to whole dollars of ten, and say nothing for nothing spent', () => {

@@ -14,7 +14,7 @@ import {
 } from "~~/shared/overview";
 import { expandSplits } from "~~/shared/splits";
 import { counted } from "../accounts";
-import { listBudgets } from "../budgets";
+import { budgetsForMonth } from "../budgets";
 import { listCategories } from "../categories";
 import { balanceHistory, transactionsBetween } from "../transactions";
 import type { Session } from "../session";
@@ -36,7 +36,7 @@ export async function overview(
     // "All" on (a year back); "All" needs only each account's first.
     balanceHistory(s, { dailyFrom: growthStart("1y", today) }),
     listCategories(s),
-    listBudgets(s),
+    budgetsForMonth(s, today.slice(0, 7)),
   ]);
   // Totals count a split one as its parts (shared/splits.ts).
   const rows = expandSplits(fetched);
@@ -80,7 +80,8 @@ export async function overview(
     ),
     over_budget: overBudget(
       thisMonth,
-      budgets.map((b) => ({ category: b.category, budget_cents: b.amount_cents })),
+      // With what rolled over into this month, as Spending shows it.
+      budgets.map((b) => ({ category: b.category, budget_cents: b.amount_cents + b.carry_cents })),
     ),
   };
 }

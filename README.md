@@ -148,7 +148,10 @@ tunnel, repository secrets) and day-to-day operations.
   - **Budgets:** open a spending category to give it a monthly budget. Its
     bar then shows what's spent against it (red once over), scaled to the
     span shown (a year is twelve months' worth, a week its share by days),
-    and Overview lists the categories over budget this month.
+    and Overview lists the categories over budget this month. Tick **Roll
+    over** on a budget in the Monthly plan for something that doesn't come
+    every month (car repairs, gifts): what each month leaves carries into
+    the next, and overspending comes off it, from the month you tick it.
   - **Search** by words (in the description, a name you gave it, or its
     note) and by amount, money in or out, on any date.
   - **Needs review** shows transactions added since the review inbox was
