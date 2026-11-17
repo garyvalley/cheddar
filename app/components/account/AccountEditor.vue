@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ACCOUNT_KINDS, isLiability, type Account, type AccountKind } from '~~/shared/accounts'
+import { changesOnItsOwn } from '~~/shared/property'
 
 // Everything a person can change about an account, linked or not: what it's
 // called and what kind it is, whether it's closed, and whether Cheddar counts it.
 // PATCH /api/accounts/:id takes the lot.
 const props = defineProps<{
-  account: Pick<Account, 'id' | 'name' | 'kind' | 'institution' | 'last4' | 'closed_on' | 'excluded' | 'linked'>
+  account: Pick<Account, 'id' | 'name' | 'kind' | 'institution' | 'last4' | 'closed_on' | 'excluded' | 'linked' | 'yearly_change_bp'>
 }>()
 const emit = defineEmits<{ done: [saved: boolean] }>()
 
@@ -19,7 +20,9 @@ const form = reactive({
   counted: !a.excluded,
   closed: !!a.closed_on,
   closedOn: a.closed_on || today,
+  yearlyChange: a.yearly_change_bp ? String(a.yearly_change_bp / 100) : '',
 })
+const grows = computed(() => !a.linked && changesOnItsOwn(form.kind))
 const action = useAction()
 
 // An unlinked balance was typed as money held or owed: it keeps its amount and counts the other way.
@@ -35,6 +38,7 @@ async function save() {
       last4: form.last4,
       excluded: !form.counted,
       closed_on: form.closed ? form.closedOn : '',
+      ...(grows.value ? { yearly_change: form.yearlyChange } : {}),
     },
   }))
   if (ok) emit('done', true)
@@ -53,6 +57,11 @@ async function save() {
         <option v-for="k in ACCOUNT_KINDS" :key="k.value" :value="k.value">{{ k.label }}</option>
       </select>
       <span v-if="flips" class="footnote block hint">Its balance now counts as {{ isLiability(form.kind) ? 'owed' : 'money you hold' }}.</span>
+    </label>
+    <label v-if="grows" class="field">
+      <span class="field-label">How much its value changes a year (optional)</span>
+      <span class="pct"><input v-model="form.yearlyChange" class="input num" inputmode="decimal" placeholder="0" aria-describedby="yearly-help"><span aria-hidden="true">%</span></span>
+      <span id="yearly-help" class="footnote block hint">3 for a home gaining 3% a year, -15 for a car losing 15%. Cheddar moves its value on each day, so it doesn't go out of date; a new value you type starts it again from there.</span>
     </label>
     <label class="field">
       <span class="field-label">Bank or card issuer (optional)</span>
@@ -102,4 +111,5 @@ async function save() {
 .closed-on { display: block; margin: 0.25rem 0 0.5rem; }
 .closed-on .input { max-width: 12rem; }
 .hint { margin-top: 0.375rem; }
+.pct { display: flex; align-items: center; gap: 0.375rem; max-width: 9rem; }
 </style>

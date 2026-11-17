@@ -128,6 +128,9 @@ tunnel, repository secrets) and day-to-day operations.
   the bank and the last four digits. Then import its statements. Click its
   balance to bring it up to date: one more than 30 days old (180 for
   property) is marked **Out of date**, and Overview says how many are.
+  A home or car can change in value by a yearly percent you set on its Edit
+  (3 for a home gaining 3% a year, -15 for a car losing 15%): Cheddar moves
+  its value on each day, so it doesn't go out of date.
 - **Import a statement** (Import, under Settings → Your accounts):
   - On your bank's website, download your transactions as CSV, or as
     Quicken (QFX) or Money (OFX).
