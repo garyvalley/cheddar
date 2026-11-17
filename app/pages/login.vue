@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { PasskeyOptions } from '~~/shared/passkeys'
 import type { SignUpMode } from '~~/shared/sign-up'
 definePageMeta({ layout: 'auth', guestOnly: true })
 useHead({ title: 'Sign in' })
@@ -38,6 +39,25 @@ async function sendCode() {
   if (r) await finish(r.me, r.recoveryCodesLeft)
 }
 
+// A passkey: on its own, or in place of the code after the password.
+const canPasskey = ref(false)
+onMounted(() => { canPasskey.value = passkeysSupported() })
+async function passkey() {
+  error.value = ''
+  const opts = await run(() => $fetch<PasskeyOptions>('/api/auth/passkey/options', { method: 'POST' }))
+  if (!opts) return
+  let credential
+  try {
+    credential = await signWithPasskey(opts.publicKey)
+  }
+  catch (e) {
+    error.value = passkeyProblem(e)
+    return
+  }
+  const r = await run(() => $fetch('/api/auth/passkey', { method: 'POST', body: { challengeId: opts.challengeId, credential, mfaId: mfaId.value } }))
+  if (r) await finish(r.me)
+}
+
 // A Cheddar that takes no new accounts doesn't offer to make one.
 const { data: signUp } = await useFetch<{ mode: SignUpMode }>('/api/auth/sign-up', { key: 'sign-up', default: () => ({ mode: 'open' as SignUpMode }) })
 </script>
@@ -60,6 +80,7 @@ const { data: signUp } = await useFetch<{ mode: SignUpMode }>('/api/auth/sign-up
       <button class="btn btn-primary btn-block" :disabled="busy">
         <span v-if="busy" class="spinner" aria-hidden="true" /> Sign in
       </button>
+      <button v-if="canPasskey" type="button" class="btn btn-tinted btn-block" :disabled="busy" @click="passkey">Sign in with a passkey</button>
       <p class="center footnote">
         <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
         <template v-if="signUp.mode !== 'closed'"> · <NuxtLink to="/register">Create an account</NuxtLink></template>
@@ -78,6 +99,7 @@ const { data: signUp } = await useFetch<{ mode: SignUpMode }>('/api/auth/sign-up
       <button class="btn btn-primary btn-block" :disabled="busy">
         <span v-if="busy" class="spinner" aria-hidden="true" /> Continue
       </button>
+      <button v-if="canPasskey" type="button" class="btn btn-tinted btn-block" :disabled="busy" @click="passkey">Use a passkey instead</button>
       <p class="center footnote"><button type="button" class="btn btn-plain" @click="mfaId = ''; code = ''; error = ''">Back</button></p>
     </form>
   </div>
