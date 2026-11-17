@@ -29,7 +29,7 @@ __export(legal_exports, {
 });
 module.exports = __toCommonJS(legal_exports);
 var TERMS_VERSION = "2026-11-16";
-var PRIVACY_UPDATED = "2026-11-16";
+var PRIVACY_UPDATED = "2026-11-17";
 function hasAgreed(version) {
   return version === TERMS_VERSION;
 }
