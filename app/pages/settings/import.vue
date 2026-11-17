@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { formatCents, isLiability, type Account, type Import } from '~~/shared/accounts'
 import { MATCH_DAYS } from '~~/shared/overlap'
-import { MAX_FILE_BYTES, dateRange, readStatement, type CsvMapping } from '~~/shared/statements'
+import { APP_NAMES, readImport } from '~~/shared/app-exports'
+import { MAX_FILE_BYTES, dateRange, type CsvMapping } from '~~/shared/statements'
 
 useHead({ title: 'Import statements' })
 const route = useRoute()
@@ -26,6 +27,8 @@ interface Chosen {
   mapping?: CsvMapping
   /** A card's CSV was flipped because most of its amounts were positive. */
   flipNote: boolean
+  /** Another app's export (Mint, Monarch, YNAB): which of its accounts to bring in. */
+  source?: string
 }
 const files = ref<Chosen[]>([])
 const fileProblems = ref<string[]>([])
@@ -37,7 +40,7 @@ const results = ref<Result[]>([])
 const input = ref<HTMLInputElement>()
 
 const liability = computed(() => !!account.value && isLiability(account.value.kind))
-const readFile = (f: Chosen) => readStatement(f.name, f.text, f.mapping, { liability: liability.value, flip: pdfFlip.value })
+const readFile = (f: Chosen) => readImport(f.name, f.text, f.mapping, { liability: liability.value, flip: pdfFlip.value }, f.source)
 const statements = computed(() => files.value.map(f => ({ file: f, statement: readFile(f) })))
 const readable = computed(() => statements.value.flatMap(x => ('problem' in x.statement ? [] : [{ file: x.file, read: x.statement }])))
 const unreadable = computed(() => statements.value.flatMap(x => ('problem' in x.statement ? [{ name: x.file.name, problem: x.statement.problem }] : [])))
@@ -131,6 +134,14 @@ const debitCol = computed(columnChoice('debit'))
 const creditCol = computed(columnChoice('credit'))
 const dateOrder = computed({ get: () => read.value?.mapping?.dateOrder ?? 'mdy', set: v => setMapping({ dateOrder: v }) })
 const flip = computed({ get: () => read.value?.mapping?.flip ?? false, set: v => setMapping({ flip: v }) })
+/** Another app's file: the account in it to bring in (one file at a time). */
+const sourceAccount = computed({
+  get: () => read.value?.account_name ?? '',
+  set: (v: string) => {
+    const f = files.value[0]
+    if (f && !several.value) f.source = v
+  },
+})
 
 // Each file is its own import, so each can be undone on its own. One that
 // fails doesn't stop the rest.
@@ -150,6 +161,7 @@ async function importFiles() {
             account: account.value.id, filename: f.name, text: f.text,
             mapping: r.format === 'csv' ? r.mapping : undefined,
             flip: r.format === 'pdf' ? pdfFlip.value : undefined,
+            source_account: r.app ? r.account_name : undefined,
           },
         })
         done.push({ name: f.name, ...answer })
@@ -221,7 +233,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
           </label>
         </div>
         <p class="group-footer">
-          Choose one file or several, such as a year of monthly statements. The PDF statement your bank sends each month works, as long as it isn't a scan. A download works too: on your bank's website, look for Download or Export next to your transactions, and choose CSV, or Quicken (QFX) or Money (OFX). Transactions already in the account are skipped, so overlapping dates are fine.
+          Choose one file or several, such as a year of monthly statements. The PDF statement your bank sends each month works, as long as it isn't a scan. A download works too: on your bank's website, look for Download or Export next to your transactions, and choose CSV, or Quicken (QFX) or Money (OFX). Moving from Mint, Monarch or YNAB? Their transactions export (a CSV) works too, one account at a time, with its categories, notes and tags. Transactions already in the account are skipped, so overlapping dates are fine.
           <template v-if="account?.linked">
             {{ account.name }} is linked to your bank, so a transaction the link already brought in, with the same amount within {{ MATCH_DAYS }} days, is skipped too.
           </template>
@@ -248,6 +260,19 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
       </section>
 
       <template v-if="readable.length">
+        <section v-if="read?.app && read.accounts" class="group" aria-labelledby="from-title">
+          <h2 id="from-title" class="group-title">From {{ APP_NAMES[read.app] }}</h2>
+          <div class="card">
+            <label class="field">
+              <span class="field-label">{{ APP_NAMES[read.app] }} account to bring into {{ account?.name }}</span>
+              <select v-model="sourceAccount" class="select" data-test="source-account">
+                <option v-for="a in read.accounts" :key="a.name" :value="a.name">{{ a.name || 'No account name' }} ({{ plural(a.count, 'transaction') }})</option>
+              </select>
+            </label>
+          </div>
+          <p class="group-footer">The file holds every account you had in {{ APP_NAMES[read.app] }}. Import each into its own account here. Their categories come across where Cheddar has one like them; your own rules still come first, and Cheddar sorts the rest.</p>
+        </section>
+        <p v-else-if="several && readable.some(x => x.read.app)" class="notice notice-info">To choose which account to bring in from a Mint, Monarch or YNAB file, choose that file on its own.</p>
         <section v-if="read && read.format === 'csv' && read.columns" class="group" aria-labelledby="columns-title">
           <h2 id="columns-title" class="group-title">Columns</h2>
           <div class="card">
@@ -330,7 +355,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
             <p v-if="closing" data-test="closing">
               Closing balance <strong class="num">{{ formatCents(closing.cents) }}</strong> on {{ day(closing.date) }}<template v-if="account?.linked">, but the bank link keeps this account's balance</template><template v-else-if="account?.balance_date && account.balance_date > closing.date">, older than the balance it has</template><template v-else>: it becomes the account's balance</template>.
             </p>
-            <p v-else>No transactions could be read. Check the columns above.</p>
+            <p v-if="!rows.length">No transactions could be read.<template v-if="read?.columns"> Check the columns above.</template></p>
             <div v-if="problems.length" class="notice notice-info">
               {{ plural(problems.length, 'line') }} won't be imported:
               <span v-for="(p, i) in problems.slice(0, 3)" :key="`${p.name}:${p.line}`">{{ i ? '; ' : ' ' }}{{ several ? `${p.name} ` : '' }}line {{ p.line }}, {{ p.problem }}</span>{{ problems.length > 3 ? '…' : '.' }}
@@ -341,7 +366,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
                 <tbody>
                   <tr v-for="(r, i) in rows.slice(0, 20)" :key="i">
                     <td class="num nowrap">{{ r.posted }}</td>
-                    <td>{{ r.description }}</td>
+                    <td>{{ r.payee || r.description }}</td>
                     <td class="num amt" :class="moneyTone(r.amount_cents)">{{ formatCents(r.amount_cents) }}</td>
                   </tr>
                 </tbody>

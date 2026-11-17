@@ -147,12 +147,39 @@ export async function listTransactions(
     expand: "link",
     ...(filter ? { filter } : {}),
   });
+  const person = callerId(s);
+  const names = list.items.some((r) => r.owner !== person)
+    ? await householdNames(s)
+    : new Map<string, string>();
   return {
-    items: list.items.map((r) => toTransaction(r, callerId(s))),
+    items: list.items.map((r) => {
+      const t = toTransaction(r, person);
+      const name = t.shared ? names.get(r.owner) : undefined;
+      return name ? { ...t, owner_name: name } : t;
+    }),
     page: list.page,
     pages: list.totalPages,
     total: list.totalItems,
   };
+}
+
+/**
+ * The caller's household members' names by id ("who spent it" on a shared
+ * account). The household's own route reads them (pb_hooks/households.pb.js):
+ * the users collection shows nobody anyone else's name. Best effort: none
+ * when it can't be read.
+ */
+export async function householdNames(s: Session): Promise<Map<string, string>> {
+  try {
+    const r = (await s.send("/api/household", { method: "GET" })) as {
+      household: { members: { id: string; name: string; email: string }[] } | null;
+    };
+    return new Map(
+      (r.household?.members ?? []).map((m) => [m.id, m.name.trim() || m.email.split("@")[0]!]),
+    );
+  } catch {
+    return new Map();
+  }
 }
 
 /** Every transaction a query finds, oldest first, as a download lists them. */

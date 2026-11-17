@@ -74,6 +74,11 @@ var PRIMARIES = Object.keys(PLAID_PRIMARY).sort(function (a, b) { return b.lengt
 function fromBank(code) {
   var c = String(code || "").toUpperCase()
   if (!c) return ""
+  // Another app's category, already mapped to one of Cheddar's (an import, pb_hooks/categories.pb.js).
+  if (c.indexOf("CHEDDAR:") === 0) {
+    var own = c.slice(8).toLowerCase()
+    return isCategory(own) ? own : ""
+  }
   if (PLAID_DETAILED[c]) return PLAID_DETAILED[c]
   // The longest primary it starts with: TRANSFER_IN_ before a shorter one.
   for (var i = 0; i < PRIMARIES.length; i++) {

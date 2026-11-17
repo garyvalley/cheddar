@@ -77,6 +77,8 @@ export interface Transaction {
   history: boolean;
   /** The transaction belongs to an account shared by another household member. */
   shared?: boolean;
+  /** For a shared one: whose account it's in ("who spent it"), when they're still in the household. */
+  owner_name?: string;
   /** Its parts when it's split across categories (shared/splits.ts), else none. */
   splits: SplitPart[];
   /** Labels across categories (shared/tags.ts), none when it has none. */

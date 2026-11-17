@@ -20,6 +20,11 @@ export interface StatementRow {
   description: string
   /** OFX's own id for the transaction (FITID), when the file has one. */
   fitid?: string
+  /** Another app's export (shared/app-exports.ts): its merchant name, category mapped to Cheddar's, note and tags. */
+  payee?: string
+  category?: string
+  note?: string
+  tags?: string[]
 }
 
 /** A line that couldn't be read as a transaction, with why. Line numbers count from 1. */

@@ -25,12 +25,22 @@
 // ---------------------------------------------------------------------------
 
 onRecordCreateRequest((e) => {
-  if (!e.hasSuperuserAuth())
+  if (!e.hasSuperuserAuth()) {
+    // An import from another app (Mint, Monarch, YNAB: shared/app-exports.ts)
+    // may say which of Cheddar's built-in categories it was in, as
+    // "cheddar:<id>"; it's read as a bank's category is, so the person's
+    // own rules still come first.
+    var from = e.record.getString("bank_category");
+    var keep =
+      e.record.getString("source") === "import" &&
+      /^cheddar:[a-z]{2,20}$/.test(from);
     ["category", "category_by", "merchant_key", "bank_category"].forEach(
       function (f) {
         e.record.set(f, "");
       },
     );
+    if (keep) e.record.set("bank_category", from);
+  }
   e.next();
 }, "transactions");
 
