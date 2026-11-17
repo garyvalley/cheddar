@@ -46,6 +46,13 @@ test('cleanTag, sameTag and the search needle', () => {
   assert.equal(tagNeedle(' Vacation  2026'), '"Vacation 2026"')
 })
 
+test('tagTotals names a tag by its most used spelling, capitals first on a tie, whatever the order', () => {
+  const rows = [{ amount_cents: -1, tags: ['trip'] }, { amount_cents: -1, tags: ['Trip'] }]
+  assert.equal(tagTotals(rows)[0].tag, 'Trip')
+  assert.equal(tagTotals(rows.reverse())[0].tag, 'Trip')
+  assert.equal(tagTotals([...rows, { amount_cents: -1, tags: ['trip'] }])[0].tag, 'trip')
+})
+
 test('tagTotals: money out and in per tag, case folded, most spent first', () => {
   assert.deepEqual(tagTotals([
     { amount_cents: -1000, tags: ['Trip', 'Business'] },

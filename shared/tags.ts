@@ -76,22 +76,26 @@ export interface TagTotal {
 /**
  * Each tag's total over `rows` (counted ones: the caller leaves out what
  * doesn't count), the most money out first, then by name. A tag spelled
- * two ways on two rows is one tag, under the spelling seen first. A split
- * transaction counts whole: a tag is on all of it.
+ * two ways is one tag, under its most used spelling (capitals first on a
+ * tie), whatever order the rows come in. A split transaction counts whole:
+ * a tag is on all of it.
  */
 export function tagTotals(rows: { amount_cents: number, tags: string[] }[]): TagTotal[] {
-  const byKey = new Map<string, TagTotal>()
+  const byKey = new Map<string, TagTotal & { spellings: Map<string, number> }>()
   for (const r of rows) {
     for (const tag of r.tags) {
       const key = tag.toLowerCase()
       let t = byKey.get(key)
-      if (!t) byKey.set(key, (t = { tag, count: 0, out_cents: 0, in_cents: 0 }))
+      if (!t) byKey.set(key, (t = { tag, count: 0, out_cents: 0, in_cents: 0, spellings: new Map() }))
+      t.spellings.set(tag, (t.spellings.get(tag) ?? 0) + 1)
       t.count++
       if (r.amount_cents < 0) t.out_cents -= r.amount_cents
       else t.in_cents += r.amount_cents
     }
   }
-  return [...byKey.values()].sort((a, b) => b.out_cents - a.out_cents || a.tag.localeCompare(b.tag))
+  return [...byKey.values()]
+    .map(({ spellings, ...t }) => ({ ...t, tag: [...spellings].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]![0] }))
+    .sort((a, b) => b.out_cents - a.out_cents || a.tag.localeCompare(b.tag))
 }
 
 /** The search text that finds a tag inside a stored list's JSON. */

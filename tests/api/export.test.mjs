@@ -96,7 +96,7 @@ describe("exporting everything", () => {
     );
     assert.ok(
       tx.includes(
-        '2026-11-02,Everyday,-82.1,"GROCERY, INC",,Groceries,no,,no,',
+        '2026-11-02,Everyday,-82.1,"GROCERY, INC",,Groceries,no,,,no,',
       ),
       tx.join("\n"),
     );
