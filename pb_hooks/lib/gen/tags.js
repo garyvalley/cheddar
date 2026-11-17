@@ -2,9 +2,38 @@
 // GENERATED from shared/tags.ts by scripts/gen-hooks.mjs. Don't edit:
 // change shared/tags.ts and run `pnpm gen:hooks`.
 var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+var __objRest = (source, exclude) => {
+  var target = {};
+  for (var prop in source)
+    if (__hasOwnProp.call(source, prop) && exclude.indexOf(prop) < 0)
+      target[prop] = source[prop];
+  if (source != null && __getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(source)) {
+      if (exclude.indexOf(prop) < 0 && __propIsEnum.call(source, prop))
+        target[prop] = source[prop];
+    }
+  return target;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -66,17 +95,22 @@ function tagsOf(stored) {
   return Array.isArray(stored) ? stored.filter((t) => typeof t === "string" && !!t) : [];
 }
 function tagTotals(rows) {
+  var _a;
   const byKey = /* @__PURE__ */ new Map();
   for (const r of rows) {
     for (const tag of r.tags) {
       const key = tag.toLowerCase();
       let t = byKey.get(key);
-      if (!t) byKey.set(key, t = { tag, count: 0, out_cents: 0, in_cents: 0 });
+      if (!t) byKey.set(key, t = { tag, count: 0, out_cents: 0, in_cents: 0, spellings: /* @__PURE__ */ new Map() });
+      t.spellings.set(tag, ((_a = t.spellings.get(tag)) != null ? _a : 0) + 1);
       t.count++;
       if (r.amount_cents < 0) t.out_cents -= r.amount_cents;
       else t.in_cents += r.amount_cents;
     }
   }
-  return [...byKey.values()].sort((a, b) => b.out_cents - a.out_cents || a.tag.localeCompare(b.tag));
+  return [...byKey.values()].map((_b) => {
+    var _c = _b, { spellings } = _c, t = __objRest(_c, ["spellings"]);
+    return __spreadProps(__spreadValues({}, t), { tag: [...spellings].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0] });
+  }).sort((a, b) => b.out_cents - a.out_cents || a.tag.localeCompare(b.tag));
 }
 var tagNeedle = (tag) => JSON.stringify(cleanTag(tag));
