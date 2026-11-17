@@ -307,7 +307,7 @@ try {
   await page.getByRole('heading', { name: 'Sign in' }).waitFor()
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.getByRole('heading', { name: 'Enter your code' }).waitFor()
   await page.getByLabel('Code').fill(totp.codeAt(secret, totp.stepAt(Date.now()) + 1))
   await page.getByRole('button', { name: 'Continue' }).click()
