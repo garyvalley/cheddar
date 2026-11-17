@@ -187,6 +187,10 @@ tunnel, repository secrets) and day-to-day operations.
     every transaction with one tag, on any date.
   - **Download CSV** saves the transactions for the period, account and
     category you're looking at as a spreadsheet, tags included.
+- **Reports** (linked from Spending and Overview's chart) show trends over
+  6 months to 5 years: income against spending month by month, any category
+  or merchant over time, where the income went (a money-flow chart), and a
+  year in review against the same months the year before.
 - **Plan ahead.** Goals (linked from Overview) track a target, an earmarked
   amount and an optional date. Cash flow (linked from Spending) combines the
   current balances of your own accounts with planned income and expenses and

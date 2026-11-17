@@ -292,26 +292,31 @@ export interface ReportRow {
   category: string;
   excluded: boolean;
   splits: unknown;
+  /** With `merchants`: who it was with, for a report by merchant. */
+  merchant_key?: string;
+  payee?: string;
+  description?: string;
 }
 
 /**
  * Every transaction posted from `from` to `to` (both included) in the
  * accounts that count, for a report: the caller's own only with `ownedOnly`
  * (Projections, Taxes), and none the person left out one by one with
- * `counted`. `extra` narrows it further (a PocketBase filter, no params).
+ * `counted`. `extra` narrows it further (a PocketBase filter, no params);
+ * `merchants` also reads who each was with.
  */
 export async function transactionsBetween(
   s: Session,
   from: string,
   to: string,
-  opts: { ownedOnly?: boolean; counted?: boolean; extra?: string } = {},
+  opts: { ownedOnly?: boolean; counted?: boolean; extra?: string; merchants?: boolean } = {},
 ): Promise<ReportRow[]> {
   const parts = ["posted >= {:from} && posted <= {:to}", COUNTED];
   if (opts.ownedOnly) parts.push("owner = {:owner}");
   if (opts.counted) parts.push(TX_COUNTED);
   if (opts.extra) parts.push(opts.extra);
   return (await s.collection("transactions").getFullList({
-    fields: "account,posted,amount_cents,category,excluded,splits",
+    fields: `account,posted,amount_cents,category,excluded,splits${opts.merchants ? ",merchant_key,payee,description" : ""}`,
     filter: s.filter(parts.join(" && "), {
       from,
       to,
