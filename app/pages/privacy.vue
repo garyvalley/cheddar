@@ -33,7 +33,7 @@ const { operatorName: name } = useRuntimeConfig().public
       <ul class="footnote">
         <li>Your name, email address and password (stored only as a hash), and your two-step sign-in app's secret, encrypted.</li>
         <li>The accounts you add or link, their balances, transactions and, for brokerage accounts, holdings.</li>
-        <li>What you add yourself: categories, rules, notes, budgets, goals, and statements you import (only the transactions read from them, not the file).</li>
+        <li>What you add yourself: categories, rules, notes, tags, budgets, goals, which alerts you want, and statements you import (only the transactions read from them, not the file).</li>
         <li>Your signed-in devices and 90 days of security activity, such as sign-ins: the kind of device and the country, not the IP address.</li>
         <li>Which version of the Terms of Use you agreed to, and when.</li>
         <li>Messages you send through the contact form, for {{ KEEP_DAYS / 365 }} year, then deleted.</li>
@@ -67,7 +67,7 @@ const { operatorName: name } = useRuntimeConfig().public
       <h2 class="headline">Who else sees it</h2>
       <p class="footnote">
         Nobody, unless you choose to share accounts with your household. Cheddar has no ads and no analytics, and your data is never sold or
-        used for anything but showing it to you. Email goes out through Mailjet, which sees only your address and the message.
+        used for anything but showing it to you. Email goes out through Mailjet, which sees only your address and the message. If you turn on alerts, that message says what the alert is about, such as a charge's amount and where it was.
         Pages travel encrypted through Cloudflare, which sees your IP address as any network in between does, and is told never to keep a copy of a page.
       </p>
     </section>
