@@ -8,6 +8,7 @@ import {
 import { listLinks } from "./bank-links";
 import { listGoals } from "./goals";
 import { listBudgets } from "./budgets";
+import { getAlertSettings } from "./alerts";
 import { listActivity } from "./activity";
 import { listCashflowItems } from "./cashflow";
 import { allTransactions } from "./transactions";
@@ -48,6 +49,7 @@ export async function exportData(
     cashflowItems,
     activity,
     holdings,
+    alerts,
   ] = await Promise.all([
     s.collection("users").getOne(callerId(s)),
     listAccounts(s, true),
@@ -68,6 +70,7 @@ export async function exportData(
       sort: "account,-value_cents",
       filter: s.filter("owner = {:owner}", { owner: callerId(s) }),
     }),
+    getAlertSettings(s),
   ]);
   const me = toMe(user);
   return {
@@ -92,6 +95,7 @@ export async function exportData(
     })),
     goals,
     budgets,
+    alerts,
     holdings: holdings.map((h) => ({
       account: h.account,
       name: h.name ?? "",

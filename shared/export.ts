@@ -1,5 +1,6 @@
 import type { Account, Import, Transaction } from "./accounts.ts";
 import type { Goal } from "./goals.ts";
+import type { AlertSettings } from "./alerts.ts";
 import type { Budget } from "./budgets.ts";
 import type { Position } from "./holdings.ts";
 import type { ActivityEvent } from "./activity.ts";
@@ -47,6 +48,8 @@ export interface ExportData {
   balance_history: BalancePoint[];
   goals: Goal[];
   budgets: Budget[];
+  /** What they're emailed about (Settings → Alerts). */
+  alerts?: AlertSettings;
   /** What linked investment accounts hold, as their banks last reported it. */
   holdings: Position[];
   cashflow_items: CashflowItem[];

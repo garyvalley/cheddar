@@ -10,7 +10,8 @@
  * worked out from the months' spending each time it's shown, with the
  * budget's current amount, and only for a month as a whole.
  */
-import { daysIn } from "./categories.ts";
+import { daysIn, summarize, type Category } from "./categories.ts";
+import { expandSplits } from "./splits.ts";
 import { parseAmount } from "./transactions.ts";
 
 export interface Budget {
@@ -52,6 +53,42 @@ export function carryInto(
 ): number {
   if (!/^\d{4}-\d{2}$/.test(from)) return 0;
   return monthsBefore(from, month).reduce((n, m) => n + monthly_cents - (spent.get(m) ?? 0), 0);
+}
+
+/**
+ * Each budget with what carries into `month` (carryInto()), from `rows`: the
+ * counted transactions from the earliest rollover month up to the end of
+ * the month before (`rollover_from` of each budget that rolls over).
+ */
+export function withCarry<B extends Budget>(
+  budgets: B[],
+  rows: { posted: string; amount_cents: number; category: string; splits?: unknown }[],
+  list: Category[],
+  month: string,
+): (B & { carry_cents: number })[] {
+  const byMonth = new Map<string, typeof rows>();
+  for (const r of expandSplits(rows)) {
+    const m = r.posted.slice(0, 7);
+    if (m >= month) continue;
+    if (!byMonth.has(m)) byMonth.set(m, []);
+    byMonth.get(m)!.push(r);
+  }
+  const spent = new Map<string, Map<string, number>>();
+  for (const [m, mRows] of byMonth)
+    for (const c of summarize(mRows, list).categories) {
+      if (!c.spending) continue;
+      if (!spent.has(c.id)) spent.set(c.id, new Map());
+      spent.get(c.id)!.set(m, c.total_cents);
+    }
+  return budgets.map((b) => ({
+    ...b,
+    carry_cents: b.rollover ? carryInto(b.amount_cents, b.rollover_from, month, spent.get(b.category) ?? new Map()) : 0,
+  }));
+}
+
+/** The first month any of `budgets` rolls over from, before `month`, or "". */
+export function carryFrom(budgets: Budget[], month: string): string {
+  return budgets.filter((b) => b.rollover && b.rollover_from && b.rollover_from < month).map((b) => b.rollover_from).sort()[0] ?? "";
 }
 
 /** The largest monthly budget accepted: $10 million. */
