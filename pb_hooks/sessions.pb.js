@@ -21,12 +21,13 @@
 // are deleted every night.
 // ---------------------------------------------------------------------------
 
-// Every full sign-in makes a row. A password alone is a full sign-in only for
+// Every full sign-in makes a row: the code step, a passkey (passkeys.pb.js),
+// or the password. A password alone is a full sign-in only for
 // an account without two-step sign-in yet (it can only set it up, sign out or
 // delete itself: migrations/0002); with two-step on, the password step ends
 // in an mfaId, and the row is made with the code. Renewing ("") makes none.
 onRecordAuthRequest((e) => {
-  var full = e.authMethod === "app" || (e.authMethod === "password" && !e.record.getBool("mfa_enabled"))
+  var full = e.authMethod === "app" || e.authMethod === "passkey" || (e.authMethod === "password" && !e.record.getBool("mfa_enabled"))
   if (full) {
     var sid = require(`${__hooks}/glue/sessions.js`).start(e.app, e.record, e.requestInfo().headers)
     require(`${__hooks}/glue/events.js`).record(e.app, e.record.id, "sign_in", e)

@@ -92,6 +92,18 @@ function recoveryCodesNew() {
   }
 }
 
+/** When a passkey is added, named `name` ("iPhone"). A passkey signs in on its own, so this matters as much as a new app. */
+function passkeyAdded(name) {
+  return {
+    subject: "A passkey was added to your Cheddar account",
+    html: shell("A passkey was added", [
+      "A passkey" + (name ? " named <strong>" + escapeHtml(name) + "</strong>" : "") + " can now sign in to your Cheddar account on its own, without your password or a code.",
+      "If this was you, there's nothing to do.",
+      "If it wasn't, sign in, remove it in Settings, then Sign-in and security, and change your password, which signs out every other device.",
+    ]),
+  }
+}
+
 /**
  * To whoever runs Cheddar (CONTACT_TO), for a message from the contact form
  * (pb_hooks/contact.pb.js). Everything the sender typed is escaped; replying
@@ -118,4 +130,5 @@ module.exports = {
   codesLocked: codesLocked,
   appChanged: appChanged,
   recoveryCodesNew: recoveryCodesNew,
+  passkeyAdded: passkeyAdded,
 }

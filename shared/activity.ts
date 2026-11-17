@@ -16,6 +16,8 @@ export const ACTIVITY_KINDS = [
   'bank_linked',
   'bank_unlinked',
   'export',
+  'passkey_added',
+  'passkey_removed',
 ] as const
 
 export type ActivityKind = typeof ACTIVITY_KINDS[number]
@@ -26,7 +28,7 @@ export interface ActivityEvent {
   device: string
   /** A two-letter country, or "". */
   place: string
-  /** A bank's name, for a link or an unlink; otherwise "". */
+  /** A bank's name, for a link or an unlink; a passkey's name; otherwise "". */
   detail: string
   /** PocketBase's created time. */
   created: string
@@ -47,6 +49,8 @@ const SAID: Record<ActivityKind, string> = {
   bank_linked: 'Bank linked',
   bank_unlinked: 'Bank unlinked',
   export: 'Data exported',
+  passkey_added: 'Passkey added',
+  passkey_removed: 'Passkey removed',
 }
 
 /** What a row says, in words: "Bank linked: Chase". */

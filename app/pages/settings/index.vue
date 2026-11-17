@@ -40,11 +40,12 @@ const allOpen = computed(() => all.every(id => open.value.includes(id)))
       <SettingsAppearance />
     </SettingsCategory>
 
-    <SettingsCategory id="security" title="Sign-in and security" sub="Email and password, two-step sign-in, devices, recent activity">
+    <SettingsCategory id="security" title="Sign-in and security" sub="Email and password, two-step sign-in, passkeys, devices, recent activity">
       <div class="cols">
         <div>
           <SettingsAccount part="sign-in" />
           <SettingsTwoStep />
+          <SettingsPasskeys />
         </div>
         <div>
           <SettingsDevices />

@@ -90,6 +90,11 @@ tunnel, repository secrets) and day-to-day operations.
   Authenticator, 1Password…), and save the ten recovery codes. It can't be
   turned off. You can move to a new app, or get new recovery codes, in
   Settings.
+- **Add a passkey** (Settings → Sign-in and security → Passkeys), and sign
+  in with Face ID, Touch ID, your PIN or a security key instead: no password
+  or code to type, and a fake sign-in page can't use it. It also works in
+  place of the code after the password. Adding one asks for your password
+  and emails you; the authenticator app and recovery codes keep working.
 - **Finish setting up** (the checklist on the Overview):
   - **Confirm your email.** The link comes by email.
   - **Choose your state and filing status** in Settings. Every state and DC
