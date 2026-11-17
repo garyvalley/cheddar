@@ -120,6 +120,13 @@ describe("household sharing", () => {
       `/api/transactions?account=${account.id}`,
     );
     assert.equal(visible.json.total, 1);
+    // Who spent it: a member sees whose account a shared transaction is in.
+    assert.equal(visible.json.items[0].owner_name, "Test");
+    assert.equal(
+      (await owner.c.call("GET", `/api/transactions?account=${account.id}`))
+        .json.items[0].owner_name,
+      undefined,
+    );
     const changed = await member.c.call(
       "PATCH",
       `/api/transactions/${transaction.json.transaction.id}`,

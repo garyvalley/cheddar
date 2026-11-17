@@ -3,13 +3,17 @@ import { importRows } from '~~/server/data/imports'
 import { todayFor } from '~~/server/data/profile'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { isLiability } from '~~/shared/accounts'
-import { MAX_FILE_BYTES, readStatement, type CsvMapping } from '~~/shared/statements'
+import { readImport } from '~~/shared/app-exports'
+import { MAX_FILE_BYTES, type CsvMapping } from '~~/shared/statements'
 
-interface Body { account: string, filename: string, text: string, mapping: CsvMapping, flip: boolean }
+interface Body { account: string, filename: string, text: string, mapping: CsvMapping, flip: boolean, source_account: string }
 
 /**
- * POST /api/imports { account, filename, text, mapping?, flip? }: a statement
- * file's transactions added to one of the caller's accounts. `text` is the
+ * POST /api/imports { account, filename, text, mapping?, flip?, source_account? }:
+ * a statement file's transactions added to one of the caller's accounts. A
+ * file exported from Mint, Monarch or YNAB (shared/app-exports.ts) holds
+ * many accounts: `source_account` names the one to bring in, with its
+ * categories, merchant names, notes and tags. `text` is the
  * file, or for a PDF the text the browser took out of it (pdfText() in
  * shared/pdf-statements.ts), and `flip` turns a PDF's signs round. The file
  * is read here again, whatever the browser's preview showed; rows already in
@@ -25,7 +29,7 @@ interface Body { account: string, filename: string, text: string, mapping: CsvMa
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
   const s = sessionFor(event)
-  const body = await readFields<Body>(event, ['account', 'filename', 'text', 'mapping', 'flip'])
+  const body = await readFields<Body>(event, ['account', 'filename', 'text', 'mapping', 'flip', 'source_account'])
   const account = recordId(body.account, 'No such account')
   const filename = typeof body.filename === 'string' ? body.filename.trim() : ''
   if (typeof body.text !== 'string' || !body.text) throw createError({ statusCode: 400, statusMessage: 'Choose a file to import.' })
@@ -33,8 +37,10 @@ export default defineEventHandler(async (event) => {
   const mapping = body.mapping && typeof body.mapping === 'object' ? body.mapping : undefined
 
   const into = await attempt(() => getAccount(s, account), 'No such account')
-  const statement = readStatement(filename, body.text, mapping, { liability: isLiability(into.kind), flip: body.flip === true, today: await attempt(() => todayFor(s)) })
+  const source = typeof body.source_account === 'string' ? body.source_account : undefined
+  const statement = readImport(filename, body.text, mapping, { liability: isLiability(into.kind), flip: body.flip === true, today: await attempt(() => todayFor(s)) }, source)
   if ('problem' in statement) throw createError({ statusCode: 400, statusMessage: statement.problem })
+  if (source !== undefined && statement.account_name !== undefined && statement.account_name !== source) throw createError({ statusCode: 400, statusMessage: 'That account isn\'t in the file.' })
   if (!statement.rows.length) throw createError({ statusCode: 400, statusMessage: 'No line of the file could be read as a transaction.' })
 
   const record = await attempt(() => importRows(s, account, { filename, format: statement.format, rows: statement.rows }))

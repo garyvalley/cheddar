@@ -134,6 +134,10 @@ tunnel, repository secrets) and day-to-day operations.
 - **Import a statement** (Import, under Settings → Your accounts):
   - On your bank's website, download your transactions as CSV, or as
     Quicken (QFX) or Money (OFX).
+  - Moving from Mint, Monarch or YNAB: export your transactions as CSV
+    there, and import the file once for each account, choosing which of
+    its accounts to bring in. Categories come across where Cheddar has one
+    like them, with merchant names, notes and tags.
   - Choose the account and the file. Cheddar shows what it read before
     saving anything. For a CSV you can change which column is the date,
     description and amount (or separate money out and money in columns),

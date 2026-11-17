@@ -138,6 +138,13 @@ export async function importRows(
           posted: row.posted,
           amount_cents: row.amount_cents,
           description: row.description,
+          // Another app's export (shared/app-exports.ts) brings its own;
+          // its category goes as bank_category, which the hooks keep only
+          // for a Cheddar id on an import (pb_hooks/categories.pb.js).
+          ...(row.payee ? { payee: row.payee } : {}),
+          ...(row.note ? { note: row.note } : {}),
+          ...(row.tags?.length ? { tags: row.tags } : {}),
+          ...(row.category ? { bank_category: `cheddar:${row.category}` } : {}),
         });
       }
       await batch.send();

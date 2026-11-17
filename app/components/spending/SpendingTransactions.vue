@@ -164,7 +164,7 @@ watch(() => props.items, () => {
           <button class="row-label opener" :aria-expanded="editing === t.id" :aria-label="`Change ${shownName(t)}, ${day(t.posted)}`" @click="open(t)">
             <span class="block desc">{{ shownName(t) }}</span>
             <span v-if="t.payee && t.description && t.payee !== t.description" class="footnote block desc">{{ t.description }}</span>
-            <span class="footnote">{{ day(t.posted) }}<template v-if="showAccount"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template><template v-if="origin(t)"> · {{ origin(t) }}</template></span>
+            <span class="footnote">{{ day(t.posted) }}<template v-if="showAccount"> · {{ names.get(t.account) }}</template><template v-if="t.owner_name"> · {{ t.owner_name }}'s</template><template v-if="t.pending"> · Pending</template><template v-if="origin(t)"> · {{ origin(t) }}</template></span>
             <span v-if="t.splits.length && t.shared" class="footnote block parts">Split details belong to the account owner.</span>
             <span v-else-if="t.splits.length" class="footnote block parts">{{ partsText(t) }}</span>
             <span v-if="t.link" class="footnote block link">{{ linkLine(t) }}</span>
@@ -252,7 +252,7 @@ watch(() => props.items, () => {
             <span>Leave out of spending, Overview, Projections and Taxes</span>
           </label>
           <p class="footnote">
-            <template v-if="t.shared">Shared by another household member. You can change its name, note, tags, or whether it counts.</template>
+            <template v-if="t.shared">Shared by {{ t.owner_name || 'another household member' }}<template v-if="t.owner_name">, in their account</template>. You can change its name, note, tags, or whether it counts.</template>
             <template v-else-if="t.source === 'manual'">You added this one by hand.</template>
             <template v-else>Its date, amount and description are what your {{ t.source === 'sync' ? 'bank sent' : 'statement says' }}. A name you give it groups it with that merchant.</template>
           </p>
