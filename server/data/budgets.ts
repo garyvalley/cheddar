@@ -1,6 +1,4 @@
-import { carryInto, type Budget } from "~~/shared/budgets";
-import { summarize } from "~~/shared/categories";
-import { expandSplits } from "~~/shared/splits";
+import { carryFrom, withCarry, type Budget } from "~~/shared/budgets";
 import { listCategories } from "./categories";
 import { transactionsBetween } from "./transactions";
 import { callerId, type Session } from "./session";
@@ -66,30 +64,12 @@ export async function budgetsForMonth(
   month: string,
 ): Promise<(Budget & { carry_cents: number })[]> {
   const budgets = await listBudgets(s);
-  const starts = budgets.filter((b) => b.rollover && b.rollover_from && b.rollover_from < month).map((b) => b.rollover_from);
-  if (!starts.length) return budgets.map((b) => ({ ...b, carry_cents: 0 }));
-  const first = starts.sort()[0]!;
+  const first = carryFrom(budgets, month);
+  if (!first) return budgets.map((b) => ({ ...b, carry_cents: 0 }));
   const [rows, list] = await Promise.all([
     // Up to the end of the month before: no posted date is on or before "YYYY-MM-00".
     transactionsBetween(s, `${first}-01`, `${month}-00`, { counted: true }),
     listCategories(s),
   ]);
-  // What each category came to in each month: category -> month -> cents.
-  const byMonth = new Map<string, (typeof rows)[number][]>();
-  for (const r of expandSplits(rows)) {
-    const m = r.posted.slice(0, 7);
-    if (!byMonth.has(m)) byMonth.set(m, []);
-    byMonth.get(m)!.push(r);
-  }
-  const spent = new Map<string, Map<string, number>>();
-  for (const [m, mRows] of byMonth)
-    for (const c of summarize(mRows, list).categories) {
-      if (!c.spending) continue;
-      if (!spent.has(c.id)) spent.set(c.id, new Map());
-      spent.get(c.id)!.set(m, c.total_cents);
-    }
-  return budgets.map((b) => ({
-    ...b,
-    carry_cents: b.rollover ? carryInto(b.amount_cents, b.rollover_from, month, spent.get(b.category) ?? new Map()) : 0,
-  }));
+  return withCarry(budgets, rows, list, month);
 }

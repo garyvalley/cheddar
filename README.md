@@ -205,6 +205,13 @@ tunnel, repository secrets) and day-to-day operations.
   account balances or net worth. Overview's **Coming up this week** lists
   the next seven days of it, and warns when a subscription's latest charge
   cost more than before.
+- **Get alerts by email** (Settings → Alerts): a charge over an amount you
+  pick, a checking or savings balance under one, bills and planned payments
+  due in the next 3 days, a budget passed this month, a bank that needs you
+  to sign in again, and a summary of the week on Mondays. Each is sent once,
+  several together in one email, and only to a confirmed address. Charges
+  and banks are looked at every hour, the rest once a morning ("Check now"
+  looks at once). They go out through Mailjet, so `MAILJET_*` must be set.
 - **Share selected accounts with a household** (Settings → Household). The
   owner invites verified Cheddar users; an invite must be accepted before
   access is granted. Household members can see selected accounts and their
