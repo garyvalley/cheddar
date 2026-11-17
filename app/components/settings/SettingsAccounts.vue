@@ -3,6 +3,7 @@
 import { ACCOUNT_KINDS, formatCents, isLiability, isStale, kindLabel, type Account, type AccountKind } from '~~/shared/accounts'
 import type { BankLinks } from '~~/shared/bank-links'
 import { GROUPS, groupOf } from '~~/shared/overview'
+import { yearlyChangeWords } from '~~/shared/property'
 
 // Each is named, closed, left out, filled from statement files and deleted here. Banks are
 // linked and unlinked just above (BankLinks); their accounts are listed here too.
@@ -75,7 +76,7 @@ const asOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString(
 // A typed-in balance past its kind's age (shared/accounts.ts) is marked, as Overview counts it.
 const stale = (a: Account) => isStale(a, today)
 
-const detail = (a: Account) => [kindLabel(a.kind), a.institution, linkOf.value.has(a.id) && 'Linked', a.last4 && `••${a.last4}`, a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' · ')
+const detail = (a: Account) => [kindLabel(a.kind), a.institution, linkOf.value.has(a.id) && 'Linked', a.last4 && `••${a.last4}`, yearlyChangeWords(a.yearly_change_bp ?? 0), a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' · ')
 </script>
 
 <template>

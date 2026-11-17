@@ -3,11 +3,11 @@ import { getAccount, updateAccount } from '~~/server/data/accounts'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { checkAccountChange, parseBalance, type AccountChange } from '~~/shared/accounts'
 
-type Body = AccountChange & { balance: unknown }
+type Body = AccountChange & { balance: unknown, yearly_change: unknown }
 
 /**
  * PATCH /api/accounts/:id { balance?, name?, kind?, institution?, last4?,
- * closed_on?, excluded? }: any of them, alone or together.
+ * closed_on?, excluded?, yearly_change? }: any of them, alone or together.
  *
  * - `balance`: what an account no bank link keeps up to date holds today
  *   ("1,234.56"; for a card or loan, what's owed).
@@ -17,12 +17,14 @@ type Body = AccountChange & { balance: unknown }
  *   (pb_hooks/balances.pb.js).
  * - `closed_on`: the day it closed (no later than today), or '' to open it again.
  * - `excluded`: true leaves it out of every page's numbers.
+ * - `yearly_change`: for property, the percent its value changes a year
+ *   ("3", "-15", "" for none); pb_hooks/property.pb.js moves it on daily.
  */
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
   const s = sessionFor(event)
   const id = recordId(getRouterParam(event, 'id'), 'No such account')
-  const body = await readFields<Body>(event, ['balance', 'name', 'kind', 'institution', 'last4', 'closed_on', 'excluded'])
+  const body = await readFields<Body>(event, ['balance', 'name', 'kind', 'institution', 'last4', 'closed_on', 'excluded', 'yearly_change'])
   const account = await attempt(() => getAccount(s, id), 'No such account')
   const today = await attempt(() => todayFor(s))
   const checked = checkAccountChange(body, account, today)

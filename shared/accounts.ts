@@ -1,5 +1,6 @@
 /** Accounts and transactions as the browser sees them, and the rules for a new account. */
 
+import { changesOnItsOwn, checkYearlyChange } from "./property.ts";
 import type { SplitPart } from "./splits.ts";
 
 export const ACCOUNT_KINDS = [
@@ -42,6 +43,8 @@ export interface Account {
   shared?: boolean;
   /** This owner has selected the account for household sharing. */
   shared_with_household?: boolean;
+  /** A property's value change a year, in basis points (shared/property.ts); 0 for none. */
+  yearly_change_bp?: number;
 }
 
 export interface NewAccount {
@@ -119,6 +122,7 @@ export function checkAccount(
 export interface AccountChange extends Partial<NewAccount> {
   closed_on?: string;
   excluded?: boolean;
+  yearly_change_bp?: number;
 }
 
 const isDay = (v: string) =>
@@ -152,6 +156,15 @@ export function checkAccountChange(
       return { problem: "Say whether to count the account." };
     out.excluded = input.excluded;
   }
+  // A yearly change belongs to property: one that stops being property drops it.
+  const kind = out.kind ?? current.kind;
+  if (input.yearly_change !== undefined) {
+    const rate = checkYearlyChange(input.yearly_change);
+    if ("problem" in rate) return rate;
+    if (rate.ok && !changesOnItsOwn(kind))
+      return { problem: "Only a home, car or other property changes in value on its own." };
+    out.yearly_change_bp = rate.ok;
+  } else if (out.kind && changesOnItsOwn(current.kind) && !changesOnItsOwn(kind)) out.yearly_change_bp = 0;
   if (input.closed_on !== undefined) {
     const day =
       typeof input.closed_on === "string" ? input.closed_on.trim() : null;
