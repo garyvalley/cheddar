@@ -273,12 +273,15 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
         <section class="card panel chart-area" aria-labelledby="flow-title">
           <div class="panel-head">
             <h2 id="flow-title" class="panel-title">Income and spending</h2>
-            <template v-if="hasMonths && shown">
-              <label class="visually-hidden" for="month-pick">Month</label>
-              <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">
-                <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
-              </select>
-            </template>
+            <span class="head-tools">
+              <NuxtLink to="/reports" class="panel-link">Trends</NuxtLink>
+              <template v-if="hasMonths && shown">
+                <label class="visually-hidden" for="month-pick">Month</label>
+                <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">
+                  <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
+                </select>
+              </template>
+            </span>
           </div>
           <div v-if="hasMonths && shown" class="card-pad">
             <div class="legend" aria-hidden="true">
@@ -494,6 +497,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
 .bar.spent { background: var(--spent); }
 .tick-label { height: 1.375rem; display: flex; align-items: center; justify-content: center; font-size: 0.6875rem; }
 .month.on .tick-label { font-weight: 600; }
+.head-tools { display: inline-flex; align-items: center; gap: 0.75rem; }
 .month-pick { width: auto; min-height: 2.25rem; font-size: 0.875rem; }
 .figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 1rem 0 0.75rem; padding-top: 1rem; border-top: var(--border); }
 .figures dt { font-size: 0.8125rem; color: var(--text-2); }
