@@ -185,6 +185,12 @@ tunnel, repository secrets) and day-to-day operations.
     "Tax-deductible". Open a transaction to tag it (a few per transaction).
     Spending lists each tag's total for the period, and the search can find
     every transaction with one tag, on any date.
+  - **Transfers and refunds are matched.** Money moved between two of your
+    own accounts (the same amount out and in, at most 4 days apart) is a
+    Transfer on both sides, so it isn't counted as spending or income. A
+    refund from a merchant is matched to its purchase there and counted
+    against that purchase's category. Each says so on its row; open one and
+    pick "Not a match" if Cheddar got it wrong.
   - **Download CSV** saves the transactions for the period, account and
     category you're looking at as a spreadsheet, tags included.
 - **Reports** (linked from Spending and Overview's chart) show trends over
