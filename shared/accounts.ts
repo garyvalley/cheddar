@@ -61,7 +61,7 @@ export interface Transaction {
   /** A category id (shared/categories.ts); empty until the store has sorted it. */
   category: string;
   /** How the category was chosen: by hand ("person"), by the person's rule, or automatically. */
-  category_by: "bank" | "match" | "default" | "rule" | "person" | "";
+  category_by: "bank" | "match" | "default" | "rule" | "person" | "link" | "";
   pending: boolean;
   source: "manual" | "import" | "sync";
   /** The person's own words about it. */
@@ -78,6 +78,8 @@ export interface Transaction {
   splits: SplitPart[];
   /** Labels across categories (shared/tags.ts), none when it has none. */
   tags: string[];
+  /** Matched as a transfer between the person's accounts or a refund of a purchase (shared/links.ts), else null. */
+  link: { kind: "transfer" | "refund"; other: { posted: string; account: string } | null } | null;
 }
 
 export interface Import {

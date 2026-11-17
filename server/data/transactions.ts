@@ -31,7 +31,18 @@ export const toTransaction = (r: RecordModel, person: string): Transaction => ({
   shared: r.owner !== person,
   splits: partsOf(r.splits),
   tags: tagsOf(r.tags),
+  link: linkOf(r),
 });
+
+/** Its match (shared/links.ts), from the expanded partner when the caller may see it. */
+function linkOf(r: RecordModel): Transaction["link"] {
+  if (r.link_kind !== "transfer" && r.link_kind !== "refund") return null;
+  const other = r.expand?.link as RecordModel | undefined;
+  return {
+    kind: r.link_kind,
+    other: other ? { posted: String(other.posted).slice(0, 10), account: other.account } : null,
+  };
+}
 
 export const PAGE_SIZE = 50;
 
@@ -133,6 +144,7 @@ export async function listTransactions(
   const filter = transactionFilter(s, q);
   const list = await s.collection("transactions").getList(q.page, PAGE_SIZE, {
     sort: "-posted,-created",
+    expand: "link",
     ...(filter ? { filter } : {}),
   });
   return {
@@ -167,7 +179,7 @@ export async function getTransaction(
   id: string,
 ): Promise<Transaction> {
   return toTransaction(
-    await s.collection("transactions").getOne(id),
+    await s.collection("transactions").getOne(id, { expand: "link" }),
     callerId(s),
   );
 }
@@ -266,6 +278,16 @@ export async function markTransactionsReviewed(
 
 export async function deleteTransaction(s: Session, id: string): Promise<void> {
   await s.collection("transactions").delete(id);
+}
+
+/** Undoes a transfer's or refund's match: both are on their own, and never matched again. */
+export function unlinkTransaction(
+  s: Session,
+  id: string,
+): Promise<{ unlinked: boolean }> {
+  return s.send(`/api/transactions/${encodeURIComponent(id)}/unlink`, {
+    method: "POST",
+  });
 }
 
 /**

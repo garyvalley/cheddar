@@ -115,6 +115,21 @@ function sort(app, rec, isNew) {
     usable(app, rec.getString("owner"), rec.getString("category"))
   )
     return;
+  // A matched transfer or refund (glue/links.js) isn't spending or income.
+  var kind = rec.getString("link_kind");
+  if (kind === "transfer") {
+    rec.set("category", "transfer");
+    rec.set("category_by", "link");
+    return;
+  }
+  if (kind === "refund" && rec.getInt("amount_cents") > 0) {
+    var bought = require(`${__hooks}/glue/links.js`).refundCategory(app, rec);
+    if (bought && usable(app, rec.getString("owner"), bought)) {
+      rec.set("category", bought);
+      rec.set("category_by", "link");
+      return;
+    }
+  }
   if (mine.category && usable(app, rec.getString("owner"), mine.category)) {
     rec.set("category", mine.category);
     rec.set("category_by", "rule");

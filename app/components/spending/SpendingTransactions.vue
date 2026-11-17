@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatCents, type Transaction } from '~~/shared/accounts'
 import { categoryOf, type Category } from '~~/shared/categories'
+import { linkWords } from '~~/shared/links'
 import { leftOver } from '~~/shared/splits'
 import { sameTag, TAG_MAX, TAGS_MAX } from '~~/shared/tags'
 import { DESCRIPTION_MAX, NOTE_MAX, PAYEE_MAX, checkEdit, shownName, type Direction } from '~~/shared/transactions'
@@ -122,6 +123,21 @@ function splitSaved(message: string) {
 }
 const partsText = (t: Transaction) => t.splits.map(p => `${label(p.category)} ${formatCents(p.amount_cents)}`).join(' · ')
 
+// A matched transfer or refund (shared/links.ts): said on its row, and the owner can undo it.
+const linkLine = (t: Transaction) => {
+  if (!t.link) return ''
+  const o = t.link.other
+  const name = o ? props.names.get(o.account) : undefined
+  return linkWords(t.link.kind, t, o && name ? { posted: day(o.posted), account_name: name } : o ? { posted: day(o.posted), account_name: 'another account' } : null)
+}
+async function unlink(t: Transaction) {
+  if (!await edit.succeed(() => $fetch(`/api/transactions/${t.id}/unlink`, { method: 'POST' }))) return
+  editing.value = ''
+  emit('changed', t.link?.kind === 'transfer'
+    ? `${shownName(t)} and its other side aren't a transfer any more, and are sorted on their own.`
+    : `${shownName(t)} isn't matched to its ${t.amount_cents > 0 ? 'purchase' : 'refund'} any more.`)
+}
+
 async function remove(t: Transaction) {
   if (!await edit.succeed(() => $fetch(`/api/transactions/${t.id}`, { method: 'DELETE' }))) return
   editing.value = ''
@@ -151,6 +167,7 @@ watch(() => props.items, () => {
             <span class="footnote">{{ day(t.posted) }}<template v-if="showAccount"> · {{ names.get(t.account) }}</template><template v-if="t.pending"> · Pending</template><template v-if="origin(t)"> · {{ origin(t) }}</template></span>
             <span v-if="t.splits.length && t.shared" class="footnote block parts">Split details belong to the account owner.</span>
             <span v-else-if="t.splits.length" class="footnote block parts">{{ partsText(t) }}</span>
+            <span v-if="t.link" class="footnote block link">{{ linkLine(t) }}</span>
             <span v-if="leftOver(t)" class="badge badge-warn">Split needs fixing</span>
             <span v-if="t.excluded" class="badge badge-off">Left out</span>
             <span v-if="t.tags.length" class="block tags"><span v-for="tag in t.tags" :key="tag" class="tag">{{ tag }}</span></span>
@@ -239,6 +256,14 @@ watch(() => props.items, () => {
             <template v-else-if="t.source === 'manual'">You added this one by hand.</template>
             <template v-else>Its date, amount and description are what your {{ t.source === 'sync' ? 'bank sent' : 'statement says' }}. A name you give it groups it with that merchant.</template>
           </p>
+          <div v-if="t.link && !t.shared" class="inline-form linked">
+            <span class="footnote grow">
+              <template v-if="t.link.kind === 'transfer'">Cheddar matched this with the same amount moving between your accounts, so neither side counts as spending or income.</template>
+              <template v-else-if="t.amount_cents > 0">Cheddar matched this refund to its purchase, so it's counted against that purchase's category, not as income.</template>
+              <template v-else>Cheddar matched a refund to this purchase.</template>
+            </span>
+            <button type="button" class="btn btn-plain" :disabled="edit.busy.value" @click="unlink(t)">Not a match</button>
+          </div>
           <p v-if="edit.error.value" class="notice notice-error" role="alert">{{ edit.error.value }}</p>
           <div v-if="deleting" class="inline-form">
             <span class="footnote grow">Delete {{ shownName(t) }}? This can't be undone.</span>
@@ -283,6 +308,8 @@ watch(() => props.items, () => {
 .offered { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
 .tag.add { min-height: 2rem; padding: 0.125rem 0.625rem; font: inherit; font-size: 0.8125rem; color: var(--accent); cursor: pointer; }
 .tag.add:hover { background: var(--accent-soft); }
+.link { color: var(--text-2); margin-top: 0.125rem; }
+.linked { align-items: center; }
 .note { color: var(--text-2); font-style: italic; white-space: pre-line; margin-top: 0.125rem; }
 .out .amount { opacity: 0.55; text-decoration: line-through; }
 .tx-side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
