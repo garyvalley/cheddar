@@ -9,8 +9,24 @@ import { GROWTH_PERIODS, groupOf, type GrowthPeriodId, type Overview } from '~~/
 // investment accounts' growth from the balances seen over time.
 
 const { me } = useAuth()
-const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
-const { data: ov, error } = await useFetch<Overview>('/api/overview')
+// The month picked on the chart (below), this one until one is.
+const selected = ref('')
+const thisMonth = useToday().slice(0, 7)
+const shownMonth = computed(() => selected.value || thisMonth)
+
+// Every request the page makes starts at once (issue #114): awaited one by
+// one, a first load waited for each in turn.
+const [{ data: list }, { data: ov, error }, { data: goalList }, { data: spend }] = await Promise.all([
+  useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) }),
+  useFetch<Overview>('/api/overview'),
+  // Savings goals (their own page, /goals): one line under the savings rate.
+  useFetch<{ goals: Goal[] }>('/api/goals', { default: () => ({ goals: [] }) }),
+  // The shown month's spending by category (the pie, below).
+  useFetch<SpendingSummary>('/api/spending', {
+    query: { period: 'month', at: shownMonth },
+    default: () => ({ from: '', to: '', spent_cents: 0, income_cents: 0, previous_spent_cents: 0, categories: [] }),
+  }),
+])
 
 const steps = computed(() => [
   { done: !!me.value?.verified, label: 'Confirm your email', hint: 'So you can reset your password if you forget it.', to: '/settings' },
@@ -48,7 +64,6 @@ function niceCeiling(cents: number) {
 const top = computed(() => niceCeiling(Math.max(...months.value.map(m => Math.max(m.income_cents, m.spent_cents)), 0)))
 const height = (cents: number) => `${Math.max(0, Math.min(100, (cents / top.value) * 100))}%`
 const compact = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100)
-const selected = ref('')
 const shown = computed(() => months.value.find(m => m.month === selected.value) ?? months.value.at(-1))
 const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
@@ -57,8 +72,7 @@ const period = ref<GrowthPeriodId>('1y')
 const invested = computed(() => ov.value?.net_worth.groups.find(g => g.id === 'investments')?.total_cents ?? null)
 const grown = computed(() => ov.value?.growth.find(g => g.period === period.value))
 const periodName = computed(() => GROWTH_PERIODS.find(p => p.id === period.value)?.name ?? '')
-// Savings goals (their own page, /goals): one line under the savings rate.
-const { data: goalList } = await useFetch<{ goals: Goal[] }>('/api/goals', { default: () => ({ goals: [] }) })
+// Savings goals: one line under the savings rate.
 const goals = computed(() => ({
   count: goalList.value.goals.length,
   saved: goalList.value.goals.reduce((n, g) => n + g.saved_cents, 0),
@@ -67,10 +81,6 @@ const goals = computed(() => ({
 const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(rate * 100).toFixed(Math.abs(rate) < 0.1 ? 2 : 1)}%`
 
 // The shown month's spending by category: the five largest, the rest as "Other".
-const { data: spend } = await useFetch<SpendingSummary>('/api/spending', {
-  query: { period: 'month', at: computed(() => shown.value?.month) },
-  default: () => ({ from: '', to: '', spent_cents: 0, income_cents: 0, previous_spent_cents: 0, categories: [] }),
-})
 const SLICES = 5
 const slices = computed(() => {
   const spent = spend.value.categories.filter(c => c.spending && c.total_cents > 0)

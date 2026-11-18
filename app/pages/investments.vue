@@ -8,8 +8,13 @@ import { GROWTH_PERIODS, type GrowthPeriodId } from '~~/shared/overview'
 // The brokerage and retirement accounts on their own: what they hold, how
 // they grew, and their value month by month. Read only: they're linked in
 // Settings and added or edited there too.
-const { data, error } = await useFetch<Investments & { holdings: Portfolio & { on: boolean } }>('/api/investments')
-const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
+const [
+  { data, error },
+  { data: links },
+] = await Promise.all([
+  useFetch<Investments & { holdings: Portfolio & { on: boolean } }>('/api/investments'),
+  useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) }),
+])
 
 const period = ref<GrowthPeriodId>('1y')
 const grown = computed(() => data.value?.growth.find(g => g.period === period.value))

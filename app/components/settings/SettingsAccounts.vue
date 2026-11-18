@@ -7,8 +7,13 @@ import { yearlyChangeWords } from '~~/shared/property'
 
 // Each is named, closed, left out, filled from statement files and deleted here. Banks are
 // linked and unlinked just above (BankLinks); their accounts are listed here too.
-const { data, refresh } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
-const { data: links } = await useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) })
+const [
+  { data, refresh },
+  { data: links },
+] = await Promise.all([
+  useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) }),
+  useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) }),
+])
 const canLink = computed(() => links.value.enabled && !links.value.full)
 // Each linked account's link, for its bank's name and whether it needs signing in again.
 const linkOf = computed(() => new Map(links.value.links.flatMap(l => l.accounts.map(a => [a.id, l] as const))))

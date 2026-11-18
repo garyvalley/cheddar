@@ -42,25 +42,6 @@ function go(change: Record<string, string | undefined>) {
   return router.push({ query })
 }
 
-const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
-const names = computed(() => new Map(list.value.accounts.map(a => [a.id, a.name])))
-
-const { data: cats, refresh: refreshCats } = await useFetch<{ categories: Category[] }>('/api/categories', { key: 'categories', default: () => ({ categories: BUILT_IN }) })
-const all = computed(() => cats.value.categories)
-const label = (id: string) => categoryOf(id, all.value).label
-const viewing = computed(() => all.value.find(c => c.id === category.value))
-
-const { data: summary, error: summaryError, refresh: refreshSummary } = await useFetch<SpendingSummary>('/api/spending', {
-  query: { period: kind, at: computed(() => period.value.at), account },
-  default: () => ({ from: '', to: '', spent_cents: 0, income_cents: 0, previous_spent_cents: 0, categories: [] }),
-})
-const spending = computed(() => summary.value.categories.filter(c => c.spending))
-const notSpending = computed(() => summary.value.categories.filter(c => !c.spending))
-const largest = computed(() => Math.max(1, ...spending.value.map(c => c.total_cents)))
-const share = (cents: number) => `${Math.max(0, Math.min(100, (cents / largest.value) * 100)).toFixed(1)}%`
-const current = computed(() => summary.value.categories.find(c => c.id === category.value))
-const count = computed(() => summary.value.categories.reduce((n, c) => n + c.count, 0))
-
 // The list shown: a search's, or a category's (or every one) for the period.
 const listQuery = computed(() => {
   const query: Record<string, string> = {}
@@ -77,19 +58,58 @@ const listQuery = computed(() => {
   return query
 })
 const listing = computed(() => reviewMode.value || searching.value || !!category.value)
-const { data: txs, pending, error: txError, refresh: refreshTxs } = await useFetch<{ items: Transaction[], page: number, pages: number, total: number }>('/api/transactions', {
-  query: computed(() => ({ ...listQuery.value, page: page.value })),
-  default: () => ({ items: [], page: 1, pages: 0, total: 0 }),
-  immediate: listing.value,
-  watch: false,
-})
+
+// Every request the page makes starts at once (issue #114): awaited one by
+// one, a first load waited for each in turn.
+const [
+  { data: list },
+  { data: cats, refresh: refreshCats },
+  { data: summary, error: summaryError, refresh: refreshSummary },
+  { data: txs, pending, error: txError, refresh: refreshTxs },
+  { data: waiting, refresh: refreshWaiting },
+  // Tags: each one's total for the period, and every one used, to offer when tagging.
+  { data: tagData, refresh: refreshTags },
+  // Budgets: a monthly amount per spending category.
+  { data: budgetList, refresh: refreshBudgets },
+] = await Promise.all([
+  useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) }),
+  useFetch<{ categories: Category[] }>('/api/categories', { key: 'categories', default: () => ({ categories: BUILT_IN }) }),
+  useFetch<SpendingSummary>('/api/spending', {
+    query: { period: kind, at: computed(() => period.value.at), account },
+    default: () => ({ from: '', to: '', spent_cents: 0, income_cents: 0, previous_spent_cents: 0, categories: [] }),
+  }),
+  useFetch<{ items: Transaction[], page: number, pages: number, total: number }>('/api/transactions', {
+    query: computed(() => ({ ...listQuery.value, page: page.value })),
+    default: () => ({ items: [], page: 1, pages: 0, total: 0 }),
+    immediate: listing.value,
+    watch: false,
+  }),
+  useFetch<{ waiting: number, history: number }>('/api/transactions/review', {
+    query: computed(() => (account.value ? { account: account.value } : {})),
+    default: () => ({ waiting: 0, history: 0 }),
+    immediate: reviewMode.value,
+    watch: false,
+  }),
+  useFetch<{ totals: TagTotal[], known: string[] }>('/api/tags', {
+    query: { from: computed(() => period.value.from), to: computed(() => period.value.to), account },
+    default: () => ({ totals: [], known: [] }),
+  }),
+  useFetch<{ budgets: Budget[] }>('/api/budgets', { default: () => ({ budgets: [] }) }),
+])
+const names = computed(() => new Map(list.value.accounts.map(a => [a.id, a.name])))
+
+const all = computed(() => cats.value.categories)
+const label = (id: string) => categoryOf(id, all.value).label
+const viewing = computed(() => all.value.find(c => c.id === category.value))
+
+const spending = computed(() => summary.value.categories.filter(c => c.spending))
+const notSpending = computed(() => summary.value.categories.filter(c => !c.spending))
+const largest = computed(() => Math.max(1, ...spending.value.map(c => c.total_cents)))
+const share = (cents: number) => `${Math.max(0, Math.min(100, (cents / largest.value) * 100)).toFixed(1)}%`
+const current = computed(() => summary.value.categories.find(c => c.id === category.value))
+const count = computed(() => summary.value.categories.reduce((n, c) => n + c.count, 0))
+
 watch([listQuery, page], () => { if (listing.value) refreshTxs() })
-const { data: waiting, refresh: refreshWaiting } = await useFetch<{ waiting: number, history: number }>('/api/transactions/review', {
-  query: computed(() => (account.value ? { account: account.value } : {})),
-  default: () => ({ waiting: 0, history: 0 }),
-  immediate: reviewMode.value,
-  watch: false,
-})
 watch([reviewMode, account], () => { if (reviewMode.value) refreshWaiting() })
 
 // What's shown, as a spreadsheet: the search, or the period, account and category picked.
@@ -121,12 +141,6 @@ const found = computed(() => {
   const size = min.value && max.value ? `$${min.value} to $${max.value}` : min.value ? `$${min.value} or more` : max.value ? `up to $${max.value}` : ''
   const what = [q.value && `“${q.value}”`, size].filter(Boolean).join(', ')
   return `${txs.value.total.toLocaleString()} ${txs.value.total === 1 ? 'transaction' : 'transactions'}${what ? ` for ${what}` : ''}${tag.value ? ` tagged ${tag.value}` : ''}, any date`
-})
-
-// Tags: each one's total for the period, and every one used, to offer when tagging.
-const { data: tagData, refresh: refreshTags } = await useFetch<{ totals: TagTotal[], known: string[] }>('/api/tags', {
-  query: { from: computed(() => period.value.from), to: computed(() => period.value.to), account },
-  default: () => ({ totals: [], known: [] }),
 })
 
 // Something changed (moved, edited, added, deleted): the totals follow, then it's said.
@@ -172,7 +186,6 @@ function showRange() {
 // Budgets: a monthly amount per spending category, shown against the span's spending.
 const overBy = (c: { total_cents: number, budget_cents?: number }) => (c.budget_cents ?? 0) - c.total_cents
 const budgetShare = (c: { total_cents: number, budget_cents?: number }) => `${Math.max(0, Math.min(100, (c.total_cents / Math.max(1, c.budget_cents ?? 0)) * 100)).toFixed(1)}%`
-const { data: budgetList, refresh: refreshBudgets } = await useFetch<{ budgets: Budget[] }>('/api/budgets', { default: () => ({ budgets: [] }) })
 const thisBudget = computed(() => budgetList.value.budgets.find(b => b.category === category.value))
 const monthlyBudget = computed(() => thisBudget.value?.amount_cents ?? 0)
 // A budget a household member shared: its amount can change here, nothing else.

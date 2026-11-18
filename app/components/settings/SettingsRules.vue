@@ -7,9 +7,15 @@ import { BUILT_IN, categoryLabel, type Category } from '~~/shared/categories'
 import { actionWords, conditionWords, RENAME_MAX, TEXT_MAX, type MerchantRule, type Rule, type Rules } from '~~/shared/rules'
 import { parseAmount } from '~~/shared/transactions'
 
-const { data, refresh } = await useFetch<Rules>('/api/rules', { default: () => ({ rules: [], merchant: [] }) })
-const { data: cats } = await useFetch<{ categories: Category[] }>('/api/categories', { key: 'categories', default: () => ({ categories: BUILT_IN }) })
-const { data: accts } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
+const [
+  { data, refresh },
+  { data: cats },
+  { data: accts },
+] = await Promise.all([
+  useFetch<Rules>('/api/rules', { default: () => ({ rules: [], merchant: [] }) }),
+  useFetch<{ categories: Category[] }>('/api/categories', { key: 'categories', default: () => ({ categories: BUILT_IN }) }),
+  useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) }),
+])
 
 // Only the person's own categories and accounts: a rule sorts only their transactions.
 const categories = computed(() => cats.value.categories.filter(c => !c.shared))

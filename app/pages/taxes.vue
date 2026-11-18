@@ -12,12 +12,14 @@ import { estimate, federalFor, ideas, type TaxYear } from '~~/shared/taxes'
 // and isn't saved.
 
 const { me } = useAuth()
-const { data: list } = await useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) })
 // The year shown: the server's pick (last year until April 15) until the person picks one.
 const route = useRoute()
 const router = useRouter()
 const picked = computed(() => (typeof route.query.year === 'string' && /^\d{4}$/.test(route.query.year) ? route.query.year : undefined))
-const { data: ty, error } = await useFetch<TaxYear & { years: number[] }>('/api/taxes', { query: { year: picked } })
+const [{ data: list }, { data: ty, error }] = await Promise.all([
+  useFetch<{ accounts: Account[] }>('/api/accounts', { default: () => ({ accounts: [] }) }),
+  useFetch<TaxYear & { years: number[] }>('/api/taxes', { query: { year: picked } }),
+])
 const year = computed(() => ty.value?.year ?? new Date().getUTCFullYear())
 const pickYear = (y: number) => router.push({ query: { ...route.query, year: String(y) } })
 // The figures used: the year's own, or the newest year's before it, said plainly.
