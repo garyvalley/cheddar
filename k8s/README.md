@@ -308,6 +308,20 @@ stop at Cloudflare's edge.
     `pvc/pb-backup-replica` with SMB).
 - Rotate the superuser: delete the `pocketbase-superuser` Secret (as admin)
   and deploy; PocketBase sets the new password on start.
+- **Updating the SMB driver** (`cluster/csi-driver-smb.yaml`, which mounts
+  the backup share). Its Helm chart version is pinned, and Dependabot can't
+  see a k3s HelmChart, so check now and then (say, monthly with the restore
+  drill):
+  1. What runs: `… -n kube-system get pods -l app=csi-smb-controller -o jsonpath='{.items[0].spec.containers[*].image}'`
+     (the `smbplugin:v…` tag is the chart's version).
+  2. What's out: the releases at
+     https://github.com/kubernetes-csi/csi-driver-smb/releases (read the
+     notes for breaking changes and the Kubernetes versions it supports).
+  3. To move to one: change `version:` in a PR, merge it, then as admin
+     `ssh ubuntu@primary sudo k3s kubectl apply -f - < k8s/cluster/csi-driver-smb.yaml`.
+     k3s's Helm controller upgrades the release. Check `pb-backup` is
+     Running and its log shows replication afterwards, then run the restore
+     drill.
 
 ## Not done yet
 

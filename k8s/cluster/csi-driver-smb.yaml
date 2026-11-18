@@ -2,6 +2,11 @@
 # k8s/cluster/backup-smb.yaml). Cluster-wide: a cluster admin applies it once,
 # and only if `kubectl get csidriver smb.csi.k8s.io` finds nothing (Homefile
 # may have installed it already). k3s's Helm controller installs the chart.
+#
+# The version is pinned, so a new upstream release never installs on its own
+# (this driver mounts the backup share). Dependabot can't track a HelmChart:
+# k8s/README.md "Updating the SMB driver" says how to check for and apply a
+# new one.
 apiVersion: helm.cattle.io/v1
 kind: HelmChart
 metadata:
@@ -10,4 +15,5 @@ metadata:
 spec:
   repo: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
   chart: csi-driver-smb
+  version: 1.20.4
   targetNamespace: kube-system
