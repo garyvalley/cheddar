@@ -15,5 +15,7 @@ routerAdd("POST", "/api/delete-account", (e) => {
     throw new BadRequestError("That password is not right.")
   }
   e.app.delete(user)
+  // Sent to the address it had, once everything is gone (best effort).
+  require(`${__hooks}/glue/two_step.js`).notify(user, "accountDeleted")
   return e.noContent(204)
 }, $apis.requireAuth("users"))

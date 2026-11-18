@@ -22,12 +22,27 @@ function start(app, user, headers) {
   var now = Date.now()
   row.set("user", user.id)
   row.set("sid_hash", hash(sid))
-  row.set("device", rules.deviceLabel(headers.x_cheddar_device).slice(0, 60))
-  row.set("place", rules.place(headers.x_cheddar_place))
+  var device = rules.deviceLabel(headers.x_cheddar_device).slice(0, 60)
+  var place = rules.place(headers.x_cheddar_place)
+  // Earlier sign-ins: live sessions, and Recent activity's (kept 90 days).
+  var previous = []
+  try {
+    app.findRecordsByFilter("sessions", "user = {:u}", "", 200, 0, { u: user.id })
+      .concat(app.findRecordsByFilter("security_events", "user = {:u} && kind = 'sign_in'", "-created", 200, 0, { u: user.id }))
+      .forEach(function (r) { previous.push({ device: r.getString("device"), place: r.getString("place") }) })
+  }
+  catch (err) {
+    console.log("[sessions] could not read earlier sign-ins: " + err)
+  }
+  row.set("device", device)
+  row.set("place", place)
   row.set("signed_in", now)
   row.set("verified", now)
   row.set("last_used", now)
   app.save(row)
+  if (rules.isNewDevice(previous, device, place)) {
+    require(`${__hooks}/glue/two_step.js`).notify(user, "newDevice", { device: device, place: place })
+  }
   return sid
 }
 

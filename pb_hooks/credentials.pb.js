@@ -37,6 +37,7 @@ routerAdd("POST", "/api/change-password", (e) => {
   var mine = sessions.current(e)
   sessions.endAll(e.app, user.id, mine ? mine.id : "")
   require(`${__hooks}/glue/events.js`).record(e.app, user.id, "password_changed", e)
+  require(`${__hooks}/glue/two_step.js`).notify(user, "passwordChanged")
   return e.json(200, { token: user.newAuthToken() })
 }, $apis.requireAuth("users"))
 
@@ -94,4 +95,11 @@ onRecordUpdateRequest((e) => {
     throw new BadRequestError("Change your password in Settings.")
   }
   e.next()
+}, "users")
+
+// A password set from a reset link is a change too: say so to the account's
+// address, as the route above does.
+onRecordConfirmPasswordResetRequest((e) => {
+  e.next()
+  require(`${__hooks}/glue/two_step.js`).notify(e.record, "passwordChanged")
 }, "users")
