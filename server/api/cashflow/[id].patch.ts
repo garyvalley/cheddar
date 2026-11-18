@@ -45,7 +45,12 @@ export default defineEventHandler(async (event) => {
   );
   if ("problem" in checked)
     throw createError({ statusCode: 400, statusMessage: checked.problem });
-  if (checked.ok.source_key) {
+  // A planned recurring charge must still be one: checked when it's tied to
+  // one, not on every change of its amount, name or date (issue #115).
+  if (
+    checked.ok.source_key &&
+    (checked.ok.source_key !== current.source_key || checked.ok.account !== current.account)
+  ) {
     const detected = await attempt(() => recurringCharges(s, today));
     if (
       !detected.items.some(

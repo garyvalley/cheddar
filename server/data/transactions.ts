@@ -5,6 +5,7 @@ import { partsOf, type SplitPart } from "~~/shared/splits";
 import { tagNeedle, tagsOf } from "~~/shared/tags";
 import type { EditFields, ManualFields } from "~~/shared/transactions";
 import { COUNTED, TX_COUNTED, counted, listAccounts } from "./accounts";
+import { keep, recall } from "./memo";
 import { callerId, type Session } from "./session";
 
 /**
@@ -417,15 +418,38 @@ export async function transactionsBetween(
   if (opts.ownedOnly) parts.push("owner = {:owner}");
   if (opts.counted) parts.push(TX_COUNTED);
   if (opts.extra) parts.push(`(${opts.extra})`);
-  return (await s.collection("transactions").getFullList({
-    fields: `account,posted,amount_cents,category,excluded,splits${opts.merchants ? ",merchant_key,payee,description" : ""}`,
-    filter: s.filter(parts.join(" && "), {
-      from,
-      to: to ?? "",
-      account: opts.account ?? "",
-      owner: opts.ownedOnly ? callerId(s) : "",
-    }),
+  const fields = `account,posted,amount_cents,category,excluded,splits${opts.merchants ? ",merchant_key,payee,description" : ""}`;
+  const filter = s.filter(parts.join(" && "), {
+    from,
+    to: to ?? "",
+    account: opts.account ?? "",
+    owner: opts.ownedOnly ? callerId(s) : "",
+  });
+  // The same rows as last time while nothing in them changed (server/data/memo.ts).
+  const key = `${callerId(s)}\n${fields}\n${filter}`;
+  const version = await versionOf(s, filter);
+  const kept = recall<ReportRow>(key, version);
+  if (kept) return kept;
+  const rows = (await s.collection("transactions").getFullList({
+    fields,
+    filter,
   })) as unknown as ReportRow[];
+  return keep(key, version, rows);
+}
+
+/**
+ * What the transactions a filter finds are at now: how many, and when the
+ * latest of them changed. A new row or a deleted one changes the count; an
+ * edit (the hooks' too: a category, a link, a sync's update) moves `updated`.
+ * Read before the rows, so rows kept with it are never older than it.
+ */
+async function versionOf(s: Session, filter: string): Promise<string> {
+  const latest = await s.collection("transactions").getList(1, 1, {
+    fields: "updated",
+    sort: "-updated",
+    filter,
+  });
+  return `${latest.totalItems}@${latest.items[0]?.updated ?? ""}`;
 }
 
 /**
