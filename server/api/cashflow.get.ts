@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   const [accounts, items, recurring] = await Promise.all([
     attempt(() => listAccounts(s, true)),
     attempt(() => listCashflowItems(s)),
-    attempt(() => recurringCharges(s, undefined, today)),
+    attempt(() => recurringCharges(s, today)),
   ]);
   const accountIds = new Set(accounts.map((account) => account.id));
   const detected = recurring.items.filter((item) =>

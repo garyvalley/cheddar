@@ -1,5 +1,5 @@
 import { overBudget } from "~~/shared/budgets";
-import { localToday, summarize } from "~~/shared/categories";
+import { summarize } from "~~/shared/categories";
 import {
   GROWTH_PERIODS,
   asHeld,
@@ -26,7 +26,7 @@ import type { Session } from "../session";
  */
 export async function overview(
   s: Session,
-  today = localToday(),
+  today: string,
 ): Promise<Overview> {
   const months = lastMonths(today, 12);
   const [all, fetched, kept, list, budgets] = await Promise.all([

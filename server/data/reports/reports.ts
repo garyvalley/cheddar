@@ -1,4 +1,3 @@
-import { localToday } from "~~/shared/categories";
 import { monthEnd, monthsFrom, report, yearReview, type Report, type YearReview } from "~~/shared/reports";
 import { expandSplits } from "~~/shared/splits";
 import { listCategories } from "../categories";
@@ -19,7 +18,7 @@ export async function trends(s: Session, from: string, to: string): Promise<Repo
 }
 
 /** A year in review, against the year before. */
-export async function yearInReview(s: Session, year: number, today = localToday()): Promise<YearReview> {
+export async function yearInReview(s: Session, year: number, today: string): Promise<YearReview> {
   const [rows, before, list] = await Promise.all([
     transactionsBetween(s, `${year}-01-01`, `${year}-12-31`, { counted: true, merchants: true }),
     transactionsBetween(s, `${year - 1}-01-01`, `${year - 1}-12-31`, { counted: true }),

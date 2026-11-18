@@ -2,7 +2,6 @@ import { growthStart, isInvestment } from "~~/shared/overview";
 import { investments, type Investments } from "~~/shared/investments";
 import { portfolio, type Portfolio, type Position } from "~~/shared/holdings";
 import { listLinks } from "../bank-links";
-import { localToday } from "~~/shared/categories";
 import { expandSplits } from "~~/shared/splits";
 import { counted } from "../accounts";
 import { balanceHistory, transactionsBetween } from "../transactions";
@@ -15,7 +14,7 @@ import type { Session } from "../session";
  */
 export async function investmentsReport(
   s: Session,
-  today = localToday(),
+  today: string,
 ): Promise<Investments & { holdings: Portfolio & { on: boolean } }> {
   const all = (await counted(s)).filter((a) => isInvestment(a.kind));
   if (!all.length) return { ...investments([], [], [], today), holdings: { ...portfolio([], [], false), on: false } };

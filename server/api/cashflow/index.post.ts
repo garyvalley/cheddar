@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   if ("problem" in checked)
     throw createError({ statusCode: 400, statusMessage: checked.problem });
   if (checked.ok.source_key) {
-    const detected = await attempt(() => recurringCharges(s, undefined, today));
+    const detected = await attempt(() => recurringCharges(s, today));
     if (
       !detected.items.some(
         (item) =>

@@ -13,5 +13,5 @@ export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const account = q.account ? recordId(q.account, 'No such account') : undefined
   const today = await attempt(() => todayFor(s))
-  return await attempt(() => recurringCharges(s, account, today))
+  return await attempt(() => recurringCharges(s, today, account))
 })

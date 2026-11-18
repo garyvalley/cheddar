@@ -1,4 +1,3 @@
-import { localToday } from "~~/shared/categories";
 import { asHeld, isInvestment, lastMonths, monthly } from "~~/shared/overview";
 import {
   PACE_MONTHS,
@@ -21,7 +20,7 @@ import type { Session } from "../session";
  */
 export async function projections(
   s: Session,
-  today = localToday(),
+  today: string,
 ): Promise<Projections> {
   const months = lastMonths(today, PACE_MONTHS + 1).slice(0, PACE_MONTHS);
   const [all, fetched, kept, list] = await Promise.all([

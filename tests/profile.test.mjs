@@ -9,6 +9,7 @@ import { STATES, stateByCode } from '../shared/states.ts'
 import { localToday } from '../shared/categories.ts'
 import { timeZoneChoices, timeZoneLabel, todayIn, US_ZONES } from '../shared/time-zone.ts'
 import { loadHookModule } from './load-hook-module.mjs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 describe('the states', () => {
   test('are the 50 states and DC, each once', () => {
@@ -110,5 +111,17 @@ describe('the hooks\' own "today"', () => {
     assert.equal(dates.personToday('2026-11-11', NOW), '2026-11-14')
     assert.equal(dates.personToday('2026-02-30', NOW), '2026-11-14')
     assert.equal(dates.personToday('soon', NOW), '2026-11-14')
+  })
+})
+
+describe('the server\'s "today"', () => {
+  // Its pods run in UTC: a report that took localToday() would give the
+  // person the wrong day for hours each evening (issue #24, #118).
+  test('is never the server\'s own day', () => {
+    const root = new URL('../server/', import.meta.url)
+    const files = readdirSync(root, { recursive: true }).filter(f => /\.ts$/.test(f))
+    assert.ok(files.length > 50)
+    for (const f of files)
+      assert.doesNotMatch(readFileSync(new URL(f, root), 'utf8'), /\blocalToday\b/, `server/${f} uses localToday(); use todayFor(s)`)
   })
 })
