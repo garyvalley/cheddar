@@ -1,5 +1,5 @@
 import { tagTotals, tagsOf, type TagTotal } from "~~/shared/tags";
-import { transactionFilter } from "./transactions";
+import { scopedFilter } from "./transactions";
 import type { Session } from "./session";
 
 /**
@@ -11,11 +11,11 @@ export async function tagsBetween(
   s: Session,
   q: { from?: string; to?: string; account?: string },
 ): Promise<{ totals: TagTotal[]; known: string[] }> {
-  const read = (filter: string) =>
-    s.collection("transactions").getFullList({ fields: "amount_cents,tags", filter });
+  const read = async (filter: Promise<string>) =>
+    s.collection("transactions").getFullList({ fields: "amount_cents,tags", filter: await filter });
   const [rows, all] = await Promise.all([
-    read(transactionFilter(s, { ...q, counted: true, tagged: true })),
-    read(transactionFilter(s, { tagged: true, uncounted: true })),
+    read(scopedFilter(s, { ...q, counted: true, tagged: true })),
+    read(scopedFilter(s, { tagged: true, uncounted: true })),
   ]);
   const known = tagTotals(all.map((r) => ({ amount_cents: 0, tags: tagsOf(r.tags) })))
     .map((t) => t.tag)
