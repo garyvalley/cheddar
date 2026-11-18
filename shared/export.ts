@@ -48,6 +48,8 @@ export interface ExportData {
   balance_history: BalancePoint[];
   goals: Goal[];
   budgets: Budget[];
+  /** Receipts kept with transactions; each file is in the zip at `file`. */
+  receipts?: { id: string; transaction: string; name: string; type: string; size: number; created: string; file: string }[];
   /** What they're emailed about (Settings → Alerts). */
   alerts?: AlertSettings;
   /** What linked investment accounts hold, as their banks last reported it. */

@@ -262,6 +262,18 @@ stop at Cloudflare's edge.
   is its own pod on the same volume, so a NAS that's down never stops
   PocketBase. Check it with `… logs deploy/pb-backup`. The deploy refuses a
   replica without an age recipient.
+  - **Receipts' files** (`pb_data/storage`) aren't in the database. With
+    `BACKUP_SMB`, the pod's `files` container copies that folder to the share
+    once a day as `cheddar-files/storage-<day>.tar.age`, encrypted to the
+    same age recipient, and keeps 14 days (`… logs deploy/pb-backup -c files`).
+    Without SMB they aren't backed up yet. To check or restore one, on the
+    Mac with the share mounted:
+    ```sh
+    age -d -i ~/cheddar-backup.key /Volumes/homefile-backups/cheddar-files/storage-2026-11-20.tar.age | tar -tv | head
+    ```
+    To put them back after a restore, extract it into `pb_data/` on `primary`
+    with PocketBase scaled to 0 (step 2 below), so `storage/` sits beside
+    `data.db`.
   - **Restore drill** (monthly, and after changing the backup settings). On
     the Mac, on the home network, with Docker:
     ```sh

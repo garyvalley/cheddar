@@ -15,9 +15,11 @@ import { allTransactions } from "./transactions";
 import { listAccounts } from "./accounts";
 import { listCategories } from "./categories";
 import { listImports } from "./imports";
+import { allReceipts } from "./receipts";
+import { receiptFileName } from "~~/shared/receipts";
 import { toMe } from "./profile";
 import { todayIn } from "~~/shared/time-zone";
-import { zip } from "./zip";
+import { zipChunks, type ZipEntry } from "./zip";
 import { callerId, type Session } from "./session";
 import type { RuleFields } from "~~/shared/rules";
 
@@ -123,17 +125,30 @@ export async function exportData(
 }
 
 /**
- * The export as a zip (accounts.csv, transactions.csv, balance_history.csv
- * and cheddar.json), and the person's own today, to name it by.
+ * The export as a zip (accounts.csv, transactions.csv, balance_history.csv,
+ * cheddar.json and a receipts folder), and the person's own today, to name it by.
  */
 export async function exportZip(
   s: Session,
   password: string,
   now = new Date(),
-): Promise<{ file: Buffer; day: string }> {
+): Promise<{ chunks: AsyncGenerator<Buffer>; day: string }> {
   const data = await exportData(s, password, now);
+  // Receipts go in the zip beside the JSON that lists them, fetched one at
+  // a time as the zip streams out.
+  const posted = new Map(data.transactions.map((t) => [t.id, t.posted]));
+  const receipts = await allReceipts(s);
+  data.receipts = receipts.map(({ receipt: r }) => ({
+    ...r,
+    file: `receipts/${receiptFileName(posted.get(r.transaction) ?? r.created, r.id, r.name, r.type)}`,
+  }));
+  const listed = data.receipts;
+  async function* entries(): AsyncGenerator<ZipEntry> {
+    yield* Object.entries(exportFiles(data));
+    for (const [i, { file }] of receipts.entries()) yield [listed[i]!.file, await file()];
+  }
   return {
-    file: zip(exportFiles(data), now),
+    chunks: zipChunks(entries(), now),
     day: todayIn(data.profile.time_zone, now),
   };
 }

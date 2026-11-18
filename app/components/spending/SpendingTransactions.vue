@@ -264,6 +264,7 @@ watch(() => props.items, () => {
             </span>
             <button type="button" class="btn btn-plain" :disabled="edit.busy.value" @click="unlink(t)">Not a match</button>
           </div>
+          <SpendingReceipts v-if="!t.shared" :transaction="t.id" />
           <p v-if="edit.error.value" class="notice notice-error" role="alert">{{ edit.error.value }}</p>
           <div v-if="deleting" class="inline-form">
             <span class="footnote grow">Delete {{ shownName(t) }}? This can't be undone.</span>
