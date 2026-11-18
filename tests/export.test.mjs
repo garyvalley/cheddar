@@ -83,20 +83,20 @@ describe('the zip', () => {
     category_rules: [{ merchant: 'coffee', category: 'dining' }], rules: [], bank_links: [], activity: [],
   }
 
-  test('holds the three spreadsheets and cheddar.json, which reads back as the export', () => {
-    const files = unzip(zip(exportFiles(data)))
+  test('holds the three spreadsheets and cheddar.json, which reads back as the export', async () => {
+    const files = unzip(await zip(exportFiles(data)))
     assert.deepEqual(Object.keys(files), ['accounts.csv', 'transactions.csv', 'balance_history.csv', 'cheddar.json'])
     assert.deepEqual(JSON.parse(files['cheddar.json']), data)
     assert.match(files['transactions.csv'], /COFFEE/)
   })
 
-  test('opens with the system unzip, when there is one', (t) => {
+  test('opens with the system unzip, when there is one', async (t) => {
     let has = true
     try { execFileSync('unzip', ['-v'], { stdio: 'ignore' }) }
     catch { has = false }
     if (!has) return t.skip('no unzip here')
     const dir = mkdtempSync(join(tmpdir(), 'cheddar-zip-'))
-    writeFileSync(join(dir, 'x.zip'), zip({ 'a.txt': 'hello '.repeat(1000), 'b.csv': 'é,1\r\n' }))
+    writeFileSync(join(dir, 'x.zip'), await zip({ 'a.txt': 'hello '.repeat(1000), 'b.csv': 'é,1\r\n', 'c.jpg': new Uint8Array([0xFF, 0xD8, 0xFF, 1, 2, 3]) }))
     const list = execFileSync('unzip', ['-t', join(dir, 'x.zip')], { encoding: 'utf8' })
     assert.match(list, /No errors detected/)
   })

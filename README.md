@@ -136,6 +136,10 @@ tunnel, repository secrets) and day-to-day operations.
   A home or car can change in value by a yearly percent you set on its Edit
   (3 for a home gaining 3% a year, -15 for a car losing 15%): Cheddar moves
   its value on each day, so it doesn't go out of date.
+- **Keep a receipt** with a transaction: open it on Spending and choose
+  Add a receipt (a photo or a PDF, kept at full size up to 10 MB), for
+  warranties, returns or getting paid back. Up to 5 on each, and your
+  export includes them.
 - **Import a statement** (Import, under Settings → Your accounts):
   - On your bank's website, download your transactions as CSV, or as
     Quicken (QFX) or Money (OFX).

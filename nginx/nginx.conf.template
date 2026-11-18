@@ -92,7 +92,7 @@ server {
     # reads this.
     add_header Cloudflare-CDN-Cache-Control "no-store" always;
 
-    # Only statement imports (below) take more.
+    # Only statement imports and receipts (below) take more.
     client_max_body_size 1M;
 
     # While Nuxt or PocketBase restarts, a deploy, an upstream 502/503/504
@@ -163,6 +163,13 @@ server {
     # line breaks makes it larger (shared/statements.ts MAX_FILE_BYTES).
     location = /api/imports {
         client_max_body_size 8M;
+        include snippets/proxy-to-nuxt.conf;
+    }
+
+    # A receipt's photo or PDF, kept at full size: up to 10 MB
+    # (shared/receipts.ts RECEIPT_MAX_BYTES), sent as multipart.
+    location ~ ^/api/transactions/[a-z0-9]{15}/receipts$ {
+        client_max_body_size 11M;
         include snippets/proxy-to-nuxt.conf;
     }
 

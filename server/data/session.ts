@@ -1,4 +1,4 @@
-import type { H3Event } from 'h3'
+import { isError, type H3Event } from 'h3'
 import PocketBase, { getTokenPayload } from 'pocketbase'
 import { pocketBaseUnavailable, UNAVAILABLE } from '~~/shared/pocketbase-errors'
 
@@ -59,6 +59,8 @@ export function callerId(s: Session): string {
  * a lost session.
  */
 export function storeError(error: unknown, notFound = 'Not found'): Error {
+  // An answer a data function chose itself (createError) stands as it is.
+  if (isError(error)) return error
   if (pocketBaseUnavailable(error)) return createError(UNAVAILABLE)
   const { status, response } = error as { status?: number, response?: { message?: string, data?: { password?: unknown } } }
   if (status === 401) return createError({ statusCode: 401, statusMessage: 'Sign in to continue' })

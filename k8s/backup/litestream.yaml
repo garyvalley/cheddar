@@ -8,7 +8,9 @@
 # (or BACKUP_SMB is "true"), with the `pb-backup` Secret and the `litestream`
 # ConfigMap beside it. Lines ending "# smb-only" are kept only with
 # BACKUP_SMB: the NAS's SMB share mounted at /replica
-# (k8s/cluster/backup-smb.yaml), and Litestream writing a plain folder there.
+# (k8s/cluster/backup-smb.yaml), Litestream writing a plain folder there,
+# and the `files` container copying receipts' files (pb_data/storage) there
+# once a day, age-encrypted.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -60,6 +62,47 @@ spec:
             - { name: data, mountPath: /pb/pb_data }
             - { name: config, mountPath: /etc/litestream, readOnly: true }
             - { name: tmp, mountPath: /tmp }
+            - { name: replica, mountPath: /replica } # smb-only
+        # Receipts' files (pb_data/storage, issue #113) aren't in the # smb-only
+        # database, so this copies that folder to the share once a day, # smb-only
+        # encrypted to the same age recipient, keeping 14 days. # smb-only
+        - name: files # smb-only
+          image: ${IMAGE_PREFIX}/pocketbase:${PB_TAG} # smb-only
+          command: # smb-only
+            - sh # smb-only
+            - -c # smb-only
+            - | # smb-only
+              set -u -o pipefail # smb-only
+              dir=/replica/cheddar-files # smb-only
+              mkdir -p "$dir" # smb-only
+              while :; do # smb-only
+                day=$(date -u +%F) # smb-only
+                if [ -d /pb/pb_data/storage ] && [ ! -f "$dir/storage-$day.tar.age" ]; then # smb-only
+                  if tar -C /pb/pb_data -cf - storage | age -r "$LITESTREAM_AGE_RECIPIENT" > "$dir/.storage-$day.tmp"; then # smb-only
+                    mv "$dir/.storage-$day.tmp" "$dir/storage-$day.tar.age" # smb-only
+                    echo "[files] storage backed up for $day" # smb-only
+                  else # smb-only
+                    rm -f "$dir/.storage-$day.tmp" # smb-only
+                    echo "[files] storage backup failed" >&2 # smb-only
+                  fi # smb-only
+                  find "$dir" -name 'storage-*.tar.age' -mtime +14 -delete # smb-only
+                fi # smb-only
+                sleep 3600 # smb-only
+              done # smb-only
+          envFrom: # smb-only
+            - secretRef: # smb-only
+                name: pb-backup # smb-only
+          resources: # smb-only
+            requests: { cpu: 10m, memory: 16Mi } # smb-only
+            limits: { memory: 128Mi } # smb-only
+          securityContext: # smb-only
+            allowPrivilegeEscalation: false # smb-only
+            readOnlyRootFilesystem: true # smb-only
+            capabilities: # smb-only
+              drop: [ALL] # smb-only
+          volumeMounts: # smb-only
+            - { name: data, mountPath: /pb/pb_data, readOnly: true } # smb-only
+            - { name: tmp, mountPath: /tmp } # smb-only
             - { name: replica, mountPath: /replica } # smb-only
       volumes:
         - name: data
