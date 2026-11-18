@@ -3,7 +3,7 @@ import { summarize, type SpendingSummary } from "~~/shared/categories";
 import { expandSplits } from "~~/shared/splits";
 import { budgetsForMonth, listBudgets } from "../budgets";
 import { listCategories } from "../categories";
-import { transactionFilter } from "../transactions";
+import { transactionsBetween } from "../transactions";
 import type { Session } from "../session";
 
 /** What each category came to between two dates, and the spending of the same span before. */
@@ -18,18 +18,10 @@ export async function spendingSummary(
 ): Promise<SpendingSummary> {
   const rows = async (range: { from: string; to: string }) =>
     expandSplits(
-      (await s.collection("transactions").getFullList({
-        fields: "amount_cents,category,splits",
-        filter: transactionFilter(s, {
-          account: q.account,
-          ...range,
-          counted: true,
-        }),
-      })) as unknown as {
-        amount_cents: number;
-        category: string;
-        splits: unknown;
-      }[],
+      await transactionsBetween(s, range.from, range.to, {
+        account: q.account,
+        counted: true,
+      }),
     );
   const [now, before, list, budgets] = await Promise.all([
     rows(q),
