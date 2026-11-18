@@ -4,7 +4,7 @@ import type { BalancePoint } from "~~/shared/overview";
 import { partsOf, type SplitPart } from "~~/shared/splits";
 import { tagNeedle, tagsOf } from "~~/shared/tags";
 import type { EditFields, ManualFields } from "~~/shared/transactions";
-import { COUNTED, TX_COUNTED } from "./accounts";
+import { COUNTED, TX_COUNTED, counted, listAccounts } from "./accounts";
 import { callerId, type Session } from "./session";
 
 /**
@@ -74,8 +74,48 @@ export interface TransactionQuery {
   ownedOnly?: boolean;
 }
 
-export function transactionFilter(s: Session, q: TransactionQuery): string {
-  const parts: string[] = [];
+/**
+ * Most that accountScope() names: PocketBase refuses a filter of a hundred
+ * or so terms, and nobody has this many accounts.
+ */
+export const SCOPE_MAX = 60;
+
+/**
+ * The accounts a query with none picked reads (the counted ones, or every
+ * one the caller sees with `uncounted`), named by id. Without it SQLite reads
+ * every person's transactions: the list rule's OR across households
+ * (migrations/0020) keeps it from using (owner, posted), and nothing else
+ * narrows it. With it, it looks up each account's rows by (account, posted)
+ * (issue #116, checked with EXPLAIN QUERY PLAN). Null when nothing needs it
+ * (an account picked, or the caller's own only, which (owner, posted)
+ * finds) or there are too many to name, and the query reads as it did.
+ */
+export async function accountScope(
+  s: Session,
+  q: { account?: string; uncounted?: boolean; ownedOnly?: boolean },
+): Promise<string | null> {
+  if (q.account || q.ownedOnly) return null;
+  const ids = (await (q.uncounted ? listAccounts(s) : counted(s))).map((a) => a.id);
+  if (ids.length > SCOPE_MAX) return null;
+  // No account: nothing to read (no id is empty).
+  if (!ids.length) return "id = ''";
+  return s.filter(
+    `(${ids.map((_, i) => `account = {:a${i}}`).join(" || ")})`,
+    Object.fromEntries(ids.map((id, i) => [`a${i}`, id])),
+  );
+}
+
+/** transactionFilter() with the query's accountScope(). */
+export async function scopedFilter(s: Session, q: TransactionQuery): Promise<string> {
+  return transactionFilter(s, q, await accountScope(s, q));
+}
+
+export function transactionFilter(
+  s: Session,
+  q: TransactionQuery,
+  scope?: string | null,
+): string {
+  const parts: string[] = scope ? [scope] : [];
   const params: Record<string, string | number | boolean> = {};
   if (q.account) {
     parts.push("account = {:account}");
@@ -141,7 +181,7 @@ export async function listTransactions(
   s: Session,
   q: TransactionQuery & { page: number },
 ) {
-  const filter = transactionFilter(s, q);
+  const filter = await scopedFilter(s, q);
   const list = await s.collection("transactions").getList(q.page, PAGE_SIZE, {
     sort: "-posted,-created",
     expand: "link",
@@ -187,7 +227,7 @@ export async function allTransactions(
   s: Session,
   q: TransactionQuery,
 ): Promise<(Transaction & { import: string })[]> {
-  const filter = transactionFilter(s, q);
+  const filter = await scopedFilter(s, q);
   const rows = await s.collection("transactions").getFullList({
     sort: "posted,created",
     fields:
@@ -271,11 +311,12 @@ export async function reviewCounts(
   s: Session,
   account?: string,
 ): Promise<{ waiting: number; history: number }> {
+  const scope = await accountScope(s, { account });
   const count = async (history: boolean) =>
     (
       await s.collection("transactions").getList(1, 1, {
         fields: "id",
-        filter: transactionFilter(s, { account, reviewed: false, history }),
+        filter: transactionFilter(s, { account, reviewed: false, history }, scope),
       })
     ).totalItems;
   const [waiting, history] = await Promise.all([count(false), count(true)]);
@@ -369,7 +410,8 @@ export async function transactionsBetween(
     merchants?: boolean;
   } = {},
 ): Promise<ReportRow[]> {
-  const parts = ["posted >= {:from}"];
+  const scope = await accountScope(s, opts);
+  const parts = scope ? [scope, "posted >= {:from}"] : ["posted >= {:from}"];
   if (to !== null) parts.push("posted <= {:to}");
   parts.push(opts.account ? "account = {:account}" : COUNTED);
   if (opts.ownedOnly) parts.push("owner = {:owner}");
