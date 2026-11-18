@@ -8,3 +8,11 @@
 # reaches a parser. Drop with the first PocketBase release built with x/net
 # 0.62.0 or later (PocketBase's main branch is still on 0.61.0, 2026-11-08).
 CVE-2026-78661
+
+# picomatch (CVE-2026-112366 / GHSA-fc5q-39xc-vjpf, HIGH, no fixed release
+# yet): ReDoS on single-branch repeated extglobs. Only build and dev tooling
+# uses it (nitropack, unstorage via devtools, eslint) on glob patterns written
+# in this repo; the production server doesn't ship it. Same advisory as the
+# auditConfig entry in pnpm-workspace.yaml (G's OK, 2026-11-17); drop both
+# once a fixed picomatch is out.
+CVE-2026-112366
