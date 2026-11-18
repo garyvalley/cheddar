@@ -3,7 +3,8 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { amountRange, checkEdit, checkManual, isDay, parseAmount, shownName } from '../shared/transactions.ts'
+import { readFileSync } from 'node:fs'
+import { amountRange, checkEdit, checkManual, isDay, MEMBER_EDITABLE, MEMBER_FIXED, memberProblem, parseAmount, shownName } from '../shared/transactions.ts'
 
 const problem = r => r.problem
 
@@ -91,4 +92,34 @@ test('a transaction shows as the name the person gave it, else the bank\'s words
   assert.equal(shownName({ payee: 'Costco', description: 'COSTCO WHSE #123' }), 'Costco')
   assert.equal(shownName({ payee: '', description: 'COSTCO WHSE #123' }), 'COSTCO WHSE #123')
   assert.equal(shownName({ payee: '', description: '' }), 'No description')
+})
+
+describe('what a household member may change on a shared transaction', () => {
+  // The update rule PocketBase applies (migrations/0021): each field a member
+  // may not change appears there as `@request.body.<field>:changed = false`.
+  const rule = readFileSync(new URL('../migrations/0021_limit_shared_transaction_edits.mjs', import.meta.url), 'utf8')
+  const inRule = [...rule.matchAll(/@request\.body\.(\w+):changed = false/g)].map(m => m[1])
+
+  test('the fields members can\'t change are the ones the update rule names', () => {
+    assert.ok(inRule.length > 5, 'found the rule\'s list')
+    assert.deepEqual([...inRule].sort(), [...MEMBER_FIXED].sort())
+  })
+
+  test('what members may change is never in that list', () => {
+    for (const field of MEMBER_EDITABLE) assert.ok(!inRule.includes(field), field)
+  })
+
+  test('every field an edit can carry is either theirs to change or the owner\'s', () => {
+    const edit = checkEdit({ payee: 'a', note: 'b', tags: ['c'], excluded: true, posted: '2026-01-02', amount: '1', direction: 'out', description: 'd' }, true)
+    assert.ok('ok' in edit)
+    const known = new Set([...MEMBER_EDITABLE, ...MEMBER_FIXED])
+    for (const field of Object.keys(edit.ok)) assert.ok(known.has(field), field)
+  })
+
+  test('a member is told what they can change', () => {
+    assert.equal(memberProblem({ payee: 'Lunch', note: '', tags: null, excluded: false }), null)
+    assert.equal(memberProblem({ payee: 'Lunch', splits: undefined }), null)
+    assert.match(memberProblem({ splits: [] }), /only its owner/)
+    assert.match(memberProblem({ amount_cents: -100 }), /only its owner/)
+  })
 })

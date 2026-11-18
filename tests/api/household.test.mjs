@@ -151,6 +151,14 @@ describe("household sharing", () => {
         .items.map((t) => t.tags),
       [["Groceries split", "Reimbursable"]],
     );
+    // Splits stay the owner's: the member is told so, not that it's gone.
+    const split = await member.c.call(
+      "PATCH",
+      `/api/transactions/${transaction.json.transaction.id}`,
+      { splits: [] },
+    );
+    assert.equal(split.status, 403, JSON.stringify(split.json));
+    assert.match(split.json.statusMessage ?? split.json.message, /only its owner/);
     const token = asPb(member.c);
     const directRead = await fetch(
       `${PB}/api/collections/transactions/records/${transaction.json.transaction.id}`,

@@ -103,6 +103,30 @@ export function checkManual(input: Record<string, unknown>): Checked<ManualField
   return { ok: { posted: input.posted, amount_cents: amount.ok, description: description.ok, payee: payee.ok, note: note.ok } }
 }
 
+/**
+ * The fields a member of a shared account's household may not change on one
+ * of its transactions: its bank details, category and splits stay the
+ * owner's. PocketBase's update rule names the same list (migrations/0021,
+ * `:changed = false`); tests/transactions.test.mjs checks they match. A field
+ * left off both is one members may change, unless a hook drops the record
+ * API's writes to it.
+ */
+export const MEMBER_FIXED = [
+  'posted', 'amount_cents', 'description', 'source', 'external_id', 'import', 'pending',
+  'category', 'category_by', 'bank_category', 'merchant_key', 'splits',
+] as const
+
+/** What a member may change on a shared transaction, besides its review state. */
+export const MEMBER_EDITABLE = ['payee', 'note', 'tags', 'excluded'] as const
+
+/** Why a member can't make `change` to a shared transaction, or null when they can. */
+export function memberProblem(change: Record<string, unknown>): string | null {
+  const fixed: readonly string[] = MEMBER_FIXED
+  return Object.keys(change).some(k => change[k] !== undefined && fixed.includes(k))
+    ? 'This transaction is in someone else\'s account. You can change its name, note, tags, or leave it out; only its owner can change the rest.'
+    : null
+}
+
 /** The fields only a transaction added by hand lets a person change. */
 export const MANUAL_ONLY = ['posted', 'amount', 'direction', 'description'] as const
 
