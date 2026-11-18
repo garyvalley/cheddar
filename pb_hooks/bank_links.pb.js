@@ -116,6 +116,7 @@ routerAdd("POST", "/api/bank-links", (e) => {
     throw err
   }
   require(`${__hooks}/glue/events.js`).record(e.app, e.auth.id, "bank_linked", e, glue.namesOf(made.link))
+  require(`${__hooks}/glue/two_step.js`).notify(e.auth, "bankLinked", glue.namesOf(made.link))
   return e.json(200, { link: glue.summary(e.app, made.link), sync: made.sync })
 }, $apis.requireAuth("users"))
 

@@ -77,7 +77,22 @@ function isSessionId(text) {
   return /^[a-zA-Z0-9]{40}$/.test(String(text || ""))
 }
 
+/**
+ * Whether a sign-in from `device` and `place` is one to tell the person about:
+ * they've signed in before (`previous`, their earlier sign-ins as
+ * { device, place }), and never from this device and place. A place either
+ * side doesn't know matches any. The first sign-in an account makes is new
+ * to it, but not news.
+ */
+function isNewDevice(previous, device, place) {
+  if (!previous || !previous.length) return false
+  return !previous.some(function (p) {
+    return p.device === device && (!p.place || !place || p.place === place)
+  })
+}
+
 module.exports = {
+  isNewDevice: isNewDevice,
   MAX_AGE_MS: MAX_AGE_MS,
   FRESH_MS: FRESH_MS,
   isExpired: isExpired,

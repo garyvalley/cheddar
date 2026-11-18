@@ -290,8 +290,10 @@ browser ──▶ Cloudflare ──tunnel──▶ nginx ──▶ Nuxt 4 (pages
     `pb_hooks/data_keys.pb.js`; k8s/README.md "Rotating the data key").
   - Five wrong codes lock the codes for 15 minutes, and each lockout after
     that lasts twice as long (up to a day) until a right code. A lockout
-    after a right password, a new authenticator app and new recovery codes
-    each email the person (`pb_hooks/lib/notices.js`).
+    after a right password, a new authenticator app, new recovery codes, a
+    new passkey, a changed password, a sign-in from a device and country not
+    seen before, a newly linked bank and a deleted account each email the
+    person (`pb_hooks/lib/notices.js`).
   - Changing the password or email needs the current password
     (`pb_hooks/credentials.pb.js`); PocketBase's own email-change request,
     which doesn't, is refused.

@@ -58,3 +58,13 @@ test('a session id from a header is 40 letters and digits', () => {
   assert.equal(s.isSessionId('a'.repeat(40)), true)
   for (const bad of ['', 'a'.repeat(39), 'a'.repeat(41), `${'a'.repeat(39)}-`, null]) assert.equal(s.isSessionId(bad), false, String(bad))
 })
+
+test('a sign-in is news only from a device and place not seen before (#122)', () => {
+  const seen = [{ device: 'Safari on iPhone', place: 'US' }, { device: 'Chrome on Mac', place: '' }]
+  assert.equal(s.isNewDevice([], 'Safari on iPhone', 'US'), false, 'the first sign-in is not news')
+  assert.equal(s.isNewDevice(seen, 'Safari on iPhone', 'US'), false)
+  assert.equal(s.isNewDevice(seen, 'Safari on iPhone', ''), false, 'an unknown place matches')
+  assert.equal(s.isNewDevice(seen, 'Chrome on Mac', 'FR'), false, 'a row without a place matches any')
+  assert.equal(s.isNewDevice(seen, 'Safari on iPhone', 'FR'), true, 'same device, another country')
+  assert.equal(s.isNewDevice(seen, 'Firefox on Windows', 'US'), true)
+})

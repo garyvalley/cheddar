@@ -52,3 +52,31 @@ test('a contact message is escaped, keeps its lines, and says whether it was sig
   assert.match(out.html, /not signed in/)
   assert.match(notices.contactMessage(msg, 'A security problem', 'acct@example.com').html, /signed in to Cheddar as acct@example\.com/)
 })
+
+// Issue #122: a changed password, a new device, a new bank, a deleted account.
+test('a changed password, a new bank and a new device each say what to do if it wasn\'t you', () => {
+  const all = [notices.passwordChanged(), notices.bankLinked('Chase'), notices.newDevice({ device: 'Safari on iPhone', place: 'US' })]
+  for (const { subject, html } of all) {
+    assert.ok(subject.length > 10, subject)
+    assert.match(html, /If this was you, there's nothing to do\./)
+    assert.match(html, /If it wasn't, someone (is signed in as you|has your password)/)
+  }
+  assert.match(all[1].html, /<strong>Chase<\/strong> was just linked/)
+  assert.match(all[2].html, /<strong>Safari on iPhone<\/strong> in US/)
+})
+
+test('a new device without a place, or a bank without a name, still reads', () => {
+  assert.match(notices.newDevice({ device: '', place: '' }).html, /from <strong>A browser<\/strong>\./)
+  assert.match(notices.bankLinked('').html, /A bank was just linked/)
+})
+
+test('the device and bank names are escaped', () => {
+  assert.doesNotMatch(notices.newDevice({ device: '<img src=x>', place: '' }).html, /<img/)
+  assert.doesNotMatch(notices.bankLinked('<b>Bank</b>').html, /<b>Bank/)
+})
+
+test('the deleted-account notice says it is done and no more mail comes', () => {
+  const { subject, html } = notices.accountDeleted()
+  assert.match(subject, /deleted/)
+  assert.match(html, /no more mail/)
+})

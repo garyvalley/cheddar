@@ -3,7 +3,10 @@
 // someone changes its email (pb_hooks/credentials.pb.js), one when the change
 // is asked for and one when it's done; and when two-step sign-in is locked
 // by wrong codes, a new authenticator app is set up, or new recovery codes
-// are made (pb_hooks/two_step.pb.js). Those are the steps a takeover takes,
+// are made (pb_hooks/two_step.pb.js); when the password changes
+// (credentials.pb.js), a sign-in comes from a device and place not seen
+// before (sessions.pb.js), a bank is linked (bank_links.pb.js), and once the
+// account is deleted (accounts.pb.js). Those are the steps a takeover takes,
 // so whoever took over a session and the password still can't keep the
 // person from hearing about it.
 //
@@ -104,6 +107,60 @@ function passkeyAdded(name) {
   }
 }
 
+/** When the password is changed from Settings; every other device was signed out. */
+function passwordChanged() {
+  return {
+    subject: "Your Cheddar password was changed",
+    html: shell("Your password was changed", [
+      "The password for your Cheddar account was just changed, and every other device that was signed in has been signed out.",
+      "If this was you, there's nothing to do.",
+      "If it wasn't, someone is signed in as you: use Forgot password on the sign-in page to choose a new one, then check Settings, then Sign-in and security.",
+    ]),
+  }
+}
+
+/**
+ * When someone signs in from a device and place this account hasn't signed in
+ * from lately: `device` ("Safari on iPhone") and `place` (a two-letter
+ * country, or "").
+ */
+function newDevice(where) {
+  var device = escapeHtml((where && where.device) || "A browser")
+  var place = where && where.place ? " in " + escapeHtml(where.place) : ""
+  return {
+    subject: "New sign-in to your Cheddar account",
+    html: shell("A new sign-in", [
+      "Your Cheddar account was just signed in to from <strong>" + device + "</strong>" + place + ".",
+      "If this was you, there's nothing to do.",
+      "If it wasn't, someone has your password and code: change your password now, which signs out every other device, and look at Settings, then Sign-in and security.",
+    ]),
+  }
+}
+
+/** When a bank is linked, named `names` ("Chase, Wells Fargo"). */
+function bankLinked(names) {
+  return {
+    subject: "A bank was linked to your Cheddar account",
+    html: shell("A bank was linked", [
+      (names ? "<strong>" + escapeHtml(names) + "</strong> was" : "A bank was") + " just linked to your Cheddar account, which can now read its accounts and transactions.",
+      "If this was you, there's nothing to do.",
+      "If it wasn't, someone is signed in as you: unlink it in Settings, then Accounts and banks, and change your password, which signs out every other device.",
+    ]),
+  }
+}
+
+/** Once the account is deleted, to the address it had. */
+function accountDeleted() {
+  return {
+    subject: "Your Cheddar account was deleted",
+    html: shell("Your account was deleted", [
+      "Your Cheddar account and everything in it were just deleted: accounts, transactions, receipts and settings. Each linked bank was told to forget it.",
+      "This address gets no more mail from Cheddar. To use Cheddar again, sign up anew.",
+      "If this wasn't you, contact whoever runs your Cheddar through the contact form.",
+    ]),
+  }
+}
+
 /**
  * To whoever runs Cheddar (CONTACT_TO), for a message from the contact form
  * (pb_hooks/contact.pb.js). Everything the sender typed is escaped; replying
@@ -131,4 +188,8 @@ module.exports = {
   appChanged: appChanged,
   recoveryCodesNew: recoveryCodesNew,
   passkeyAdded: passkeyAdded,
+  passwordChanged: passwordChanged,
+  newDevice: newDevice,
+  bankLinked: bankLinked,
+  accountDeleted: accountDeleted,
 }
