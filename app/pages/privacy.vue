@@ -66,7 +66,7 @@ const { operatorName: name } = useRuntimeConfig().public
     <section class="card card-pad">
       <h2 class="headline">Who else sees it</h2>
       <p class="footnote">
-        Nobody, unless you choose to share accounts with your household. Cheddar has no ads and no analytics, and your data is never sold or
+        Nobody, unless you choose to share accounts or budgets with your household. Cheddar has no ads and no analytics, and your data is never sold or
         used for anything but showing it to you. Email goes out through Mailjet, which sees only your address and the message. If you turn on alerts, that message says what the alert is about, such as a charge's amount and where it was.
         Pages travel encrypted through Cloudflare, which sees your IP address as any network in between does, and is told never to keep a copy of a page.
       </p>

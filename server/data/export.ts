@@ -65,7 +65,7 @@ export async function exportData(
     listCategories(s),
     listLinks(s),
     listGoals(s),
-    listBudgets(s),
+    listBudgets(s, true),
     listCashflowItems(s),
     listActivity(s),
     s.collection("holdings").getFullList({

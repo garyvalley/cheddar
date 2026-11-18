@@ -23,6 +23,10 @@ export interface Budget {
   rollover: boolean;
   /** YYYY-MM: the first month whose leftover carries; "" when it doesn't roll over. */
   rollover_from: string;
+  /** Shared with the household: every member sees it and may change its amount. */
+  shared_with_household?: boolean;
+  /** Someone else's, shared with the caller: whose (their name). */
+  owner_name?: string;
 }
 
 /** "2026-11" → "2026-12". */
