@@ -1,4 +1,3 @@
-import { localToday } from "~~/shared/categories";
 import {
   LOOKBACK_YEARS,
   recurring,
@@ -15,8 +14,8 @@ import type { Session } from "../session";
  */
 export async function recurringCharges(
   s: Session,
+  today: string,
   account?: string,
-  today = localToday(),
 ): Promise<RecurringSummary> {
   const from = `${Number(today.slice(0, 4)) - LOOKBACK_YEARS}${today.slice(4)}`;
   const [rows, list] = await Promise.all([

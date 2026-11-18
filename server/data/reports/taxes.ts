@@ -1,4 +1,3 @@
-import { localToday } from "~~/shared/categories";
 import { expandSplits } from "~~/shared/splits";
 import { taxYear, type TaxYear } from "~~/shared/taxes";
 import { COUNTED, listAccounts } from "../accounts";
@@ -12,7 +11,7 @@ import { callerId, type Session } from "../session";
  */
 export async function taxes(
   s: Session,
-  today = localToday(),
+  today: string,
   year = Number(today.slice(0, 4)),
 ): Promise<TaxYear> {
   const jan1 = `${year}-01-01`;
