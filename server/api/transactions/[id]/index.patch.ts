@@ -2,7 +2,7 @@ import { editTransaction, getTransaction } from '~~/server/data/transactions'
 import { listCategories } from '~~/server/data/categories'
 import { attempt, sessionFor } from '~~/server/data/session'
 import { checkSplit, type SplitPart } from '~~/shared/splits'
-import { checkEdit, type EditFields } from '~~/shared/transactions'
+import { checkEdit, memberProblem, type EditFields } from '~~/shared/transactions'
 
 const GONE = 'That transaction isn\'t there.'
 
@@ -29,6 +29,10 @@ export default defineEventHandler(async (event) => {
     if ('problem' in checked) throw createError({ statusCode: 400, statusMessage: checked.problem })
     change = checked.ok
   }
+  // A member of a shared account's household: say so plainly, rather than the
+  // store's refusal (a 404) for a field only the owner may change.
+  const notMine = current.shared && memberProblem({ ...change, splits })
+  if (notMine) throw createError({ statusCode: 403, statusMessage: notMine })
   let parts: SplitPart[] | undefined
   if (splits !== undefined) {
     const ids = new Set((await attempt(() => listCategories(s))).map(c => c.id))
