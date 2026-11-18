@@ -304,6 +304,7 @@ routerAdd(
       }),
     );
     e.app.save(household);
+    require(`${__hooks}/glue/households.js`).unshare(e.app, household.id, user);
     e.app
       .findRecordsByFilter(
         "household_invites",
@@ -344,19 +345,7 @@ routerAdd(
         throw new BadRequestError(
           "Remove other members before closing the household.",
         );
-      e.app
-        .findRecordsByFilter(
-          "accounts",
-          "shared_household = {:household}",
-          "",
-          0,
-          0,
-          { household: household.id },
-        )
-        .forEach(function (account) {
-          account.set("shared_household", "");
-          e.app.save(account);
-        });
+      require(`${__hooks}/glue/households.js`).unshare(e.app, household.id, "");
       e.app.delete(household);
     } else {
       household.set(
@@ -366,6 +355,7 @@ routerAdd(
         }),
       );
       e.app.save(household);
+      require(`${__hooks}/glue/households.js`).unshare(e.app, household.id, e.auth.id);
     }
     return e.noContent(204);
   },
