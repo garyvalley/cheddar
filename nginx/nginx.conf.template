@@ -168,7 +168,7 @@ server {
 
     # A receipt's photo or PDF, kept at full size: up to 10 MB
     # (shared/receipts.ts RECEIPT_MAX_BYTES), sent as multipart.
-    location ~ ^/api/transactions/[a-z0-9]{15}/receipts$ {
+    location ~ "^/api/transactions/[a-z0-9]{15}/receipts$" {
         client_max_body_size 11M;
         include snippets/proxy-to-nuxt.conf;
     }
