@@ -7,16 +7,20 @@
 // ---------------------------------------------------------------------------
 
 var dates = require(`${__hooks}/lib/dates.js`);
+var investing = require(`${__hooks}/lib/gen/investing.js`);
 var ProviderError = require(`${__hooks}/glue/providers.js`).ProviderError;
 
 /**
  * What the link's brokerage and retirement accounts hold, when the provider
  * gives holdings and they're switched on (PLAID_INVESTMENTS): each such
- * account's rows are replaced with what the bank says now, and the link
- * notes why there are none ("unsupported", "consent"). Best effort: a failed
- * holdings call keeps the last ones and never fails the sync.
+ * account's rows are replaced with what the bank says now, today's
+ * `holding_history` row per security is written (or rewritten, on a second
+ * sync the same day), and the link notes why there are none
+ * ("unsupported", "consent"). Then the accounts' activity (syncActivity).
+ * Best effort: a failed call keeps what was there and never fails the sync.
+ * `today` is the person's day (YYYY-MM-DD).
  */
-function syncHoldings(app, link, provider, access, rows) {
+function syncHoldings(app, link, provider, access, rows, today) {
   if (!provider.holdings || !provider.holdingsOn || !provider.holdingsOn()) return;
   var invested = rows.filter(function (r) {
     return r.kind === "brokerage" || r.kind === "retirement";
@@ -44,10 +48,11 @@ function syncHoldings(app, link, provider, access, rows) {
         txApp.findRecordsByFilter("holdings", "account = {:a}", "", 0, 0, { a: account.id }).forEach(function (h) {
           txApp.delete(h);
         });
-        got.rows
-          .filter(function (h) {
-            return h.account === r.external_id;
-          })
+        var mine = got.rows.filter(function (h) {
+          return h.account === r.external_id;
+        });
+        keepDay(txApp, owner, account.id, today, mine);
+        mine
           .forEach(function (h) {
             var rec = new Record(collection);
             rec.set("owner", owner);
@@ -63,6 +68,83 @@ function syncHoldings(app, link, provider, access, rows) {
     var fresh = txApp.findRecordById("bank_links", link.id);
     fresh.set("holdings", got.status);
     txApp.save(fresh);
+  });
+  if (got.status === "ok" && provider.activity) {
+    try {
+      syncActivity(app, owner, provider, access, invested, today);
+    } catch (err) {
+      if (!(err instanceof ProviderError)) console.log("[holdings] activity for link " + link.id + ": " + err);
+    }
+  }
+}
+
+/** The account's row per security for `today` in holding_history, replacing any written earlier that day. */
+function keepDay(txApp, owner, account, today, positions) {
+  txApp
+    .findRecordsByFilter("holding_history", "account = {:a} && date = {:d}", "", 0, 0, { a: account, d: today })
+    .forEach(function (h) {
+      txApp.delete(h);
+    });
+  var collection = txApp.findCollectionByNameOrId("holding_history");
+  investing.dayRows(positions).forEach(function (d) {
+    var rec = new Record(collection);
+    rec.set("owner", owner);
+    rec.set("account", account);
+    rec.set("date", today);
+    ["security", "name", "ticker", "type", "quantity", "value_cents"].forEach(function (f) {
+      rec.set(f, d[f]);
+    });
+    if (d.price_cents !== null) rec.set("price_cents", d.price_cents);
+    txApp.save(rec);
+  });
+}
+
+/**
+ * The investment accounts' buys, sells, dividends and the rest, kept in
+ * `investment_activity`: from a month before the newest kept (two years
+ * back the first time) to today, each added once by its id, or updated.
+ */
+function syncActivity(app, owner, provider, access, invested, today) {
+  var accounts = {};
+  invested.forEach(function (r) {
+    try {
+      accounts[r.external_id] = app.findFirstRecordByFilter("accounts", "owner = {:owner} && external_id = {:ext}", { owner: owner, ext: r.external_id }).id;
+    } catch (_) {
+      /* not kept */
+    }
+  });
+  var ids = Object.keys(accounts).map(function (k) {
+    return accounts[k];
+  });
+  if (!ids.length) return;
+  var newest = "";
+  ids.forEach(function (id) {
+    var last = app.findRecordsByFilter("investment_activity", "account = {:a}", "-date", 1, 0, { a: id })[0];
+    if (last && last.getString("date") > newest) newest = last.getString("date");
+  });
+  var got = provider.activity(access, investing.activityFrom(newest, today), today);
+  if (got.status !== "ok") return;
+  app.runInTransaction(function (txApp) {
+    var collection = txApp.findCollectionByNameOrId("investment_activity");
+    got.rows.forEach(function (a) {
+      var account = accounts[a.account];
+      if (!account) return;
+      var rec;
+      try {
+        rec = txApp.findFirstRecordByFilter("investment_activity", "account = {:a} && external_id = {:id}", { a: account, id: a.id });
+      } catch (_) {
+        rec = new Record(collection);
+        rec.set("owner", owner);
+        rec.set("account", account);
+        rec.set("external_id", a.id);
+      }
+      ["date", "kind", "name", "security", "ticker", "quantity", "amount_cents"].forEach(function (f) {
+        rec.set(f, a[f]);
+      });
+      rec.set("price_cents", a.price_cents === null ? 0 : a.price_cents);
+      rec.set("fees_cents", a.fees_cents === null ? 0 : a.fees_cents);
+      txApp.save(rec);
+    });
   });
 }
 

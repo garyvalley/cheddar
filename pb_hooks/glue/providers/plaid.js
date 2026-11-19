@@ -141,6 +141,42 @@ module.exports = {
     if (gap) return { status: gap, rows: [] };
     throw new errors.ProviderError(f);
   },
+  /**
+   * The link's investment activity (buys, sells, dividends: lib/plaid.js
+   * activityRows) dated `from` to `to` (YYYY-MM-DD), every page: { status:
+   * "ok", rows }, or { status: "unsupported" | "consent", rows: [] } as for
+   * holdings. Any other failure throws.
+   */
+  activity: function (access, from, to) {
+    var raw = { investment_transactions: [], securities: [] };
+    for (var page = 0; page < plaid.MAX_PAGES; page++) {
+      var res;
+      try {
+        res = $http.send(plaid.request(cfg(), "/investments/transactions/get", {
+          access_token: access,
+          start_date: from,
+          end_date: to,
+          options: { count: 500, offset: raw.investment_transactions.length },
+        }));
+      } catch (_) {
+        throw new errors.ProviderError(plaid.failure(0, null));
+      }
+      if (res.statusCode !== 200) {
+        var f = plaid.failure(res.statusCode, res.json);
+        console.log("[plaid] /investments/transactions/get: " + f.code + " (request " + (plaid.requestId(res.json) || "-") + ")");
+        var gap = plaid.holdingsGap(f.code);
+        if (gap) return { status: gap, rows: [] };
+        throw new errors.ProviderError(f);
+      }
+      var j = res.json || {};
+      var got = Array.isArray(j.investment_transactions) ? j.investment_transactions : [];
+      raw.investment_transactions = raw.investment_transactions.concat(got);
+      raw.securities = raw.securities.concat(Array.isArray(j.securities) ? j.securities : []);
+      var total = typeof j.total_investment_transactions === "number" ? j.total_investment_transactions : 0;
+      if (!got.length || raw.investment_transactions.length >= total) break;
+    }
+    return { status: "ok", rows: plaid.activityRows(raw) };
+  },
   /** Tells Plaid to forget the link, so nobody is billed for it. */
   remove: function (access) {
     call("/item/remove", { access_token: access });

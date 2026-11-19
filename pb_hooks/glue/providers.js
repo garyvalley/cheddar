@@ -26,6 +26,10 @@
 //                               rows: [{ account, name, ticker, type, quantity,
 //                               price_cents, value_cents, cost_basis_cents,
 //                               currency, price_as_of }] } (optional)
+//   activity(access, from, to)  investment activity dated from..to, { status
+//                               as holdings, rows: [{ id, account, date, kind,
+//                               name, security, ticker, quantity, price_cents,
+//                               amount_cents, fees_cents }] } (optional)
 //   remove(access)              tells the provider to forget the link
 //   clean(text)                 a name from the provider made safe to show
 //   webhookUrl()                where its links send webhooks, or "" for none

@@ -11,7 +11,7 @@
  * way people should agree to again.
  */
 export const TERMS_VERSION = '2026-11-16'
-export const PRIVACY_UPDATED = '2026-11-17'
+export const PRIVACY_UPDATED = '2026-11-19'
 
 /** Whether `version` (users.terms_version) is the current Terms of Use. */
 export function hasAgreed(version: unknown): boolean {

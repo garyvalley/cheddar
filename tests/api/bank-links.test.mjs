@@ -241,10 +241,21 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
         { account_id: ira, security_id: 'usd', quantity: 120.03, institution_price: 1, institution_value: 120.03, iso_currency_code: 'USD' },
       ],
     }
+    // Buys, a dividend and a sale (three, so they take two pages), plus one outside the two years asked for.
+    bank.activity = {
+      securities: bank.holdings.securities,
+      investment_transactions: [
+        { investment_transaction_id: `buy-${ira}`, account_id: ira, security_id: 'vti', date: daysAgo(40), name: 'BUY VTI', quantity: 20, price: 250, amount: 5000, fees: 0, type: 'buy', subtype: 'buy', iso_currency_code: 'USD' },
+        { investment_transaction_id: `div-${ira}`, account_id: ira, security_id: 'vti', date: daysAgo(10), name: 'VTI DIVIDEND', quantity: 0, amount: -31.5, type: 'cash', subtype: 'qualified dividend', iso_currency_code: 'USD' },
+        { investment_transaction_id: `sell-${ira}`, account_id: ira, security_id: 'bnd', date: daysAgo(5), name: 'SELL BND', quantity: -5, price: 80, amount: -400, type: 'sell', subtype: 'sell', iso_currency_code: 'USD' },
+        { investment_transaction_id: `old-${ira}`, account_id: ira, security_id: 'vti', date: daysAgo(800), name: 'BUY VTI', quantity: 1, price: 100, amount: 100, type: 'buy', subtype: 'buy', iso_currency_code: 'USD' },
+      ],
+    }
     const tokens = mock.linkTokens.length
     const { link: l } = await link(c, bank)
     assert.deepEqual(mock.linkTokens.slice(tokens).map(b => b.optional_products), [['investments']])
     assert.equal(l.holdings, 'ok')
+    assert.deepEqual(bank.calls.filter(x => x.path === '/investments/transactions/get').map(x => [x.from, x.offset]), [[daysAgo(730), 0], [daysAgo(730), 2]])
 
     const inv = (await c.call('GET', '/api/investments')).json
     const account = inv.accounts.find(a => a.name === 'Rollover IRA')
@@ -256,6 +267,13 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal(mine.gap, '')
     assert.deepEqual(inv.holdings.allocation.map(a => [a.label, a.value_cents]), [['ETFs', 600000], ['Bonds', 400000], ['Cash', 12003]])
     assert.equal(inv.holdings.covered_cents, 1012003)
+    // Activity, newest first and kept apart from spending; the first day kept has no change yet.
+    assert.deepEqual(inv.activity.rows.map(a => [a.kind, a.ticker, a.amount_cents]), [['sell', 'BND', 40000], ['dividend', 'VTI', 3150], ['buy', 'VTI', -500000]])
+    assert.equal(inv.activity.income_12m_cents, 3150)
+    assert.equal(mine.positions[0].change, null)
+    assert.equal((await c.call('GET', '/api/transactions?q=DIVIDEND')).json.total, 0)
+    const days = (await pb('GET', '/api/collections/holding_history/records?perPage=50', asPb(c))).json.items
+    assert.deepEqual(days.map(d => [d.security, d.value_cents]).sort(), [['bnd', 400000], ['cash', 12003], ['vti', 600000]])
 
     // Only the sync writes them, and nobody else reads them.
     const row = (await pb('GET', '/api/collections/holdings/records', asPb(c))).json.items[0]
@@ -267,12 +285,28 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.equal((await pb('GET', '/api/collections/holdings/records', asPb(other))).json.items.length, 0)
     assert.equal((await pb('GET', `/api/collections/holdings/records/${row.id}`, asPb(other))).status, 404)
 
-    // Selling the bond fund: the next sync replaces what's held.
+    // Their past is the sync's alone too, and nobody else's to read.
+    for (const name of ['holding_history', 'investment_activity']) {
+      const one = (await pb('GET', `/api/collections/${name}/records`, asPb(c))).json.items[0]
+      assert.ok(one, name)
+      assert.notEqual((await pb('POST', `/api/collections/${name}/records`, asPb(c), { owner: one.owner, account: one.account, date: one.date, security: 'x', external_id: 'x' })).status, 200, name)
+      assert.notEqual((await pb('PATCH', `/api/collections/${name}/records/${one.id}`, asPb(c), { value_cents: 1, amount_cents: 1 })).status, 200, name)
+      assert.notEqual((await pb('DELETE', `/api/collections/${name}/records/${one.id}`, asPb(c))).status, 204, name)
+      assert.equal((await pb('GET', `/api/collections/${name}/records`, asPb(other))).json.items.length, 0, name)
+      assert.equal((await pb('GET', `/api/collections/${name}/records/${one.id}`, asPb(other))).status, 404, name)
+    }
+
+    // Selling the bond fund: the next sync replaces what's held, rewrites today's history, and adds the activity once.
     bank.holdings = { ...bank.holdings, holdings: bank.holdings.holdings.filter(h => h.security_id !== 'bnd') }
+    const before = bank.calls.length
     await allowSync(l.id)
     await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
-    const after = (await c.call('GET', '/api/investments')).json.holdings.accounts[account.id]
-    assert.deepEqual(after.positions.map(p => p.ticker), ['VTI', 'CUR:USD'])
+    const after = (await c.call('GET', '/api/investments')).json
+    assert.deepEqual(after.holdings.accounts[account.id].positions.map(p => p.ticker), ['VTI', 'CUR:USD'])
+    assert.deepEqual(bank.calls.slice(before).filter(x => x.path === '/investments/transactions/get').map(x => x.from)[0], daysAgo(35))
+    assert.equal(after.activity.rows.length, 3)
+    const today = (await pb('GET', '/api/collections/holding_history/records?perPage=50', asPb(c))).json.items
+    assert.deepEqual(today.map(d => d.security).sort(), ['cash', 'vti'])
 
     // A bank whose holdings the person hasn't shared: the sync works, and the page says what to do.
     const c2 = await person()

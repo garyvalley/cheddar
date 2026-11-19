@@ -23,6 +23,8 @@ export interface Position {
   price_as_of: string
   /** When Cheddar fetched it (PocketBase's date format). */
   as_of: string
+  /** Its value on the first day kept in the last 30 (shared/investing.ts positionChanges), or null. */
+  change?: { since: string, from_cents: number } | null
 }
 
 /**

@@ -32,7 +32,7 @@ const { operatorName: name } = useRuntimeConfig().public
       <h2 class="headline">What Cheddar keeps</h2>
       <ul class="footnote">
         <li>Your name, email address and password (stored only as a hash), your two-step sign-in app's secret, encrypted, and for each passkey you add, its name and public key (which can't be used to sign in on its own).</li>
-        <li>The accounts you add or link, their balances, transactions and, for brokerage accounts, holdings.</li>
+        <li>The accounts you add or link, their balances, transactions and, for brokerage accounts, holdings, what each holding was worth day by day, and buys, sells and dividends.</li>
         <li>What you add yourself: categories, rules, notes, tags, budgets, goals, which alerts you want, receipts you add to transactions, and statements you import (only the transactions read from them, not the file).</li>
         <li>Your signed-in devices and 90 days of security activity, such as sign-ins: the kind of device and the country, not the IP address.</li>
         <li>Which version of the Terms of Use you agreed to, and when.</li>

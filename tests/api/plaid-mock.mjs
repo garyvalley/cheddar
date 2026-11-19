@@ -34,6 +34,8 @@ export function sampleBank() {
     status: null, // or a Plaid error_code every call answers with
     // What /investments/holdings/get answers: { holdings, securities }, or an error_code string; none by default.
     holdings: 'PRODUCTS_NOT_SUPPORTED',
+    // What /investments/transactions/get answers: { investment_transactions, securities }, or an error_code string.
+    activity: { investment_transactions: [], securities: [] },
     calls: [],
   }
 }
@@ -85,7 +87,7 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
     const item = items.get(body.access_token)
     if (item && req.url === '/item/remove') item.removals++
     if (!item || item.removed) return error(res, 'INVALID_ACCESS_TOKEN')
-    item.bank.calls.push({ path: req.url, cursor: body.cursor ?? null })
+    item.bank.calls.push({ path: req.url, cursor: body.cursor ?? null, ...(body.start_date ? { from: body.start_date, to: body.end_date, offset: body.options?.offset ?? 0 } : {}) })
     if (item.bank.status) return error(res, item.bank.status)
 
     if (req.url === '/accounts/get') {
@@ -109,6 +111,14 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
       const h = item.bank.holdings
       if (typeof h === 'string') return error(res, h)
       return answer(res, 200, { accounts: item.bank.accounts, holdings: h.holdings, securities: h.securities, item: { item_id: item.itemId }, request_id: id() })
+    }
+    if (req.url === '/investments/transactions/get') {
+      const a = item.bank.activity
+      if (typeof a === 'string') return error(res, a)
+      const within = a.investment_transactions.filter(t => t.date >= body.start_date && t.date <= body.end_date)
+      // Two at a time, to exercise paging.
+      const offset = body.options?.offset ?? 0
+      return answer(res, 200, { accounts: item.bank.accounts, investment_transactions: within.slice(offset, offset + 2), securities: a.securities, total_investment_transactions: within.length, request_id: id() })
     }
     if (req.url === '/item/webhook/update') {
       item.webhook = body.webhook

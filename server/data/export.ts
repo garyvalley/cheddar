@@ -52,6 +52,8 @@ export async function exportData(
     activity,
     holdings,
     alerts,
+    holdingDays,
+    investmentActivity,
   ] = await Promise.all([
     s.collection('users').getOne(callerId(s)),
     listAccounts(s, true),
@@ -73,6 +75,14 @@ export async function exportData(
       filter: s.filter('owner = {:owner}', { owner: callerId(s) }),
     }),
     getAlertSettings(s),
+    s.collection('holding_history').getFullList({
+      sort: 'account,date,security',
+      filter: s.filter('owner = {:owner}', { owner: callerId(s) }),
+    }),
+    s.collection('investment_activity').getFullList({
+      sort: 'account,date',
+      filter: s.filter('owner = {:owner}', { owner: callerId(s) }),
+    }),
   ])
   const me = toMe(user)
   return {
@@ -109,6 +119,29 @@ export async function exportData(
       cost_basis_cents: h.cost_basis_cents || null,
       price_as_of: h.price_as_of ?? '',
       as_of: h.as_of ?? '',
+    })),
+    holding_history: holdingDays.map(h => ({
+      account: h.account,
+      date: h.date,
+      security: h.security ?? '',
+      name: h.name ?? '',
+      ticker: h.ticker ?? '',
+      type: h.type ?? '',
+      quantity: h.quantity ?? 0,
+      price_cents: h.price_cents || null,
+      value_cents: h.value_cents ?? 0,
+    })),
+    investment_activity: investmentActivity.map(a => ({
+      account: a.account,
+      date: a.date,
+      kind: a.kind,
+      name: a.name ?? '',
+      security: a.security ?? '',
+      ticker: a.ticker ?? '',
+      quantity: a.quantity ?? 0,
+      price_cents: a.price_cents || null,
+      amount_cents: a.amount_cents ?? 0,
+      fees_cents: a.fees_cents || null,
     })),
     cashflow_items: cashflowItems,
     categories,

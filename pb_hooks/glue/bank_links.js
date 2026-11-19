@@ -273,7 +273,7 @@ function sync(app, link, today) {
     txApp.save(link);
   });
   result.ok = true;
-  require(`${__hooks}/glue/sync_holdings.js`).syncHoldings(app, link, provider, access, rows);
+  require(`${__hooks}/glue/sync_holdings.js`).syncHoldings(app, link, provider, access, rows, dates.personToday(today, now));
   return result;
 }
 
