@@ -167,7 +167,7 @@ const comparison = computed(() => {
   return `${formatCents(Math.abs(now - was))} ${now > was ? 'more' : 'less'} than ${before}.`
 })
 
-watch([category, q, min, max, tag], () => { renaming.value = false; deleting.value = false; notice.value = ''; budgeting.value = false })
+watch([category, q, min, max, tag], () => { renaming.value = false; deleting.value = false; notice.value = '' })
 
 // A custom range: two dates, kept in the address as "from~to".
 const range = reactive({ from: period.value.from, to: period.value.to })
@@ -183,32 +183,9 @@ function showRange() {
   return go({ period: 'custom', at })
 }
 
-// Budgets: a monthly amount per spending category, shown against the span's spending.
-const overBy = (c: { total_cents: number, budget_cents?: number }) => (c.budget_cents ?? 0) - c.total_cents
-const budgetShare = (c: { total_cents: number, budget_cents?: number }) => `${Math.max(0, Math.min(100, (c.total_cents / Math.max(1, c.budget_cents ?? 0)) * 100)).toFixed(1)}%`
+// The category's budget (SpendingBudget sets it), and the totals it's shown against.
 const thisBudget = computed(() => budgetList.value.budgets.find(b => b.category === category.value))
-const monthlyBudget = computed(() => thisBudget.value?.amount_cents ?? 0)
-// A budget a household member shared: its amount can change here, nothing else.
-const othersBudget = computed(() => thisBudget.value?.owner_name !== undefined)
-const budgeting = ref(false)
-const budgetInput = ref('')
-const budgetShared = ref(false)
-// Whether the person is in a household, asked once they open a budget of their own.
-const inHousehold = ref(false)
-const budget = useAction()
-async function startBudget() {
-  budgetInput.value = monthlyBudget.value ? (monthlyBudget.value / 100).toFixed(2) : ''
-  budgetShared.value = !!thisBudget.value?.shared_with_household
-  budgeting.value = true
-  if (!othersBudget.value) {
-    const h = await $fetch<{ household: { members: unknown[] } | null }>('/api/household').catch(() => null)
-    inHousehold.value = (h?.household?.members.length ?? 0) > 1
-  }
-}
-async function saveBudget(amount: string) {
-  const share = !othersBudget.value && amount && (inHousehold.value || thisBudget.value?.shared_with_household) ? { shared: budgetShared.value } : {}
-  if (!await budget.run(() => $fetch(`/api/budgets/${category.value}`, { method: 'PUT', body: { amount, ...share } }))) return
-  budgeting.value = false
+async function budgetChanged() {
   await Promise.all([refreshBudgets(), refreshSummary()])
 }
 
@@ -356,36 +333,10 @@ async function confirmDelete() {
             <h2 id="cat-title" class="title-2">{{ label(category) }}</h2>
             <p class="num title-3 total" :class="current?.spending ? spendTone(current.total_cents) : moneyTone(current?.total_cents ?? 0)">{{ formatCents(current?.total_cents ?? 0) }}</p>
             <p class="footnote">{{ period.label }} · {{ (current?.count ?? 0).toLocaleString() }} {{ current?.count === 1 ? 'transaction' : 'transactions' }}<template v-if="viewing?.custom"> · {{ viewing.shared ? 'Shared category' : 'Your own category' }}</template></p>
-            <div v-if="viewing?.spending" class="budget">
-              <template v-if="current?.budget_cents">
-                <span class="bar" aria-hidden="true"><span class="bar-fill" :class="overBy(current) < 0 ? 'over' : 'under'" :style="{ width: budgetShare(current) }" /></span>
-                <p class="footnote">
-                  {{ formatCents(current.budget_cents) }} budget for {{ period.label }} ·
-                  <span v-if="overBy(current) < 0" class="loss">{{ formatCents(-overBy(current)) }} over</span>
-                  <span v-else>{{ formatCents(overBy(current)) }} left</span>
-                  <template v-if="current.carry_cents">
-                    · includes {{ current.carry_cents > 0 ? `${formatCents(current.carry_cents)} rolled over` : `${formatCents(-current.carry_cents)} taken off for overspending` }} from earlier months
-                  </template>
-                </p>
-              </template>
-              <form v-if="budgeting" class="inline-form" @submit.prevent="saveBudget(budgetInput)">
-                <label class="visually-hidden" for="budget">Monthly budget</label>
-                <input id="budget" v-model="budgetInput" class="input num" inputmode="decimal" placeholder="Monthly budget, $">
-                <button class="btn btn-primary" :disabled="budget.busy.value"><span v-if="budget.busy.value" class="spinner" aria-hidden="true" /> Save</button>
-                <button v-if="monthlyBudget && !othersBudget" type="button" class="btn btn-plain danger" :disabled="budget.busy.value" @click="saveBudget('')">Remove budget</button>
-                <button type="button" class="btn btn-plain" @click="budgeting = false">Cancel</button>
-                <label v-if="!othersBudget && (inHousehold || thisBudget?.shared_with_household)" class="check share">
-                  <input v-model="budgetShared" type="checkbox" data-test="share-budget">
-                  <span>Share with your household: everyone sees it and can change its amount</span>
-                </label>
-              </form>
-              <p v-else class="btn-row">
-                <button class="btn btn-tinted" @click="startBudget">{{ monthlyBudget ? `Budget: ${formatCents(monthlyBudget)} a month` : 'Set a monthly budget' }}</button>
-              </p>
-              <p v-if="othersBudget" class="footnote" data-test="budget-from">Shared by {{ thisBudget?.owner_name || 'a household member' }}: you can change its amount.</p>
-              <p v-else-if="thisBudget?.shared_with_household" class="footnote">Shared with your household.</p>
-              <p v-if="budget.error.value" class="notice notice-error" role="alert">{{ budget.error.value }}</p>
-            </div>
+            <SpendingBudget
+              v-if="viewing?.spending" :category="category" :current="current" :period-label="period.label"
+              :budget="thisBudget" @changed="budgetChanged"
+            />
             <template v-if="viewing?.custom && !viewing.shared">
               <form v-if="renaming" class="inline-form" @submit.prevent="saveRename">
                 <label class="visually-hidden" for="rename">New name</label>
@@ -553,9 +504,6 @@ async function confirmDelete() {
 /* Within budget is a neutral progress bar; over it is the fixed loss red. */
 .bar-fill.under { background: var(--text-3); }
 .bar-fill.over { background: var(--loss); }
-.budget { margin-top: 0.75rem; }
-.budget .share { flex-basis: 100%; display: flex; gap: 0.5rem; align-items: center; }
-.budget .bar { max-width: 28rem; }
 .range { display: inline-flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .range .input { width: auto; background: var(--surface); border-color: var(--separator); }
 

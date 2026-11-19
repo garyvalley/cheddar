@@ -6,7 +6,7 @@
 // it separately). Newer ones, and everything a later sync adds, go to the
 // inbox as before.
 //
-// The sync (pb_hooks/glue/bank_links.js) marks it, from pb_hooks/lib/gen/review.js:
+// The sync (pb_hooks/glue/sync_rows.js) marks it, from pb_hooks/lib/gen/review.js:
 // this file, built for the hooks by scripts/gen-hooks.mjs. Pure: no Intl.
 
 export const REVIEW_DAYS = 30

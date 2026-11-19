@@ -2,8 +2,9 @@
 
 // ---------------------------------------------------------------------------
 // Bank links' records: linking, syncing and removing a link through its
-// provider (glue/providers.js; Plaid is the only one so far), and writing
-// what it sends. Nothing here knows which provider it is. Required inside a
+// provider (glue/providers.js; Plaid is the only one so far). What a sync
+// writes is glue/sync_rows.js (accounts, transactions) and
+// glue/sync_holdings.js (investment holdings). Nothing here knows which provider it is. Required inside a
 // handler body, not at file scope: PocketBase's JSVM pool does not share
 // file-level declarations with hook callbacks.
 //
@@ -14,7 +15,6 @@
 
 var plaid = require(`${__hooks}/lib/plaid.js`);
 var dates = require(`${__hooks}/lib/dates.js`);
-var overlap = require(`${__hooks}/lib/gen/overlap.js`);
 var review = require(`${__hooks}/lib/gen/review.js`);
 var providers = require(`${__hooks}/glue/providers.js`);
 
@@ -181,159 +181,6 @@ function broughtIn(app, link, accounts) {
   return out;
 }
 
-/** The account a Plaid account syncs into, made the first time it's seen. */
-function accountFor(txApp, link, row) {
-  var owner = link.getString("owner");
-  var account;
-  try {
-    account = txApp.findFirstRecordByFilter(
-      "accounts",
-      "owner = {:owner} && external_id = {:ext}",
-      { owner: owner, ext: row.external_id },
-    );
-  } catch (_) {
-    account = new Record(txApp.findCollectionByNameOrId("accounts"));
-    account.set("owner", owner);
-    account.set("external_id", row.external_id);
-    account.set("source", "sync");
-    // Only the first time: after that these are the person's (Accounts' Edit).
-    account.set("name", row.name);
-    account.set("kind", row.kind);
-    if (row.last4) account.set("last4", row.last4);
-  }
-  account.set("link", link.id);
-  if (row.institution && !account.getString("institution"))
-    account.set("institution", row.institution);
-  account.set("currency", row.currency);
-  if (row.balance_cents !== null) {
-    account.set("balance_cents", row.balance_cents);
-    account.set("balance_date", row.balance_date);
-  }
-  txApp.save(account);
-  return account;
-}
-
-/**
- * The row a statement imported into `account` already holds for `t`, as
- * shared/overlap.ts matches them (lib/gen/overlap.js), or null. Rows a sync took over are the
- * link's now, so each imported row stands for one transaction at most.
- */
-function imported(txApp, account, t) {
-  var span = overlap.around(t.posted);
-  var rows = txApp.findRecordsByFilter(
-    "transactions",
-    "account = {:account} && source = 'import' && amount_cents = {:amount} && posted >= {:from} && posted <= {:to}",
-    "posted",
-    0,
-    0,
-    {
-      account: account.id,
-      amount: t.amount_cents,
-      from: span.from,
-      to: span.to,
-    },
-  );
-  var i = overlap.nearest(
-    t,
-    rows.map(function (r) {
-      return {
-        posted: r.getString("posted"),
-        amount_cents: r.getInt("amount_cents"),
-      };
-    }),
-  );
-  return i === -1 ? null : rows[i];
-}
-
-/**
- * A pending charge that posts comes back as a new transaction (and the
- * pending one is removed): what the person made of the pending one, its
- * name, note, being left out, a category chosen by hand and a split, moves
- * to the posted one. A split whose amount changed as it posted (a tip) is
- * left to fix (shared/splits.ts).
- */
-function carryOver(txApp, account, t, rec) {
-  if (!t.pending_of) return;
-  var was;
-  try {
-    was = txApp.findFirstRecordByFilter(
-      "transactions",
-      "account = {:account} && external_id = {:ext}",
-      { account: account.id, ext: t.pending_of },
-    );
-  } catch (_) {
-    return;
-  }
-  if (was.getString("payee")) rec.set("payee", was.getString("payee"));
-  rec.set("note", was.getString("note"));
-  rec.set("excluded", was.getBool("excluded"));
-  rec.set("reviewed", was.getBool("reviewed"));
-  if (was.getString("category_by") === "person") {
-    rec.set("category", was.getString("category"));
-    rec.set("category_by", "person");
-  }
-  var parts = JSON.parse(was.getString("splits") || "null");
-  if (parts) rec.set("splits", parts);
-}
-
-/**
- * Adds or brings up to date one transaction, or takes over the row a
- * statement already brought in for it; answers "added", "updated" or "".
- * A new one posted long before the link was made (`linkedAt`) is the link's
- * history, kept out of the review inbox (shared/review.ts).
- */
-function upsert(txApp, collection, account, t, linkedAt) {
-  var rec;
-  try {
-    rec = txApp.findFirstRecordByFilter(
-      "transactions",
-      "account = {:account} && external_id = {:ext}",
-      { account: account.id, ext: t.external_id },
-    );
-  } catch (_) {
-    rec = null;
-  }
-  var outcome = "updated";
-  var took = !rec && imported(txApp, account, t);
-  if (took) {
-    // The statement had it first: the row becomes the link's, so the bank's
-    // later changes and removals reach it, and undoing that import keeps it.
-    rec = took;
-    rec.set("source", "sync");
-    rec.set("external_id", t.external_id);
-    rec.set("import", "");
-    if (!rec.getString("payee")) rec.set("payee", t.payee);
-  } else if (rec) {
-    if (
-      rec.getString("posted") === t.posted &&
-      rec.getInt("amount_cents") === t.amount_cents &&
-      rec.getBool("pending") === t.pending &&
-      rec.getString("description") === t.description &&
-      rec.getString("bank_category") === t.bank_category
-    )
-      return "";
-  } else {
-    rec = new Record(collection);
-    rec.set("owner", account.getString("owner"));
-    rec.set("account", account.id);
-    rec.set("source", "sync");
-    rec.set("external_id", t.external_id);
-    // The bank's own words; the person's edits to these later stay theirs.
-    rec.set("payee", t.payee);
-    rec.set("history", review.isHistory(t.posted, linkedAt));
-    carryOver(txApp, account, t, rec);
-    outcome = "added";
-  }
-  rec.set("posted", t.posted);
-  rec.set("amount_cents", t.amount_cents);
-  rec.set("description", t.description);
-  rec.set("pending", t.pending);
-  // Plaid's category; pb_hooks/categories.pb.js sorts the row by it as it saves.
-  rec.set("bank_category", t.bank_category);
-  txApp.save(rec);
-  return outcome;
-}
-
 /** Records a failed sync on the link; answers the sync result. */
 function failed(app, link, f, result) {
   link.set("status", f.status);
@@ -387,16 +234,17 @@ function sync(app, link, today) {
   var rows = found.rows;
   pointWebhook(link, provider, access);
 
+  var write = require(`${__hooks}/glue/sync_rows.js`);
   app.runInTransaction(function (txApp) {
     var byPlaidId = {};
     rows.forEach(function (row) {
-      byPlaidId[row.external_id] = accountFor(txApp, link, row);
+      byPlaidId[row.external_id] = write.accountFor(txApp, link, row);
     });
     var collection = txApp.findCollectionByNameOrId("transactions");
     changes.added.concat(changes.modified).forEach(function (t) {
       var account = byPlaidId[t.account];
       if (!account) return;
-      var outcome = upsert(txApp, collection, account, t, link.getString("created"));
+      var outcome = write.upsert(txApp, collection, account, t, link.getString("created"));
       if (outcome === "added") result.added++;
       else if (outcome === "updated") result.updated++;
     });
@@ -425,65 +273,8 @@ function sync(app, link, today) {
     txApp.save(link);
   });
   result.ok = true;
-  syncHoldings(app, link, provider, access, rows);
+  require(`${__hooks}/glue/sync_holdings.js`).syncHoldings(app, link, provider, access, rows);
   return result;
-}
-
-/**
- * What the link's brokerage and retirement accounts hold, when the provider
- * gives holdings and they're switched on (PLAID_INVESTMENTS): each such
- * account's rows are replaced with what the bank says now, and the link
- * notes why there are none ("unsupported", "consent"). Best effort: a failed
- * holdings call keeps the last ones and never fails the sync.
- */
-function syncHoldings(app, link, provider, access, rows) {
-  if (!provider.holdings || !provider.holdingsOn || !provider.holdingsOn()) return;
-  var invested = rows.filter(function (r) {
-    return r.kind === "brokerage" || r.kind === "retirement";
-  });
-  if (!invested.length) return;
-  var got;
-  try {
-    got = provider.holdings(access);
-  } catch (err) {
-    if (err instanceof ProviderError) return;
-    throw err;
-  }
-  var owner = link.getString("owner");
-  var now = dates.toPb(Date.now());
-  app.runInTransaction(function (txApp) {
-    if (got.status === "ok") {
-      var collection = txApp.findCollectionByNameOrId("holdings");
-      invested.forEach(function (r) {
-        var account;
-        try {
-          account = txApp.findFirstRecordByFilter("accounts", "owner = {:owner} && external_id = {:ext}", { owner: owner, ext: r.external_id });
-        } catch (_) {
-          return;
-        }
-        txApp.findRecordsByFilter("holdings", "account = {:a}", "", 0, 0, { a: account.id }).forEach(function (h) {
-          txApp.delete(h);
-        });
-        got.rows
-          .filter(function (h) {
-            return h.account === r.external_id;
-          })
-          .forEach(function (h) {
-            var rec = new Record(collection);
-            rec.set("owner", owner);
-            rec.set("account", account.id);
-            ["name", "ticker", "type", "quantity", "price_cents", "value_cents", "cost_basis_cents", "currency", "price_as_of"].forEach(function (f) {
-              if (h[f] !== null && h[f] !== undefined) rec.set(f, h[f]);
-            });
-            rec.set("as_of", now);
-            txApp.save(rec);
-          });
-      });
-    }
-    var fresh = txApp.findRecordById("bank_links", link.id);
-    fresh.set("holdings", got.status);
-    txApp.save(fresh);
-  });
 }
 
 /**

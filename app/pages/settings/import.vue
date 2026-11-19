@@ -188,18 +188,12 @@ const unreadLines = computed(() => imported.value.reduce((n, r) => n + (r.unread
 const failures = computed(() => results.value.filter(r => r.error))
 const newBalance = computed(() => imported.value.reduce<{ cents: number, date: string } | null>((best, r) => (r.balance && (!best || r.balance.date >= best.date) ? r.balance : best), null))
 
-const undo = useAction()
-const undoing = ref('')
-async function undoImport(id: string) {
-  undoing.value = id
-  if (await undo.succeed(() => $fetch(`/api/imports/${id}`, { method: 'DELETE' }))) {
-    results.value = results.value.filter(r => r.import?.id !== id)
-    await refreshHistory()
-  }
-  undoing.value = ''
+// An import undone in the list below (SettingsImportHistory): it leaves what was just shown too.
+async function undone(id: string) {
+  results.value = results.value.filter(r => r.import?.id !== id)
+  await refreshHistory()
 }
 
-const when = (iso: string) => new Date(iso.replace(' ', 'T')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 const day = (ymd: string) => new Date(`${ymd}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`
 </script>
@@ -382,25 +376,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
         </section>
       </template>
 
-      <section v-if="history.imports.length" class="group" aria-labelledby="history-title">
-        <h2 id="history-title" class="group-title">Imported into {{ account?.name }}</h2>
-        <ul class="card list">
-          <li v-for="i in history.imports" :key="i.id" class="row">
-            <span class="row-label">
-              <span class="block name">{{ i.filename || 'Statement' }}</span>
-              <span class="footnote">
-                {{ when(i.created) }} · {{ plural(i.added, 'added', 'added') }}<template v-if="i.skipped">, {{ i.skipped }} already there</template>
-                <template v-if="i.first_date"> · {{ day(i.first_date) }} to {{ day(i.last_date) }}</template>
-              </span>
-            </span>
-            <button class="btn btn-plain" :disabled="undo.busy.value" :aria-label="`Undo the import of ${i.filename}`" @click="undoImport(i.id)">
-              <span v-if="undoing === i.id" class="spinner" aria-hidden="true" /> Undo
-            </button>
-          </li>
-        </ul>
-        <p v-if="undo.error.value" class="notice notice-error" role="alert">{{ undo.error.value }}</p>
-        <p class="group-footer">Undo removes the transactions that import added.</p>
-      </section>
+      <SettingsImportHistory v-if="history.imports.length" :imports="history.imports" :account-name="account?.name ?? ''" @undone="undone" />
     </template>
   </div>
 </template>
