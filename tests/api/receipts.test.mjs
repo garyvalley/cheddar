@@ -18,7 +18,7 @@ function upload(c, txId, name = 'Lunch.jpg', content = JPEG) {
   body.set('name', name)
   return fetch(`${APP}/api/transactions/${txId}/receipts`, {
     method: 'POST', body,
-    headers: { origin: APP, cookie: c.cookie, 'x-forwarded-for': c.from },
+    headers: { 'origin': APP, 'cookie': c.cookie, 'x-forwarded-for': c.from },
   }).then(async r => ({ status: r.status, json: await r.json().catch(() => null) }))
 }
 
@@ -29,7 +29,7 @@ async function transaction(c) {
   return { account: a, tx: t.json.transaction }
 }
 
-const raw = (c, path) => fetch(`${APP}${path}`, { headers: { cookie: c.cookie, 'x-forwarded-for': c.from } })
+const raw = (c, path) => fetch(`${APP}${path}`, { headers: { 'cookie': c.cookie, 'x-forwarded-for': c.from } })
 
 describe('receipts', () => {
   test('add, open, list, export and delete', async () => {
@@ -52,7 +52,7 @@ describe('receipts', () => {
 
     const exported = await fetch(`${APP}/api/export`, {
       method: 'POST',
-      headers: { origin: APP, 'content-type': 'application/json', cookie: c.cookie, 'x-forwarded-for': c.from },
+      headers: { 'origin': APP, 'content-type': 'application/json', 'cookie': c.cookie, 'x-forwarded-for': c.from },
       body: JSON.stringify({ password: PASSWORD }),
     })
     assert.equal(exported.status, 200)

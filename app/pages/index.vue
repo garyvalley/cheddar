@@ -227,150 +227,150 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
         </div>
       </section>
 
-        <!-- Two figures side by side. -->
-        <div class="tiles tiles-area">
-          <section class="card tile growth-area" aria-labelledby="growth-title">
-            <div class="tile-head">
-              <h2 id="growth-title" class="tile-label"><NuxtLink to="/investments" class="tile-link">Investments</NuxtLink></h2>
-              <template v-if="ov?.has_investments">
-                <label class="visually-hidden" for="growth-period">Over</label>
-                <select id="growth-period" v-model="period" class="select tile-pick">
-                  <option v-for="p in GROWTH_PERIODS" :key="p.id" :value="p.id">{{ p.label }}</option>
-                </select>
-              </template>
-            </div>
+      <!-- Two figures side by side. -->
+      <div class="tiles tiles-area">
+        <section class="card tile growth-area" aria-labelledby="growth-title">
+          <div class="tile-head">
+            <h2 id="growth-title" class="tile-label"><NuxtLink to="/investments" class="tile-link">Investments</NuxtLink></h2>
             <template v-if="ov?.has_investments">
-              <template v-if="grown && grown.rate !== null">
-                <p class="num tile-value" :class="moneyTone(grown.gain_cents)" data-test="growth">{{ percent(grown.rate) }}</p>
-                <p class="footnote">
-                  <span class="num change" :class="moneyTone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span> over {{ periodName }}, less money moved in or out
-                </p>
-              </template>
-              <template v-else>
-                <!-- A new link has today's value and nothing to compare it with yet: show what's invested. -->
-                <p v-if="invested !== null" class="num tile-value" data-test="invested">{{ formatCents(invested) }}</p>
-                <p class="footnote">Invested today. Growth shows once Cheddar has seen these balances on more than one day.</p>
-              </template>
+              <label class="visually-hidden" for="growth-period">Over</label>
+              <select id="growth-period" v-model="period" class="select tile-pick">
+                <option v-for="p in GROWTH_PERIODS" :key="p.id" :value="p.id">{{ p.label }}</option>
+              </select>
             </template>
-            <p v-else class="footnote">Add a brokerage or retirement account in <NuxtLink to="/settings#accounts">Settings</NuxtLink> to see how your investments grow.</p>
-          </section>
-
-          <section class="card tile kept-area" aria-labelledby="kept-title">
-            <div class="tile-head">
-              <h2 id="kept-title" class="tile-label">Savings rate</h2>
-              <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
-            </div>
-            <template v-if="kept">
-              <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>
-              <div class="meter" aria-hidden="true"><i :style="{ width: `${Math.max(0, Math.min(100, kept.rate * 100))}%` }" /></div>
+          </div>
+          <template v-if="ov?.has_investments">
+            <template v-if="grown && grown.rate !== null">
+              <p class="num tile-value" :class="moneyTone(grown.gain_cents)" data-test="growth">{{ percent(grown.rate) }}</p>
               <p class="footnote">
-                <span class="num change" :class="moneyTone(kept.per_month)">{{ formatCents(Math.abs(kept.per_month)) }}</span>
-                a month {{ kept.per_month >= 0 ? 'kept' : 'over' }}, last 6 months
+                <span class="num change" :class="moneyTone(grown.gain_cents)">{{ signed(grown.gain_cents) }}</span> over {{ periodName }}, less money moved in or out
               </p>
             </template>
-            <p v-else class="footnote">Shows once your accounts have six whole months of income and spending.</p>
-            <NuxtLink to="/goals" class="goals-line" data-test="goals-summary">
-              <template v-if="goals.count">
-                <span>{{ goals.count === 1 ? '1 goal' : `${goals.count} goals` }}</span>
-                <span class="num" :title="`${formatCents(goals.saved)} of ${formatCents(goals.target)}`">{{ Math.floor(goals.saved / goals.target * 100) }}% saved</span>
-              </template>
-              <span v-else>Set a savings goal</span>
-              <AppIcon name="chevron" />
-            </NuxtLink>
-          </section>
+            <template v-else>
+              <!-- A new link has today's value and nothing to compare it with yet: show what's invested. -->
+              <p v-if="invested !== null" class="num tile-value" data-test="invested">{{ formatCents(invested) }}</p>
+              <p class="footnote">Invested today. Growth shows once Cheddar has seen these balances on more than one day.</p>
+            </template>
+          </template>
+          <p v-else class="footnote">Add a brokerage or retirement account in <NuxtLink to="/settings#accounts">Settings</NuxtLink> to see how your investments grow.</p>
+        </section>
+
+        <section class="card tile kept-area" aria-labelledby="kept-title">
+          <div class="tile-head">
+            <h2 id="kept-title" class="tile-label">Savings rate</h2>
+            <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
+          </div>
+          <template v-if="kept">
+            <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>
+            <div class="meter" aria-hidden="true"><i :style="{ width: `${Math.max(0, Math.min(100, kept.rate * 100))}%` }" /></div>
+            <p class="footnote">
+              <span class="num change" :class="moneyTone(kept.per_month)">{{ formatCents(Math.abs(kept.per_month)) }}</span>
+              a month {{ kept.per_month >= 0 ? 'kept' : 'over' }}, last 6 months
+            </p>
+          </template>
+          <p v-else class="footnote">Shows once your accounts have six whole months of income and spending.</p>
+          <NuxtLink to="/goals" class="goals-line" data-test="goals-summary">
+            <template v-if="goals.count">
+              <span>{{ goals.count === 1 ? '1 goal' : `${goals.count} goals` }}</span>
+              <span class="num" :title="`${formatCents(goals.saved)} of ${formatCents(goals.target)}`">{{ Math.floor(goals.saved / goals.target * 100) }}% saved</span>
+            </template>
+            <span v-else>Set a savings goal</span>
+            <AppIcon name="chevron" />
+          </NuxtLink>
+        </section>
+      </div>
+
+      <section class="card panel chart-area" aria-labelledby="flow-title">
+        <div class="panel-head">
+          <h2 id="flow-title" class="panel-title">Income and spending</h2>
+          <span class="head-tools">
+            <NuxtLink to="/reports" class="panel-link">Trends</NuxtLink>
+            <template v-if="hasMonths && shown">
+              <label class="visually-hidden" for="month-pick">Month</label>
+              <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">
+                <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
+              </select>
+            </template>
+          </span>
         </div>
+        <div v-if="hasMonths && shown" class="card-pad">
+          <div class="legend" aria-hidden="true">
+            <span><i class="key income" /> Income</span>
+            <span><i class="key spent" /> Spending</span>
+          </div>
+          <div class="chart" aria-hidden="true">
+            <div class="axis">
+              <span>{{ compact(top) }}</span>
+              <span>{{ compact(top / 2) }}</span>
+              <span>$0</span>
+            </div>
+            <div class="plot">
+              <div class="grid"><i /><i /><i /></div>
+              <button
+                v-for="m in months" :key="m.month" class="month" :class="{ on: shown.month === m.month }" tabindex="-1"
+                @click="selected = m.month" @mouseenter="selected = m.month"
+              >
+                <span class="bars">
+                  <span class="bar income" :style="{ height: height(m.income_cents) }" />
+                  <span class="bar spent" :style="{ height: height(m.spent_cents) }" />
+                </span>
+                <span class="tick-label">{{ m.label.slice(0, 1) }}<span class="wide">{{ m.label.slice(1) }}</span></span>
+              </button>
+            </div>
+          </div>
+          <dl class="figures" aria-live="polite">
+            <div><dt>Income</dt><dd class="num" :class="moneyTone(shown.income_cents)">{{ formatCents(shown.income_cents) }}</dd></div>
+            <div><dt>Spending</dt><dd class="num" :class="spendTone(shown.spent_cents)">{{ formatCents(shown.spent_cents) }}</dd></div>
+            <div>
+              <dt>{{ shown.income_cents >= shown.spent_cents ? 'Kept' : 'Over' }}</dt>
+              <dd class="num" :class="moneyTone(shown.income_cents - shown.spent_cents)">{{ formatCents(Math.abs(shown.income_cents - shown.spent_cents)) }}</dd>
+            </div>
+          </dl>
+          <div class="visually-hidden">
+            <table>
+              <caption>Income and spending by month</caption>
+              <thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead>
+              <tbody>
+                <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="caption">Moving money between your own accounts counts as neither.</p>
+        </div>
+        <div v-else class="card-pad">
+          <p class="footnote">Each month's income and spending shows here once your accounts have transactions from the last year.</p>
+        </div>
+      </section>
 
-        <section class="card panel chart-area" aria-labelledby="flow-title">
-          <div class="panel-head">
-            <h2 id="flow-title" class="panel-title">Income and spending</h2>
-            <span class="head-tools">
-              <NuxtLink to="/reports" class="panel-link">Trends</NuxtLink>
-              <template v-if="hasMonths && shown">
-                <label class="visually-hidden" for="month-pick">Month</label>
-                <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">
-                  <option v-for="m in months" :key="m.month" :value="m.month">{{ monthName(m.month) }}</option>
-                </select>
-              </template>
-            </span>
-          </div>
-          <div v-if="hasMonths && shown" class="card-pad">
-            <div class="legend" aria-hidden="true">
-              <span><i class="key income" /> Income</span>
-              <span><i class="key spent" /> Spending</span>
-            </div>
-            <div class="chart" aria-hidden="true">
-              <div class="axis">
-                <span>{{ compact(top) }}</span>
-                <span>{{ compact(top / 2) }}</span>
-                <span>$0</span>
-              </div>
-              <div class="plot">
-                <div class="grid"><i /><i /><i /></div>
-                <button
-                  v-for="m in months" :key="m.month" class="month" :class="{ on: shown.month === m.month }" tabindex="-1"
-                  @click="selected = m.month" @mouseenter="selected = m.month"
-                >
-                  <span class="bars">
-                    <span class="bar income" :style="{ height: height(m.income_cents) }" />
-                    <span class="bar spent" :style="{ height: height(m.spent_cents) }" />
-                  </span>
-                  <span class="tick-label">{{ m.label.slice(0, 1) }}<span class="wide">{{ m.label.slice(1) }}</span></span>
-                </button>
-              </div>
-            </div>
-            <dl class="figures" aria-live="polite">
-              <div><dt>Income</dt><dd class="num" :class="moneyTone(shown.income_cents)">{{ formatCents(shown.income_cents) }}</dd></div>
-              <div><dt>Spending</dt><dd class="num" :class="spendTone(shown.spent_cents)">{{ formatCents(shown.spent_cents) }}</dd></div>
-              <div>
-                <dt>{{ shown.income_cents >= shown.spent_cents ? 'Kept' : 'Over' }}</dt>
-                <dd class="num" :class="moneyTone(shown.income_cents - shown.spent_cents)">{{ formatCents(Math.abs(shown.income_cents - shown.spent_cents)) }}</dd>
-              </div>
-            </dl>
-            <div class="visually-hidden">
-              <table>
-                <caption>Income and spending by month</caption>
-                <thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead>
-                <tbody>
-                  <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ formatCents(m.income_cents) }}</td><td>{{ formatCents(m.spent_cents) }}</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <p class="caption">Moving money between your own accounts counts as neither.</p>
-          </div>
-          <div v-else class="card-pad">
-            <p class="footnote">Each month's income and spending shows here once your accounts have transactions from the last year.</p>
-          </div>
-        </section>
-
-        <section class="card panel pie-area" aria-labelledby="cats-title">
-          <div class="panel-head">
-            <h2 id="cats-title" class="panel-title">Spending by category{{ shown ? `, ${monthName(shown.month).split(' ')[0]}` : '' }}</h2>
-            <NuxtLink v-if="shown" :to="{ path: '/spending', query: { at: shown.month } }" class="panel-link">See all</NuxtLink>
-          </div>
-          <div v-if="slices.length" class="card-pad pie-wrap">
-            <svg class="pie" viewBox="0 0 42 42" role="img" :aria-label="`Spending by category: ${slices.map(c => `${c.label} ${formatCents(c.cents)}`).join(', ')}`">
-              <circle class="pie-track" cx="21" cy="21" r="15.9155" />
-              <circle
-                v-for="c in slices" :key="c.id" class="pie-slice" :class="{ dim: hovered && hovered !== c.id }"
-                cx="21" cy="21" r="15.9155" :stroke="c.color" :stroke-dasharray="dash(c.share)" :stroke-dashoffset="25 - c.start"
-                @mouseenter="hovered = c.id" @mouseleave="hovered = ''"
-              ><title>{{ c.label }}: {{ formatCents(c.cents) }} ({{ share(c.share) }})</title></circle>
-              <text x="21" y="20.5" class="pie-total">{{ compact(pieTotal) }}</text>
-              <text x="21" y="25.5" class="pie-sub">spent</text>
-            </svg>
-            <ul class="pie-legend">
-              <li v-for="c in slices" :key="c.id" :class="{ dim: hovered && hovered !== c.id }" @mouseenter="hovered = c.id" @mouseleave="hovered = ''">
-                <i class="swatch" :style="{ background: c.color }" aria-hidden="true" />
-                <span class="pie-name">{{ c.label }}</span>
-                <span class="num">{{ formatCents(c.cents) }}</span>
-                <span class="num pie-share">{{ share(c.share) }}</span>
-              </li>
-            </ul>
-          </div>
-          <div v-else class="card-pad">
-            <p class="footnote">Nothing spent{{ shown ? ` in ${monthName(shown.month)}` : '' }} yet.</p>
-          </div>
-        </section>
+      <section class="card panel pie-area" aria-labelledby="cats-title">
+        <div class="panel-head">
+          <h2 id="cats-title" class="panel-title">Spending by category{{ shown ? `, ${monthName(shown.month).split(' ')[0]}` : '' }}</h2>
+          <NuxtLink v-if="shown" :to="{ path: '/spending', query: { at: shown.month } }" class="panel-link">See all</NuxtLink>
+        </div>
+        <div v-if="slices.length" class="card-pad pie-wrap">
+          <svg class="pie" viewBox="0 0 42 42" role="img" :aria-label="`Spending by category: ${slices.map(c => `${c.label} ${formatCents(c.cents)}`).join(', ')}`">
+            <circle class="pie-track" cx="21" cy="21" r="15.9155" />
+            <circle
+              v-for="c in slices" :key="c.id" class="pie-slice" :class="{ dim: hovered && hovered !== c.id }"
+              cx="21" cy="21" r="15.9155" :stroke="c.color" :stroke-dasharray="dash(c.share)" :stroke-dashoffset="25 - c.start"
+              @mouseenter="hovered = c.id" @mouseleave="hovered = ''"
+            ><title>{{ c.label }}: {{ formatCents(c.cents) }} ({{ share(c.share) }})</title></circle>
+            <text x="21" y="20.5" class="pie-total">{{ compact(pieTotal) }}</text>
+            <text x="21" y="25.5" class="pie-sub">spent</text>
+          </svg>
+          <ul class="pie-legend">
+            <li v-for="c in slices" :key="c.id" :class="{ dim: hovered && hovered !== c.id }" @mouseenter="hovered = c.id" @mouseleave="hovered = ''">
+              <i class="swatch" :style="{ background: c.color }" aria-hidden="true" />
+              <span class="pie-name">{{ c.label }}</span>
+              <span class="num">{{ formatCents(c.cents) }}</span>
+              <span class="num pie-share">{{ share(c.share) }}</span>
+            </li>
+          </ul>
+        </div>
+        <div v-else class="card-pad">
+          <p class="footnote">Nothing spent{{ shown ? ` in ${monthName(shown.month)}` : '' }} yet.</p>
+        </div>
+      </section>
     </div>
 
     <!-- Whether linked banks are current, last on the page (G's choice): quiet when they are. -->

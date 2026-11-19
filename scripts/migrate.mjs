@@ -35,7 +35,8 @@ async function send(method, path, { body, token } = {}) {
   const r = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   const text = await r.text()
   let parsed = text
-  try { parsed = text ? JSON.parse(text) : null } catch { /* not JSON: keep the text */ }
+  try { parsed = text ? JSON.parse(text) : null }
+  catch { /* not JSON: keep the text */ }
   if (!r.ok) {
     const error = new Error(`${method} ${path}: HTTP ${r.status} ${JSON.stringify(parsed)}`)
     error.status = r.status
@@ -116,4 +117,3 @@ for (const file of files) {
   ran++
 }
 console.log(`[migrate] up to date (${ran} applied, ${files.length} in all)`)
-

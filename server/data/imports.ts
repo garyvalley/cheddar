@@ -1,54 +1,54 @@
-import { createHash } from "node:crypto";
-import type { RecordModel } from "pocketbase";
-import type { Import } from "~~/shared/accounts";
-import { alreadySynced, around, type Dated } from "~~/shared/overlap";
+import { createHash } from 'node:crypto'
+import type { RecordModel } from 'pocketbase'
+import type { Import } from '~~/shared/accounts'
+import { alreadySynced, around, type Dated } from '~~/shared/overlap'
 import {
   dateRange,
   type StatementFormat,
   type StatementRow,
-} from "~~/shared/statements";
-import { callerId, type Session } from "./session";
+} from '~~/shared/statements'
+import { callerId, type Session } from './session'
 
 /** Statement files imported into an account, and the transactions they add. */
 
 export const toImport = (r: RecordModel): Import => ({
   id: r.id,
   account: r.account,
-  filename: r.filename ?? "",
+  filename: r.filename ?? '',
   format: r.format,
   added: r.added ?? 0,
   skipped: r.skipped ?? 0,
-  first_date: r.first_date ?? "",
-  last_date: r.last_date ?? "",
+  first_date: r.first_date ?? '',
+  last_date: r.last_date ?? '',
   created: r.created,
-});
+})
 
 export async function listImports(
   s: Session,
   account?: string,
   ownedOnly = false,
 ): Promise<Import[]> {
-  const parts: string[] = [];
-  const params: Record<string, string> = {};
+  const parts: string[] = []
+  const params: Record<string, string> = {}
   if (account) {
-    parts.push("account = {:account}");
-    params.account = account;
+    parts.push('account = {:account}')
+    params.account = account
   }
   if (ownedOnly) {
-    parts.push("owner = {:owner}");
-    params.owner = callerId(s);
+    parts.push('owner = {:owner}')
+    params.owner = callerId(s)
   }
   return (
-    await s.collection("imports").getFullList({
-      sort: "-created",
-      ...(parts.length ? { filter: s.filter(parts.join(" && "), params) } : {}),
+    await s.collection('imports').getFullList({
+      sort: '-created',
+      ...(parts.length ? { filter: s.filter(parts.join(' && '), params) } : {}),
     })
-  ).map(toImport);
+  ).map(toImport)
 }
 
 /** Undoes an import: its transactions go with it. */
 export async function deleteImport(s: Session, id: string): Promise<void> {
-  await s.collection("imports").delete(id);
+  await s.collection('imports').delete(id)
 }
 
 /**
@@ -59,17 +59,17 @@ export async function deleteImport(s: Session, id: string): Promise<void> {
  * each of them once.
  */
 export function externalIds(rows: StatementRow[]): string[] {
-  const seen = new Map<string, number>();
+  const seen = new Map<string, number>()
   return rows.map((r) => {
-    if (r.fitid) return `fitid:${r.fitid}`;
-    const key = `${r.posted}|${r.amount_cents}|${r.description.toLowerCase().replace(/\s+/g, " ").trim()}`;
-    const n = seen.get(key) ?? 0;
-    seen.set(key, n + 1);
-    return `csv:${createHash("sha256").update(`${key}|${n}`).digest("hex").slice(0, 40)}`;
-  });
+    if (r.fitid) return `fitid:${r.fitid}`
+    const key = `${r.posted}|${r.amount_cents}|${r.description.toLowerCase().replace(/\s+/g, ' ').trim()}`
+    const n = seen.get(key) ?? 0
+    seen.set(key, n + 1)
+    return `csv:${createHash('sha256').update(`${key}|${n}`).digest('hex').slice(0, 40)}`
+  })
 }
 
-const BATCH = 200; // migrations/0003: the batch API's maxRequests
+const BATCH = 200 // migrations/0003: the batch API's maxRequests
 
 /**
  * Adds a statement's rows to an account, skipping each one it already has:
@@ -81,59 +81,59 @@ const BATCH = 200; // migrations/0003: the batch API's maxRequests
 export async function importRows(
   s: Session,
   account: string,
-  file: { filename: string; format: StatementFormat; rows: StatementRow[] },
+  file: { filename: string, format: StatementFormat, rows: StatementRow[] },
 ) {
-  const owner = callerId(s);
-  const ids = externalIds(file.rows);
-  const range = dateRange(file.rows);
-  const have = new Set<string>();
-  let synced: Dated[] = [];
+  const owner = callerId(s)
+  const ids = externalIds(file.rows)
+  const range = dateRange(file.rows)
+  const have = new Set<string>()
+  let synced: Dated[] = []
   if (range) {
-    const span = around(range.first, range.last);
-    const existing = await s.collection("transactions").getFullList({
-      fields: "external_id,source,posted,amount_cents",
+    const span = around(range.first, range.last)
+    const existing = await s.collection('transactions').getFullList({
+      fields: 'external_id,source,posted,amount_cents',
       filter: s.filter(
-        "account = {:account} && posted >= {:from} && posted <= {:to}",
+        'account = {:account} && posted >= {:from} && posted <= {:to}',
         { account, ...span },
       ),
-    });
-    for (const r of existing) have.add(r.external_id);
+    })
+    for (const r of existing) have.add(r.external_id)
     synced = existing
-      .filter((r) => r.source === "sync")
-      .map((r) => ({ posted: r.posted, amount_cents: r.amount_cents }));
+      .filter(r => r.source === 'sync')
+      .map(r => ({ posted: r.posted, amount_cents: r.amount_cents }))
   }
-  const candidates: { row: StatementRow; id: string }[] = [];
+  const candidates: { row: StatementRow, id: string }[] = []
   file.rows.forEach((row, i) => {
-    const id = ids[i]!;
-    if (have.has(id)) return;
-    have.add(id); // an OFX file that repeats an id
-    candidates.push({ row, id });
-  });
+    const id = ids[i]!
+    if (have.has(id)) return
+    have.add(id) // an OFX file that repeats an id
+    candidates.push({ row, id })
+  })
   const fromLink = alreadySynced(
-    candidates.map((c) => c.row),
+    candidates.map(c => c.row),
     synced,
-  );
-  const fresh = candidates.filter((_, i) => !fromLink[i]);
+  )
+  const fresh = candidates.filter((_, i) => !fromLink[i])
 
-  const record = await s.collection("imports").create({
+  const record = await s.collection('imports').create({
     owner,
     account,
     filename: file.filename.slice(0, 200),
     format: file.format,
     added: fresh.length,
     skipped: file.rows.length - fresh.length,
-    first_date: range?.first ?? "",
-    last_date: range?.last ?? "",
-  });
+    first_date: range?.first ?? '',
+    last_date: range?.last ?? '',
+  })
   try {
     for (let i = 0; i < fresh.length; i += BATCH) {
-      const batch = s.createBatch();
+      const batch = s.createBatch()
       for (const { row, id } of fresh.slice(i, i + BATCH)) {
-        batch.collection("transactions").create({
+        batch.collection('transactions').create({
           owner,
           account,
           import: record.id,
-          source: "import",
+          source: 'import',
           external_id: id,
           posted: row.posted,
           amount_cents: row.amount_cents,
@@ -145,16 +145,17 @@ export async function importRows(
           ...(row.note ? { note: row.note } : {}),
           ...(row.tags?.length ? { tags: row.tags } : {}),
           ...(row.category ? { bank_category: `cheddar:${row.category}` } : {}),
-        });
+        })
       }
-      await batch.send();
+      await batch.send()
     }
-  } catch (error) {
-    await s
-      .collection("imports")
-      .delete(record.id)
-      .catch(() => {});
-    throw error;
   }
-  return toImport(record);
+  catch (error) {
+    await s
+      .collection('imports')
+      .delete(record.id)
+      .catch(() => {})
+    throw error
+  }
+  return toImport(record)
 }

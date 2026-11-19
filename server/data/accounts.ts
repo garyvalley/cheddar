@@ -1,6 +1,6 @@
-import type { RecordModel } from "pocketbase";
-import type { Account, AccountChange, NewAccount } from "~~/shared/accounts";
-import { callerId, type Session } from "./session";
+import type { RecordModel } from 'pocketbase'
+import type { Account, AccountChange, NewAccount } from '~~/shared/accounts'
+import { callerId, type Session } from './session'
 
 /**
  * Accounts, always as the signed-in person: PocketBase's rules
@@ -12,39 +12,39 @@ export const toAccount = (r: RecordModel, person: string): Account => ({
   id: r.id,
   name: r.name,
   kind: r.kind,
-  institution: r.institution ?? "",
-  last4: r.last4 ?? "",
-  currency: r.currency || "USD",
-  source: r.source ?? "",
+  institution: r.institution ?? '',
+  last4: r.last4 ?? '',
+  currency: r.currency || 'USD',
+  source: r.source ?? '',
   balance_cents: r.balance_date ? (r.balance_cents ?? 0) : null,
-  balance_date: r.balance_date ?? "",
+  balance_date: r.balance_date ?? '',
   linked: !!r.link,
-  closed_on: r.closed_on ?? "",
+  closed_on: r.closed_on ?? '',
   excluded: !!r.excluded,
   owned: r.owner === person,
   shared: r.owner !== person,
   shared_with_household: !!r.shared_household,
   yearly_change_bp: r.yearly_change_bp ?? 0,
-});
+})
 
 export async function listAccounts(
   s: Session,
   ownedOnly = false,
 ): Promise<Account[]> {
-  const person = callerId(s);
+  const person = callerId(s)
   return (
-    await s.collection("accounts").getFullList({
-      sort: "name,created",
+    await s.collection('accounts').getFullList({
+      sort: 'name,created',
       ...(ownedOnly
-        ? { filter: s.filter("owner = {:owner}", { owner: person }) }
+        ? { filter: s.filter('owner = {:owner}', { owner: person }) }
         : {}),
     })
-  ).map((r) => toAccount(r, person));
+  ).map(r => toAccount(r, person))
 }
 
 /** One of the caller's accounts; a 404 from the store for anyone else's. */
 export async function getAccount(s: Session, id: string): Promise<Account> {
-  return toAccount(await s.collection("accounts").getOne(id), callerId(s));
+  return toAccount(await s.collection('accounts').getOne(id), callerId(s))
 }
 
 export async function createAccount(
@@ -52,14 +52,14 @@ export async function createAccount(
   a: NewAccount,
 ): Promise<Account> {
   return toAccount(
-    await s.collection("accounts").create({
+    await s.collection('accounts').create({
       ...a,
       owner: callerId(s),
-      currency: "USD",
-      source: "manual",
+      currency: 'USD',
+      source: 'manual',
     }),
     callerId(s),
-  );
+  )
 }
 
 /**
@@ -75,10 +75,10 @@ export async function setBalance(
 ): Promise<Account> {
   return toAccount(
     await s
-      .collection("accounts")
+      .collection('accounts')
       .update(id, { balance_cents: cents, balance_date: date }),
     callerId(s),
-  );
+  )
 }
 
 /**
@@ -88,17 +88,17 @@ export async function setBalance(
 export async function updateAccount(
   s: Session,
   id: string,
-  change: AccountChange & { balance_cents?: number; balance_date?: string },
+  change: AccountChange & { balance_cents?: number, balance_date?: string },
 ): Promise<Account> {
   return toAccount(
-    await s.collection("accounts").update(id, change),
+    await s.collection('accounts').update(id, change),
     callerId(s),
-  );
+  )
 }
 
 /** Deletes the account with every transaction and import in it. */
 export async function deleteAccount(s: Session, id: string): Promise<void> {
-  await s.collection("accounts").delete(id);
+  await s.collection('accounts').delete(id)
 }
 
 /**
@@ -106,11 +106,11 @@ export async function deleteAccount(s: Session, id: string): Promise<void> {
  * filter, on a transaction query, and `counted()` on a list of accounts.
  * Closed accounts still count, for the time they were open (asHeld()).
  */
-export const COUNTED = "account.excluded = false";
+export const COUNTED = 'account.excluded = false'
 /**
  * And the transactions the person left out one by one: they're listed, but
  * no total counts them.
  */
-export const TX_COUNTED = "excluded = false";
+export const TX_COUNTED = 'excluded = false'
 export const counted = async (s: Session) =>
-  (await listAccounts(s)).filter((a) => !a.excluded);
+  (await listAccounts(s)).filter(a => !a.excluded)

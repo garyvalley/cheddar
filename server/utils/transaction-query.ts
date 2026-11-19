@@ -1,9 +1,9 @@
-import type { H3Event } from "h3";
-import { isCategoryRef } from "~~/shared/categories";
-import { cleanTag, tagProblem } from "~~/shared/tags";
-import { amountRange } from "~~/shared/transactions";
+import type { H3Event } from 'h3'
+import { isCategoryRef } from '~~/shared/categories'
+import { cleanTag, tagProblem } from '~~/shared/tags'
+import { amountRange } from '~~/shared/transactions'
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /**
  * The filters a list or download of transactions takes from the query
@@ -13,54 +13,54 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
  * dollars, in or out.
  */
 export function readTransactionQuery(event: H3Event) {
-  const q = getQuery(event);
+  const q = getQuery(event)
   const account = q.account
-    ? recordId(q.account, "No such account")
-    : undefined;
+    ? recordId(q.account, 'No such account')
+    : undefined
   if (q.category && !isCategoryRef(q.category))
-    throw createError({ statusCode: 400, statusMessage: "No such category" });
+    throw createError({ statusCode: 400, statusMessage: 'No such category' })
   const date = (v: unknown) => {
-    if (v === undefined || v === "") return undefined;
-    if (typeof v !== "string" || !DATE.test(v))
+    if (v === undefined || v === '') return undefined
+    if (typeof v !== 'string' || !DATE.test(v))
       throw createError({
         statusCode: 400,
-        statusMessage: "Dates are YYYY-MM-DD",
-      });
-    return v;
-  };
-  if (q.q !== undefined && typeof q.q !== "string")
+        statusMessage: 'Dates are YYYY-MM-DD',
+      })
+    return v
+  }
+  if (q.q !== undefined && typeof q.q !== 'string')
     throw createError({
       statusCode: 400,
-      statusMessage: "Search for some words",
-    });
+      statusMessage: 'Search for some words',
+    })
   if (
-    q.reviewed !== undefined &&
-    q.reviewed !== "true" &&
-    q.reviewed !== "false"
+    q.reviewed !== undefined
+    && q.reviewed !== 'true'
+    && q.reviewed !== 'false'
   )
     throw createError({
       statusCode: 400,
-      statusMessage: "Choose reviewed or needs review",
-    });
-  if (q.history !== undefined && q.history !== "true" && q.history !== "false")
+      statusMessage: 'Choose reviewed or needs review',
+    })
+  if (q.history !== undefined && q.history !== 'true' && q.history !== 'false')
     throw createError({
       statusCode: 400,
-      statusMessage: "Choose history or not",
-    });
-  const words = (q.q ?? "").trim().replace(/\s+/g, " ");
+      statusMessage: 'Choose history or not',
+    })
+  const words = (q.q ?? '').trim().replace(/\s+/g, ' ')
   if (words.length > 100)
     throw createError({
       statusCode: 400,
-      statusMessage: "Search for at most 100 characters",
-    });
-  if (q.tag !== undefined && typeof q.tag !== "string")
-    throw createError({ statusCode: 400, statusMessage: "Pick one tag" });
-  const tag = cleanTag(q.tag);
+      statusMessage: 'Search for at most 100 characters',
+    })
+  if (q.tag !== undefined && typeof q.tag !== 'string')
+    throw createError({ statusCode: 400, statusMessage: 'Pick one tag' })
+  const tag = cleanTag(q.tag)
   if (tag && tagProblem(tag))
-    throw createError({ statusCode: 400, statusMessage: tagProblem(tag) });
-  const range = amountRange(q.min, q.max);
-  if ("problem" in range)
-    throw createError({ statusCode: 400, statusMessage: range.problem });
+    throw createError({ statusCode: 400, statusMessage: tagProblem(tag) })
+  const range = amountRange(q.min, q.max)
+  if ('problem' in range)
+    throw createError({ statusCode: 400, statusMessage: range.problem })
   return {
     account,
     category: (q.category as string) || undefined,
@@ -68,8 +68,8 @@ export function readTransactionQuery(event: H3Event) {
     to: date(q.to),
     q: words || undefined,
     tag: tag || undefined,
-    reviewed: q.reviewed === undefined ? undefined : q.reviewed === "true",
-    history: q.history === undefined ? undefined : q.history === "true",
+    reviewed: q.reviewed === undefined ? undefined : q.reviewed === 'true',
+    history: q.history === undefined ? undefined : q.history === 'true',
     ...range.ok,
-  };
+  }
 }

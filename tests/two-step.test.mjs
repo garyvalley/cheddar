@@ -29,7 +29,7 @@ test('ten recovery codes are shown formatted and stored only as hashes', () => {
   assert.deepEqual(made.hashes, made.codes.map(c => sha256(twoStep.normaliseRecoveryCode(c))))
 })
 
-test("a stored recovery_codes value that isn't a JSON list holds none", () => {
+test('a stored recovery_codes value that isn\'t a JSON list holds none', () => {
   assert.deepEqual(twoStep.recoveryHashes('["a","b"]'), ['a', 'b'])
   for (const bad of ['', '{}', 'not json', null]) assert.deepEqual(twoStep.recoveryHashes(bad), [], String(bad))
 })
@@ -37,7 +37,7 @@ test("a stored recovery_codes value that isn't a JSON list holds none", () => {
 describe('a code at sign-in', () => {
   const step = totp.stepAt(NOW)
   const row = { secret: SECRET, last_step: step - 2, hashes: [sha256('abcde23456'), sha256('fghjk78923')] }
-  test("the app's current code is accepted, and its step is spent", () => {
+  test('the app\'s current code is accepted, and its step is spent', () => {
     assert.deepEqual(twoStep.acceptCode(row, totp.codeAt(SECRET, step), NOW, matches), { kind: 'app', last_step: step })
   })
   test('a code at or before the last step used is refused', () => {

@@ -44,7 +44,7 @@ test('chargeAlerts: money out of at least the amount', () => {
 })
 
 test('balanceAlerts: open, counted checking and savings under the amount', () => {
-  const a = (over) => ({ id: 'x', name: 'Everyday', kind: 'checking', balance_cents: 5000, excluded: false, closed_on: '', ...over })
+  const a = over => ({ id: 'x', name: 'Everyday', kind: 'checking', balance_cents: 5000, excluded: false, closed_on: '', ...over })
   const found = balanceAlerts([a(), a({ id: 'card', kind: 'credit_card', balance_cents: -90000 }), a({ id: 'out', excluded: true }),
     a({ id: 'shut', closed_on: '2026-01-01' }), a({ id: 'none', balance_cents: null }), a({ id: 'rich', balance_cents: 900000 })], 20000, '2026-11-17')
   assert.deepEqual(found.map(f => f.key), ['balance:x'])
@@ -52,7 +52,7 @@ test('balanceAlerts: open, counted checking and savings under the amount', () =>
 })
 
 test('billAlerts: money out in the next 3 days, soonest first', () => {
-  const e = (over) => ({ id: 'i:2026-11-18', account: 'a', date: '2026-11-18', name: 'Rent', amount_cents: -190000, source: 'scheduled', running_cents: null, ...over })
+  const e = over => ({ id: 'i:2026-11-18', account: 'a', date: '2026-11-18', name: 'Rent', amount_cents: -190000, source: 'scheduled', running_cents: null, ...over })
   const found = billAlerts([e({ id: 'p:2026-11-19', date: '2026-11-19', name: 'Pay', amount_cents: 400000 }), e(), e({ id: 'n:2026-11-17', date: '2026-11-17', name: 'Netflix', amount_cents: -1549 }), e({ id: 'late', date: '2026-11-21' })],
     new Map([['a', 'Everyday']]), '2026-11-17')
   assert.deepEqual(found.map(f => f.text), ['Netflix: $15.49 today from Everyday.', 'Rent: $1,900.00 on Wed, Nov 18 from Everyday.'])
@@ -60,7 +60,7 @@ test('billAlerts: money out in the next 3 days, soonest first', () => {
 
 test('budgetAlerts once a month, bankAlerts by state', () => {
   assert.deepEqual(budgetAlerts([{ id: 'dining', label: 'Dining', spent_cents: 30000, budget_cents: 25000 }], '2026-11').map(a => a.key), ['budget:dining:2026-11'])
-  const h = (state) => ({ id: 'l', name: 'Chase', state, message: '', last_synced: '', accounts: [] })
+  const h = state => ({ id: 'l', name: 'Chase', state, message: '', last_synced: '', accounts: [] })
   assert.deepEqual(bankAlerts([h('ok')]), [])
   assert.match(bankAlerts([h('reconnect')])[0].text, /sign in to it again/)
   assert.equal(bankAlerts([h('stale')])[0].key, 'bank:l:stale')

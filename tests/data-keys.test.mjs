@@ -35,7 +35,7 @@ describe('the key set', () => {
     assert.equal(set.current, 'v3')
     assert.deepEqual(Object.keys(set.keys), ['v3', 'v2', 'v1'])
     assert.equal(set.keys.v1, OLD)
-    assert.equal(dk.parse(`v1:${A}`, OLD).keys.v1, A, "DATA_KEYS's v1 wins")
+    assert.equal(dk.parse(`v1:${A}`, OLD).keys.v1, A, 'DATA_KEYS\'s v1 wins')
   })
 
   test('is BANK_LINK_KEY alone before DATA_KEYS, and none without either', () => {
@@ -77,7 +77,7 @@ describe('sealing', () => {
     assert.equal(dk.isCurrent(set, 'JBSWY3DPEHPK3PXP'), false)
   })
 
-  test("gives null for a value that won't decrypt, and leaves empty empty", () => {
+  test('gives null for a value that won\'t decrypt, and leaves empty empty', () => {
     assert.equal(dk.open(set, `v2:${encrypt('x', A)}`, decrypt), null)
     assert.equal(dk.open(set, 'v2:garbage', decrypt), null)
     assert.equal(dk.open(set, '', decrypt), '')
@@ -92,7 +92,7 @@ describe('sealing', () => {
 })
 
 describe('recovery codes', () => {
-  test("are an HMAC with the newest key's own code key, not the key itself", () => {
+  test('are an HMAC with the newest key\'s own code key, not the key itself', () => {
     const set = dk.parse(`v2:${B}`, '')
     const stored = dk.hashCode(set, 'abcde23456', sha256, hs256)
     assert.match(stored, /^v2:[0-9a-f]{64}$/)

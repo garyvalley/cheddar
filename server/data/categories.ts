@@ -1,20 +1,20 @@
-import type { Category } from "~~/shared/categories";
-import type { Session } from "./session";
+import type { Category } from '~~/shared/categories'
+import type { Session } from './session'
 
 /**
  * The person's categories, built in and their own: the routes in
  * pb_hooks/categories.pb.js, which alone read and write their own ones.
  */
 export async function listCategories(s: Session): Promise<Category[]> {
-  return (await s.send("/api/categories", { method: "GET" })).categories;
+  return (await s.send('/api/categories', { method: 'GET' })).categories
 }
 
 export async function createCategory(
   s: Session,
   name: string,
 ): Promise<Category> {
-  return (await s.send("/api/categories", { method: "POST", body: { name } }))
-    .category;
+  return (await s.send('/api/categories', { method: 'POST', body: { name } }))
+    .category
 }
 
 export async function renameCategory(
@@ -24,10 +24,10 @@ export async function renameCategory(
 ): Promise<Category> {
   return (
     await s.send(`/api/categories/${encodeURIComponent(id)}/rename`, {
-      method: "POST",
+      method: 'POST',
       body: { name },
     })
-  ).category;
+  ).category
 }
 
 /** Deletes one of the person's own categories; its transactions are sorted again on their own. */
@@ -36,6 +36,6 @@ export async function removeCategory(
   id: string,
 ): Promise<{ resorted: number }> {
   return await s.send(`/api/categories/${encodeURIComponent(id)}/remove`, {
-    method: "POST",
-  });
+    method: 'POST',
+  })
 }

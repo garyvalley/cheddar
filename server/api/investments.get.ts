@@ -1,6 +1,6 @@
-import { investmentsReport } from "~~/server/data/reports/investments";
-import { todayFor } from "~~/server/data/profile";
-import { attempt, sessionFor } from "~~/server/data/session";
+import { investmentsReport } from '~~/server/data/reports/investments'
+import { todayFor } from '~~/server/data/profile'
+import { attempt, sessionFor } from '~~/server/data/session'
 
 /**
  * GET /api/investments: the brokerage and retirement accounts, what they
@@ -8,7 +8,7 @@ import { attempt, sessionFor } from "~~/server/data/session";
  * (shared/investments.ts).
  */
 export default defineEventHandler(async (event) => {
-  const s = sessionFor(event);
-  const today = await attempt(() => todayFor(s));
-  return await attempt(() => investmentsReport(s, today));
-});
+  const s = sessionFor(event)
+  const today = await attempt(() => todayFor(s))
+  return await attempt(() => investmentsReport(s, today))
+})

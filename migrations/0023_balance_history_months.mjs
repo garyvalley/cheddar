@@ -8,19 +8,19 @@
 //
 // The same read rule as balance_history (0020): the owner, or a member of
 // the household the account is shared with, with two-step sign-in on.
-const RECORD_READ =
-  "@request.auth.mfa_enabled = true && (owner = @request.auth.id || account.shared_household.members.id ?= @request.auth.id)";
+const RECORD_READ
+  = '@request.auth.mfa_enabled = true && (owner = @request.auth.id || account.shared_household.members.id ?= @request.auth.id)'
 
-const MONTH = (fn) =>
-  `(SELECT ${fn}(x.date) FROM balance_history x WHERE x.account = b.account AND x.date >= substr(b.date, 1, 7) || '-01' AND x.date <= substr(b.date, 1, 7) || '-31')`;
+const MONTH = fn =>
+  `(SELECT ${fn}(x.date) FROM balance_history x WHERE x.account = b.account AND x.date >= substr(b.date, 1, 7) || '-01' AND x.date <= substr(b.date, 1, 7) || '-31')`
 
 export default async function up(pb) {
-  if (await pb.collection("balance_history_months")) return;
-  await pb.send("POST", "/api/collections", {
-    name: "balance_history_months",
-    type: "view",
+  if (await pb.collection('balance_history_months')) return
+  await pb.send('POST', '/api/collections', {
+    name: 'balance_history_months',
+    type: 'view',
     listRule: RECORD_READ,
     viewRule: RECORD_READ,
-    viewQuery: `SELECT b.id, b.owner, b.account, b.date, b.balance_cents FROM balance_history b WHERE b.date = ${MONTH("MIN")} OR b.date = ${MONTH("MAX")}`,
-  });
+    viewQuery: `SELECT b.id, b.owner, b.account, b.date, b.balance_cents FROM balance_history b WHERE b.date = ${MONTH('MIN')} OR b.date = ${MONTH('MAX')}`,
+  })
 }

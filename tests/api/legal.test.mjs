@@ -53,7 +53,7 @@ describe('agreeing to the terms', () => {
 
   test('someone on an older version agrees again through /api/auth/agree', async () => {
     const { c, id } = await ready()
-    const su = { authorization: await superuser(), 'content-type': 'application/json' }
+    const su = { 'authorization': await superuser(), 'content-type': 'application/json' }
     await fetch(`${PB}/api/collections/users/records/${id}`, { method: 'PATCH', headers: su, body: JSON.stringify({ terms_version: '' }) })
     assert.equal((await c.call('GET', '/api/auth/me')).json.me.terms_version, '')
     const r = await c.call('POST', '/api/auth/agree')
@@ -133,4 +133,3 @@ describe('public pages', () => {
     }
   })
 })
-

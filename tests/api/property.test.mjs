@@ -23,13 +23,13 @@ test('a property\'s value moves on each day by its yearly change, and only a pro
   const su = await superuser()
   for (const a of [home, car, checking]) {
     const r = await fetch(`${PB}/api/collections/accounts/records/${a.id}`, {
-      method: 'PATCH', headers: { authorization: su, 'content-type': 'application/json' },
+      method: 'PATCH', headers: { 'authorization': su, 'content-type': 'application/json' },
       body: JSON.stringify({ balance_date: daysAgo(365), balance_cents: a === checking ? 100 : undefined }),
     })
     assert.equal(r.status, 200, await r.text())
   }
   const run = await fetch(`${PB}/api/property-values/run`, {
-    method: 'POST', headers: { authorization: su, 'content-type': 'application/json' }, body: JSON.stringify({ today }),
+    method: 'POST', headers: { 'authorization': su, 'content-type': 'application/json' }, body: JSON.stringify({ today }),
   })
   const ran = await run.json()
   assert.equal(run.status, 200, JSON.stringify(ran))

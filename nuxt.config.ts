@@ -3,12 +3,9 @@
 const dev = process.env.NODE_ENV !== 'production'
 
 export default defineNuxtConfig({
-  compatibilityDate: '2025-07-15',
-  devtools: { enabled: false },
-  // Production reads neither, and they would bloat .output.
-  sourcemap: { server: false, client: false },
 
   modules: ['@nuxt/eslint', 'nuxt-security'],
+  devtools: { enabled: false },
 
   app: {
     head: {
@@ -38,8 +35,6 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
-  devServer: { port: Number(process.env.NUXT_DEV_PORT || 3005) },
-
   runtimeConfig: {
     // Server-only: the browser never talks to PocketBase.
     pocketbaseUrl: 'http://127.0.0.1:8095',
@@ -51,6 +46,21 @@ export default defineNuxtConfig({
       operatorState: 'California',
     },
   },
+
+  routeRules: {
+    // A statement file of up to 4 MB, sent as JSON text (shared/statements.ts);
+    // nginx allows the same for this route alone.
+    '/api/imports': { security: { requestSizeLimiter: { maxRequestSizeInBytes: 8_000_000 } } },
+  },
+  // Production reads neither, and they would bloat .output.
+  sourcemap: { server: false, client: false },
+
+  devServer: { port: Number(process.env.NUXT_DEV_PORT || 3005) },
+  compatibilityDate: '2025-07-15',
+
+  // One code style everywhere but pb_hooks/ (eslint.config.mjs): single
+  // quotes, no semicolons, two spaces (@nuxt/eslint's stylistic defaults).
+  eslint: { config: { stylistic: true } },
 
   // Security headers come from nuxt-security: script-src needs a per-request
   // nonce, which a static header can't carry.
@@ -93,11 +103,5 @@ export default defineNuxtConfig({
     corsHandler: false,
     requestSizeLimiter: { maxRequestSizeInBytes: 1_000_000, maxUploadFileRequestInBytes: 10_000_000 },
     removeLoggers: false,
-  },
-
-  routeRules: {
-    // A statement file of up to 4 MB, sent as JSON text (shared/statements.ts);
-    // nginx allows the same for this route alone.
-    '/api/imports': { security: { requestSizeLimiter: { maxRequestSizeInBytes: 8_000_000 } } },
   },
 })

@@ -10,17 +10,17 @@
  * app/pages/privacy.vue changes, and TERMS_VERSION when either changes in a
  * way people should agree to again.
  */
-export const TERMS_VERSION = "2026-11-16";
-export const PRIVACY_UPDATED = "2026-11-17";
+export const TERMS_VERSION = '2026-11-16'
+export const PRIVACY_UPDATED = '2026-11-17'
 
 /** Whether `version` (users.terms_version) is the current Terms of Use. */
 export function hasAgreed(version: unknown): boolean {
-  return version === TERMS_VERSION;
+  return version === TERMS_VERSION
 }
 
 /** "November 16, 2026" for a YYYY-MM-DD version, spelled out so it reads the same everywhere. */
 export function legalDate(version: string): string {
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const [y, m, d] = version.split("-").map(Number);
-  return `${months[(m ?? 1) - 1]} ${d}, ${y}`;
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  const [y, m, d] = version.split('-').map(Number)
+  return `${months[(m ?? 1) - 1]} ${d}, ${y}`
 }

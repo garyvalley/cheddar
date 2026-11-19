@@ -12,9 +12,9 @@ import { anonymous, type Session } from './session'
  * Asking for an email never says whether the address has an account.
  */
 
-export type SignIn =
-  | { token: string, session: string, record: RecordModel }
-  | { mfaId: string }
+export type SignIn
+  = | { token: string, session: string, record: RecordModel }
+    | { mfaId: string }
 
 /**
  * A right password gives a token and its device session, or, with two-step

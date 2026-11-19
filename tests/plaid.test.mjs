@@ -90,7 +90,7 @@ describe('webhooks', () => {
     assert.equal(plaid.requestId({ request_id: 'Ab12cD' }), 'Ab12cD')
     assert.equal(plaid.requestId({ request_id: 'bad id\n' }), '')
     assert.equal(plaid.requestId(null), '')
-    assert.equal(plaid.webhookEvent({ webhook_type: 'TRANSACTIONS', webhook_code: 'SYNC_UPDATES_AVAILABLE', item_id: "x' || 1=1" }).itemId, '')
+    assert.equal(plaid.webhookEvent({ webhook_type: 'TRANSACTIONS', webhook_code: 'SYNC_UPDATES_AVAILABLE', item_id: 'x\' || 1=1' }).itemId, '')
     assert.deepEqual(plaid.webhookEvent(null), { itemId: '', sync: false })
   })
 })

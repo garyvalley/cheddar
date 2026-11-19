@@ -94,7 +94,7 @@ describe('overview', () => {
     d.setMonth(d.getMonth() - 2)
     const then = d.toISOString().slice(0, 10)
     const made = await fetch(`${PB}/api/collections/balance_history/records`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: su },
+      method: 'POST', headers: { 'content-type': 'application/json', 'authorization': su },
       body: JSON.stringify({ owner: id, account: brk.id, date: then, balance_cents: 1000000 }),
     })
     assert.equal(made.status, 200)

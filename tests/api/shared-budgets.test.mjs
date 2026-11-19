@@ -12,7 +12,7 @@ async function verify(address) {
   const token = await superuser()
   const found = await fetch(`${PB}/api/collections/users/records?filter=${encodeURIComponent(`email = '${address}'`)}`, { headers: { authorization: token } })
   const user = (await found.json()).items[0]
-  await fetch(`${PB}/api/collections/users/records/${user.id}`, { method: 'PATCH', headers: { authorization: token, 'content-type': 'application/json' }, body: JSON.stringify({ verified: true }) })
+  await fetch(`${PB}/api/collections/users/records/${user.id}`, { method: 'PATCH', headers: { 'authorization': token, 'content-type': 'application/json' }, body: JSON.stringify({ verified: true }) })
 }
 
 async function household() {
@@ -50,7 +50,7 @@ describe('shared household budgets', () => {
     assert.equal((await member.c.call('PUT', '/api/budgets/groceries', { amount: '650', shared: false })).status, 403)
 
     // The record API holds the same line.
-    const record = (await (await fetch(`${PB}/api/collections/budgets/records?filter=${encodeURIComponent("category='groceries'")}`, { headers: asPb(member.c) })).json()).items[0]
+    const record = (await (await fetch(`${PB}/api/collections/budgets/records?filter=${encodeURIComponent('category=\'groceries\'')}`, { headers: asPb(member.c) })).json()).items[0]
     const patch = body => fetch(`${PB}/api/collections/budgets/records/${record.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json', ...asPb(member.c) }, body: JSON.stringify(body) })
     assert.equal((await patch({ category: 'dining' })).status, 404)
     assert.equal((await patch({ owner: member.id })).status, 404)

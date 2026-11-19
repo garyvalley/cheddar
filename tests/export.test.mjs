@@ -17,7 +17,7 @@ const accounts = [
   { id: 'a1', name: 'Everyday', kind: 'checking', institution: 'Big Bank', last4: '1234', currency: 'USD', source: 'manual', balance_cents: 123456, balance_date: '2026-11-01', linked: false, closed_on: '', excluded: false },
   { id: 'a2', name: 'Visa', kind: 'credit_card', institution: '', last4: '', currency: 'USD', source: 'sync', balance_cents: null, balance_date: '', linked: true, closed_on: '2026-10-31', excluded: true },
 ]
-const tx = (over) => ({ id: 't', account: 'a1', posted: '2026-11-02', amount_cents: -450, description: 'COFFEE', payee: '', category: 'dining', category_by: 'match', pending: false, source: 'import', note: '', tags: [], excluded: false, import: '', ...over })
+const tx = over => ({ id: 't', account: 'a1', posted: '2026-11-02', amount_cents: -450, description: 'COFFEE', payee: '', category: 'dining', category_by: 'match', pending: false, source: 'import', note: '', tags: [], excluded: false, import: '', ...over })
 
 describe('CSV cells', () => {
   test('that a spreadsheet would run as a formula start with a quote mark', () => {
@@ -54,9 +54,9 @@ describe('the spreadsheets', () => {
       tx({ amount_cents: -12000, description: 'COSTCO', category: 'groceries', splits: [{ category: 'groceries', amount_cents: -8000 }, { category: 'shopping', amount_cents: -4000 }] }),
     ], accounts, BUILT_IN)
     assert.equal(csv, `${BOM}Date,Account,Amount,Description,Payee,Category,Pending,Note,Tags,Left out,Split\r\n`
-      + '2026-11-02,Everyday,-4.5,COFFEE,,Dining and drinks,no,,,no,\r\n'
-      + '2026-11-02,Visa,2500,\'=cmd|calc,ACME,Income,yes,"Bonus, finally","Business, Tax-deductible",yes,\r\n'
-      + '2026-11-02,Everyday,-120,COSTCO,,Groceries,no,,,no,Groceries -80.00; Shopping -40.00\r\n')
+    + '2026-11-02,Everyday,-4.5,COFFEE,,Dining and drinks,no,,,no,\r\n'
+    + '2026-11-02,Visa,2500,\'=cmd|calc,ACME,Income,yes,"Bonus, finally","Business, Tax-deductible",yes,\r\n'
+    + '2026-11-02,Everyday,-120,COSTCO,,Groceries,no,,,no,Groceries -80.00; Shopping -40.00\r\n')
   })
 
   test('accounts: a balance only once there is one', () => {

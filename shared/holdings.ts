@@ -96,11 +96,16 @@ export function portfolio(
     const value = mine.reduce((n, p) => n + p.value_cents, 0)
     const gap: HoldingsGap = mine.length
       ? ''
-      : !a.owned ? 'shared'
-          : !a.link ? 'manual'
-              : !holdingsOn ? 'off'
-                  : a.link.holdings === 'consent' ? 'consent'
-                    : a.link.holdings === 'unsupported' ? 'unsupported'
+      : !a.owned
+          ? 'shared'
+          : !a.link
+              ? 'manual'
+              : !holdingsOn
+                  ? 'off'
+                  : a.link.holdings === 'consent'
+                    ? 'consent'
+                    : a.link.holdings === 'unsupported'
+                      ? 'unsupported'
                       : a.link.holdings === 'ok' ? 'empty' : 'pending'
     out[a.id] = {
       positions: mine,
