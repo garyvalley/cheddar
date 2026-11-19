@@ -49,7 +49,7 @@ test('a device is named by its browser and system', () => {
   assert.equal(s.deviceLabel(''), 'A browser')
 })
 
-test("the place is a country code, or nothing when Cloudflare doesn't know", () => {
+test('the place is a country code, or nothing when Cloudflare doesn\'t know', () => {
   assert.equal(s.place('us'), 'US')
   for (const none of ['', 'XX', 'T1', 'USA', null]) assert.equal(s.place(none), '', String(none))
 })

@@ -23,8 +23,8 @@ export default async function up(pb) {
     confirmEmailChangeTemplate: {
       subject: 'Confirm your new {APP_NAME} email',
       body: shell('Confirm your new email', p('Tap the button to make this the address you sign in to Cheddar with. The link works for 30 minutes.')
-        + button('{APP_URL}/confirm-email?token={TOKEN}', 'Confirm new email')
-        + p('If you didn\'t ask for this, you can ignore this email: nothing changes.')),
+      + button('{APP_URL}/confirm-email?token={TOKEN}', 'Confirm new email')
+      + p('If you didn\'t ask for this, you can ignore this email: nothing changes.')),
     },
   })
 }

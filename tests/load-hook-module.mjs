@@ -29,6 +29,6 @@ export function loadHookModule(relativePath) {
   vm.runInThisContext(
     `(function (module, exports, require, __hooks) {\n${source}\n})`,
     { filename: relativePath },
-  )(module, module.exports, (path) => loadHookModule(relative(root, path)), hooks)
+  )(module, module.exports, path => loadHookModule(relative(root, path)), hooks)
   return module.exports
 }

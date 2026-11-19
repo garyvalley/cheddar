@@ -64,7 +64,7 @@ export default async function up(pb) {
       ],
       indexes: [
         'CREATE INDEX idx_accounts_owner ON accounts (owner)',
-        "CREATE UNIQUE INDEX idx_accounts_external ON accounts (owner, external_id) WHERE external_id != ''",
+        'CREATE UNIQUE INDEX idx_accounts_external ON accounts (owner, external_id) WHERE external_id != \'\'',
       ],
     })
   }
@@ -127,7 +127,7 @@ export default async function up(pb) {
       indexes: [
         'CREATE INDEX idx_transactions_owner_posted ON transactions (owner, posted)',
         'CREATE INDEX idx_transactions_account_posted ON transactions (account, posted)',
-        "CREATE UNIQUE INDEX idx_transactions_external ON transactions (account, external_id) WHERE external_id != ''",
+        'CREATE UNIQUE INDEX idx_transactions_external ON transactions (account, external_id) WHERE external_id != \'\'',
       ],
     })
   }

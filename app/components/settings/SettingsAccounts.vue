@@ -24,7 +24,7 @@ watch(closedCount, (n) => { if (!n) showClosed.value = false })
 const accounts = computed(() => data.value.accounts.filter(a => showClosed.value || !a.closed_on))
 
 // Listed by kind, as Overview adds them up, each kind with its total.
-const kinds = computed(() => GROUPS.map(g => {
+const kinds = computed(() => GROUPS.map((g) => {
   const list = accounts.value.filter(a => groupOf(a.kind) === g.id)
   const counted = list.filter(a => !a.excluded && !a.closed_on && a.balance_cents !== null)
   return { id: g.id, label: g.label, accounts: list, total_cents: counted.reduce((n, a) => n + a.balance_cents!, 0), any: counted.length > 0 }

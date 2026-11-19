@@ -1,12 +1,12 @@
-import type { RecordModel } from "pocketbase";
-import type { Transaction } from "~~/shared/accounts";
-import type { BalancePoint } from "~~/shared/overview";
-import { partsOf, type SplitPart } from "~~/shared/splits";
-import { tagNeedle, tagsOf } from "~~/shared/tags";
-import type { EditFields, ManualFields } from "~~/shared/transactions";
-import { COUNTED, TX_COUNTED, counted, listAccounts } from "./accounts";
-import { keep, recall } from "./memo";
-import { callerId, type Session } from "./session";
+import type { RecordModel } from 'pocketbase'
+import type { Transaction } from '~~/shared/accounts'
+import type { BalancePoint } from '~~/shared/overview'
+import { partsOf, type SplitPart } from '~~/shared/splits'
+import { tagNeedle, tagsOf } from '~~/shared/tags'
+import type { EditFields, ManualFields } from '~~/shared/transactions'
+import { COUNTED, TX_COUNTED, counted, listAccounts } from './accounts'
+import { keep, recall } from './memo'
+import { callerId, type Session } from './session'
 
 /**
  * Transactions, always as the signed-in person: the list and search pages
@@ -19,13 +19,13 @@ export const toTransaction = (r: RecordModel, person: string): Transaction => ({
   account: r.account,
   posted: r.posted,
   amount_cents: r.amount_cents ?? 0,
-  description: r.description ?? "",
-  payee: r.payee ?? "",
-  category: r.category ?? "",
-  category_by: r.category_by ?? "",
+  description: r.description ?? '',
+  payee: r.payee ?? '',
+  category: r.category ?? '',
+  category_by: r.category_by ?? '',
   pending: !!r.pending,
   source: r.source,
-  note: r.note ?? "",
+  note: r.note ?? '',
   excluded: !!r.excluded,
   reviewed: !!r.reviewed,
   history: !!r.history,
@@ -33,53 +33,53 @@ export const toTransaction = (r: RecordModel, person: string): Transaction => ({
   splits: partsOf(r.splits),
   tags: tagsOf(r.tags),
   link: linkOf(r),
-});
+})
 
 /** Its match (shared/links.ts), from the expanded partner when the caller may see it. */
-function linkOf(r: RecordModel): Transaction["link"] {
-  if (r.link_kind !== "transfer" && r.link_kind !== "refund") return null;
-  const other = r.expand?.link as RecordModel | undefined;
+function linkOf(r: RecordModel): Transaction['link'] {
+  if (r.link_kind !== 'transfer' && r.link_kind !== 'refund') return null
+  const other = r.expand?.link as RecordModel | undefined
   return {
     kind: r.link_kind,
     other: other ? { posted: String(other.posted).slice(0, 10), account: other.account } : null,
-  };
+  }
 }
 
-export const PAGE_SIZE = 50;
+export const PAGE_SIZE = 50
 
 export interface TransactionQuery {
-  account?: string;
+  account?: string
   /** A category id; "other" also finds what isn't sorted yet. */
-  category?: string;
+  category?: string
   /** YYYY-MM-DD, both ends included. */
-  from?: string;
-  to?: string;
+  from?: string
+  to?: string
   /** Also the accounts left out of every page's numbers, as an export reads them. Picking one account always does. */
-  uncounted?: boolean;
+  uncounted?: boolean
   /** Words its description, name or note contain. */
-  q?: string;
+  q?: string
   /** One of its tags (shared/tags.ts), whatever its case. */
-  tag?: string;
+  tag?: string
   /** Only transactions with a tag. */
-  tagged?: boolean;
+  tagged?: boolean
   /** Its size in whole cents, money in or out alike; both ends included. */
-  min?: number | null;
-  max?: number | null;
+  min?: number | null
+  max?: number | null
   /** Only transactions that count toward a total: none the person left out one by one. */
-  counted?: boolean;
+  counted?: boolean
   /** Whether the person has reviewed the transaction. */
-  reviewed?: boolean;
+  reviewed?: boolean
   /** Whether it came in with a bank link's history (shared/review.ts). */
-  history?: boolean;
+  history?: boolean
   /** Only rows owned by the caller, for personal exports. */
-  ownedOnly?: boolean;
+  ownedOnly?: boolean
 }
 
 /**
  * Most that accountScope() names: PocketBase refuses a filter of a hundred
  * or so terms, and nobody has this many accounts.
  */
-export const SCOPE_MAX = 60;
+export const SCOPE_MAX = 60
 
 /**
  * The accounts a query with none picked reads (the counted ones, or every
@@ -93,22 +93,22 @@ export const SCOPE_MAX = 60;
  */
 export async function accountScope(
   s: Session,
-  q: { account?: string; uncounted?: boolean; ownedOnly?: boolean },
+  q: { account?: string, uncounted?: boolean, ownedOnly?: boolean },
 ): Promise<string | null> {
-  if (q.account || q.ownedOnly) return null;
-  const ids = (await (q.uncounted ? listAccounts(s) : counted(s))).map((a) => a.id);
-  if (ids.length > SCOPE_MAX) return null;
+  if (q.account || q.ownedOnly) return null
+  const ids = (await (q.uncounted ? listAccounts(s) : counted(s))).map(a => a.id)
+  if (ids.length > SCOPE_MAX) return null
   // No account: nothing to read (no id is empty).
-  if (!ids.length) return "id = ''";
+  if (!ids.length) return 'id = \'\''
   return s.filter(
-    `(${ids.map((_, i) => `account = {:a${i}}`).join(" || ")})`,
+    `(${ids.map((_, i) => `account = {:a${i}}`).join(' || ')})`,
     Object.fromEntries(ids.map((id, i) => [`a${i}`, id])),
-  );
+  )
 }
 
 /** transactionFilter() with the query's accountScope(). */
 export async function scopedFilter(s: Session, q: TransactionQuery): Promise<string> {
-  return transactionFilter(s, q, await accountScope(s, q));
+  return transactionFilter(s, q, await accountScope(s, q))
 }
 
 export function transactionFilter(
@@ -116,92 +116,93 @@ export function transactionFilter(
   q: TransactionQuery,
   scope?: string | null,
 ): string {
-  const parts: string[] = scope ? [scope] : [];
-  const params: Record<string, string | number | boolean> = {};
+  const parts: string[] = scope ? [scope] : []
+  const params: Record<string, string | number | boolean> = {}
   if (q.account) {
-    parts.push("account = {:account}");
-    params.account = q.account;
-  } else if (!q.uncounted) parts.push(COUNTED);
+    parts.push('account = {:account}')
+    params.account = q.account
+  }
+  else if (!q.uncounted) parts.push(COUNTED)
   // A split one is in each of its parts' categories instead of its own
   // (PocketBase stores the parts as compact JSON, keys in order).
   if (q.category) {
-    const own =
-      q.category === "other"
-        ? "(category = 'other' || category = '')"
-        : "category = {:category}";
-    parts.push(`((splits = null && ${own}) || splits ~ {:part})`);
+    const own
+      = q.category === 'other'
+        ? '(category = \'other\' || category = \'\')'
+        : 'category = {:category}'
+    parts.push(`((splits = null && ${own}) || splits ~ {:part})`)
     Object.assign(params, {
       category: q.category,
       part: `"category":"${q.category}"`,
-    });
+    })
   }
   if (q.from) {
-    parts.push("posted >= {:from}");
-    params.from = q.from;
+    parts.push('posted >= {:from}')
+    params.from = q.from
   }
   if (q.to) {
-    parts.push("posted <= {:to}");
-    params.to = q.to;
+    parts.push('posted <= {:to}')
+    params.to = q.to
   }
   if (q.q) {
-    parts.push("(description ~ {:q} || payee ~ {:q} || note ~ {:q})");
-    params.q = q.q;
+    parts.push('(description ~ {:q} || payee ~ {:q} || note ~ {:q})')
+    params.q = q.q
   }
   if (q.tag) {
     // Each tag is a JSON string in the stored list, quotes and all.
-    parts.push("tags ~ {:tag}");
-    params.tag = tagNeedle(q.tag);
+    parts.push('tags ~ {:tag}')
+    params.tag = tagNeedle(q.tag)
   }
-  if (q.tagged) parts.push("tags ~ '\"'");
+  if (q.tagged) parts.push('tags ~ \'"\'')
   if (q.reviewed !== undefined) {
-    parts.push("reviewed = {:reviewed}");
-    params.reviewed = q.reviewed;
+    parts.push('reviewed = {:reviewed}')
+    params.reviewed = q.reviewed
   }
   if (q.history !== undefined) {
-    parts.push("history = {:history}");
-    params.history = q.history;
+    parts.push('history = {:history}')
+    params.history = q.history
   }
   if (q.ownedOnly) {
-    parts.push("owner = {:owner}");
-    params.owner = callerId(s);
+    parts.push('owner = {:owner}')
+    params.owner = callerId(s)
   }
   // By size: -$80 and +$80 are both "$80".
   if (q.min != null || q.max != null) {
-    const lo = q.min ?? 0;
-    const hi = q.max ?? Number.MAX_SAFE_INTEGER;
+    const lo = q.min ?? 0
+    const hi = q.max ?? Number.MAX_SAFE_INTEGER
     parts.push(
-      "((amount_cents >= {:lo} && amount_cents <= {:hi}) || (amount_cents >= {:nhi} && amount_cents <= {:nlo}))",
-    );
-    Object.assign(params, { lo, hi, nlo: -lo, nhi: -hi });
+      '((amount_cents >= {:lo} && amount_cents <= {:hi}) || (amount_cents >= {:nhi} && amount_cents <= {:nlo}))',
+    )
+    Object.assign(params, { lo, hi, nlo: -lo, nhi: -hi })
   }
-  if (q.counted) parts.push(TX_COUNTED);
-  return s.filter(parts.join(" && "), params);
+  if (q.counted) parts.push(TX_COUNTED)
+  return s.filter(parts.join(' && '), params)
 }
 
 export async function listTransactions(
   s: Session,
   q: TransactionQuery & { page: number },
 ) {
-  const filter = await scopedFilter(s, q);
-  const list = await s.collection("transactions").getList(q.page, PAGE_SIZE, {
-    sort: "-posted,-created",
-    expand: "link",
+  const filter = await scopedFilter(s, q)
+  const list = await s.collection('transactions').getList(q.page, PAGE_SIZE, {
+    sort: '-posted,-created',
+    expand: 'link',
     ...(filter ? { filter } : {}),
-  });
-  const person = callerId(s);
-  const names = list.items.some((r) => r.owner !== person)
+  })
+  const person = callerId(s)
+  const names = list.items.some(r => r.owner !== person)
     ? await householdNames(s)
-    : new Map<string, string>();
+    : new Map<string, string>()
   return {
     items: list.items.map((r) => {
-      const t = toTransaction(r, person);
-      const name = t.shared ? names.get(r.owner) : undefined;
-      return name ? { ...t, owner_name: name } : t;
+      const t = toTransaction(r, person)
+      const name = t.shared ? names.get(r.owner) : undefined
+      return name ? { ...t, owner_name: name } : t
     }),
     page: list.page,
     pages: list.totalPages,
     total: list.totalItems,
-  };
+  }
 }
 
 /**
@@ -212,14 +213,15 @@ export async function listTransactions(
  */
 export async function householdNames(s: Session): Promise<Map<string, string>> {
   try {
-    const r = (await s.send("/api/household", { method: "GET" })) as {
-      household: { members: { id: string; name: string; email: string }[] } | null;
-    };
+    const r = (await s.send('/api/household', { method: 'GET' })) as {
+      household: { members: { id: string, name: string, email: string }[] } | null
+    }
     return new Map(
-      (r.household?.members ?? []).map((m) => [m.id, m.name.trim() || m.email.split("@")[0]!]),
-    );
-  } catch {
-    return new Map();
+      (r.household?.members ?? []).map(m => [m.id, m.name.trim() || m.email.split('@')[0]!]),
+    )
+  }
+  catch {
+    return new Map()
   }
 }
 
@@ -228,17 +230,17 @@ export async function allTransactions(
   s: Session,
   q: TransactionQuery,
 ): Promise<(Transaction & { import: string })[]> {
-  const filter = await scopedFilter(s, q);
-  const rows = await s.collection("transactions").getFullList({
-    sort: "posted,created",
+  const filter = await scopedFilter(s, q)
+  const rows = await s.collection('transactions').getFullList({
+    sort: 'posted,created',
     fields:
-      "id,owner,account,import,posted,amount_cents,description,payee,category,category_by,pending,source,note,excluded,splits,tags",
+      'id,owner,account,import,posted,amount_cents,description,payee,category,category_by,pending,source,note,excluded,splits,tags',
     ...(filter ? { filter } : {}),
-  });
-  return rows.map((r) => ({
+  })
+  return rows.map(r => ({
     ...toTransaction(r, callerId(s)),
-    import: r.import ?? "",
-  }));
+    import: r.import ?? '',
+  }))
 }
 
 /** One of the caller's transactions; a 404 from the store for anyone else's. */
@@ -247,9 +249,9 @@ export async function getTransaction(
   id: string,
 ): Promise<Transaction> {
   return toTransaction(
-    await s.collection("transactions").getOne(id, { expand: "link" }),
+    await s.collection('transactions').getOne(id, { expand: 'link' }),
     callerId(s),
-  );
+  )
 }
 
 /**
@@ -263,14 +265,14 @@ export async function addTransaction(
   t: ManualFields,
 ): Promise<Transaction> {
   return toTransaction(
-    await s.collection("transactions").create({
+    await s.collection('transactions').create({
       ...t,
       owner: callerId(s),
       account,
-      source: "manual",
+      source: 'manual',
     }),
     callerId(s),
-  );
+  )
 }
 
 /**
@@ -283,7 +285,7 @@ export async function editTransaction(
   id: string,
   change: EditFields & { splits?: SplitPart[] },
 ): Promise<Transaction> {
-  const { payee, note, excluded, posted, amount_cents, description, tags } = change;
+  const { payee, note, excluded, posted, amount_cents, description, tags } = change
   const body: Record<string, unknown> = Object.fromEntries(
     Object.entries({
       payee,
@@ -294,13 +296,13 @@ export async function editTransaction(
       description,
       tags,
     }).filter(([, v]) => v !== undefined),
-  );
+  )
   // An empty list undoes a split (pb_hooks/splits.pb.js checks the parts).
-  if (change.splits) body.splits = change.splits.length ? change.splits : null;
+  if (change.splits) body.splits = change.splits.length ? change.splits : null
   return toTransaction(
-    await s.collection("transactions").update(id, body),
+    await s.collection('transactions').update(id, body),
     callerId(s),
-  );
+  )
 }
 
 /**
@@ -311,17 +313,17 @@ export async function editTransaction(
 export async function reviewCounts(
   s: Session,
   account?: string,
-): Promise<{ waiting: number; history: number }> {
-  const scope = await accountScope(s, { account });
+): Promise<{ waiting: number, history: number }> {
+  const scope = await accountScope(s, { account })
   const count = async (history: boolean) =>
     (
-      await s.collection("transactions").getList(1, 1, {
-        fields: "id",
+      await s.collection('transactions').getList(1, 1, {
+        fields: 'id',
         filter: transactionFilter(s, { account, reviewed: false, history }, scope),
       })
-    ).totalItems;
-  const [waiting, history] = await Promise.all([count(false), count(true)]);
-  return { waiting, history };
+    ).totalItems
+  const [waiting, history] = await Promise.all([count(false), count(true)])
+  return { waiting, history }
 }
 
 export async function markTransactionsReviewed(
@@ -329,24 +331,24 @@ export async function markTransactionsReviewed(
   ids: string[],
   reviewed: boolean,
 ): Promise<number> {
-  const batch = s.createBatch();
-  const params = Object.fromEntries(ids.map((id, i) => [`id${i}`, id]));
-  const filter = ids.map((_, i) => `id = {:id${i}}`).join(" || ");
+  const batch = s.createBatch()
+  const params = Object.fromEntries(ids.map((id, i) => [`id${i}`, id]))
+  const filter = ids.map((_, i) => `id = {:id${i}}`).join(' || ')
   const found = await s
-    .collection("transactions")
-    .getFullList({ fields: "id", filter: s.filter(filter, params) });
+    .collection('transactions')
+    .getFullList({ fields: 'id', filter: s.filter(filter, params) })
   if (found.length !== ids.length)
-    throw Object.assign(new Error("That transaction isn't there."), {
+    throw Object.assign(new Error('That transaction isn\'t there.'), {
       status: 404,
-    });
+    })
   for (const id of ids)
-    batch.collection("transactions").update(id, { reviewed });
-  await batch.send();
-  return ids.length;
+    batch.collection('transactions').update(id, { reviewed })
+  await batch.send()
+  return ids.length
 }
 
 export async function deleteTransaction(s: Session, id: string): Promise<void> {
-  await s.collection("transactions").delete(id);
+  await s.collection('transactions').delete(id)
 }
 
 /** Undoes a transfer's or refund's match: both are on their own, and never matched again. */
@@ -355,8 +357,8 @@ export function unlinkTransaction(
   id: string,
 ): Promise<{ unlinked: boolean }> {
   return s.send(`/api/transactions/${encodeURIComponent(id)}/unlink`, {
-    method: "POST",
-  });
+    method: 'POST',
+  })
 }
 
 /**
@@ -368,25 +370,25 @@ export function recategorize(
   s: Session,
   id: string,
   category: string,
-): Promise<{ transaction: { id: string; category: string }; moved: number }> {
+): Promise<{ transaction: { id: string, category: string }, moved: number }> {
   return s.send(`/api/transactions/${encodeURIComponent(id)}/category`, {
-    method: "POST",
+    method: 'POST',
     body: { category },
-  });
+  })
 }
 
 /** A transaction as the reports read it: enough to total, split and count it. */
 export interface ReportRow {
-  account: string;
-  posted: string;
-  amount_cents: number;
-  category: string;
-  excluded: boolean;
-  splits: unknown;
+  account: string
+  posted: string
+  amount_cents: number
+  category: string
+  excluded: boolean
+  splits: unknown
   /** With `merchants`: who it was with, for a report by merchant. */
-  merchant_key?: string;
-  payee?: string;
-  description?: string;
+  merchant_key?: string
+  payee?: string
+  description?: string
 }
 
 /**
@@ -404,37 +406,37 @@ export async function transactionsBetween(
   from: string,
   to: string | null,
   opts: {
-    account?: string;
-    ownedOnly?: boolean;
-    counted?: boolean;
-    extra?: string;
-    merchants?: boolean;
+    account?: string
+    ownedOnly?: boolean
+    counted?: boolean
+    extra?: string
+    merchants?: boolean
   } = {},
 ): Promise<ReportRow[]> {
-  const scope = await accountScope(s, opts);
-  const parts = scope ? [scope, "posted >= {:from}"] : ["posted >= {:from}"];
-  if (to !== null) parts.push("posted <= {:to}");
-  parts.push(opts.account ? "account = {:account}" : COUNTED);
-  if (opts.ownedOnly) parts.push("owner = {:owner}");
-  if (opts.counted) parts.push(TX_COUNTED);
-  if (opts.extra) parts.push(`(${opts.extra})`);
-  const fields = `account,posted,amount_cents,category,excluded,splits${opts.merchants ? ",merchant_key,payee,description" : ""}`;
-  const filter = s.filter(parts.join(" && "), {
+  const scope = await accountScope(s, opts)
+  const parts = scope ? [scope, 'posted >= {:from}'] : ['posted >= {:from}']
+  if (to !== null) parts.push('posted <= {:to}')
+  parts.push(opts.account ? 'account = {:account}' : COUNTED)
+  if (opts.ownedOnly) parts.push('owner = {:owner}')
+  if (opts.counted) parts.push(TX_COUNTED)
+  if (opts.extra) parts.push(`(${opts.extra})`)
+  const fields = `account,posted,amount_cents,category,excluded,splits${opts.merchants ? ',merchant_key,payee,description' : ''}`
+  const filter = s.filter(parts.join(' && '), {
     from,
-    to: to ?? "",
-    account: opts.account ?? "",
-    owner: opts.ownedOnly ? callerId(s) : "",
-  });
+    to: to ?? '',
+    account: opts.account ?? '',
+    owner: opts.ownedOnly ? callerId(s) : '',
+  })
   // The same rows as last time while nothing in them changed (server/data/memo.ts).
-  const key = `${callerId(s)}\n${fields}\n${filter}`;
-  const version = await versionOf(s, filter);
-  const kept = recall<ReportRow>(key, version);
-  if (kept) return kept;
-  const rows = (await s.collection("transactions").getFullList({
+  const key = `${callerId(s)}\n${fields}\n${filter}`
+  const version = await versionOf(s, filter)
+  const kept = recall<ReportRow>(key, version)
+  if (kept) return kept
+  const rows = (await s.collection('transactions').getFullList({
     fields,
     filter,
-  })) as unknown as ReportRow[];
-  return keep(key, version, rows);
+  })) as unknown as ReportRow[]
+  return keep(key, version, rows)
 }
 
 /**
@@ -444,12 +446,12 @@ export async function transactionsBetween(
  * Read before the rows, so rows kept with it are never older than it.
  */
 async function versionOf(s: Session, filter: string): Promise<string> {
-  const latest = await s.collection("transactions").getList(1, 1, {
-    fields: "updated",
-    sort: "-updated",
+  const latest = await s.collection('transactions').getList(1, 1, {
+    fields: 'updated',
+    sort: '-updated',
     filter,
-  });
-  return `${latest.totalItems}@${latest.items[0]?.updated ?? ""}`;
+  })
+  return `${latest.totalItems}@${latest.items[0]?.updated ?? ''}`
 }
 
 /**
@@ -463,30 +465,30 @@ async function versionOf(s: Session, filter: string): Promise<string> {
  */
 export async function balanceHistory(
   s: Session,
-  opts: { ownedOnly?: boolean; dailyFrom?: string } = {},
+  opts: { ownedOnly?: boolean, dailyFrom?: string } = {},
 ): Promise<BalancePoint[]> {
   const read = (collection: string, extra?: string) => {
     const parts = [
-      ...(opts.ownedOnly ? ["owner = {:owner}"] : []),
+      ...(opts.ownedOnly ? ['owner = {:owner}'] : []),
       ...(extra ? [extra] : []),
-    ];
+    ]
     return s.collection(collection).getFullList({
-      fields: "account,date,balance_cents",
-      sort: "date",
+      fields: 'account,date,balance_cents',
+      sort: 'date',
       ...(parts.length
         ? {
-            filter: s.filter(parts.join(" && "), {
+            filter: s.filter(parts.join(' && '), {
               owner: callerId(s),
               cut: `${opts.dailyFrom?.slice(0, 7)}-01`,
             }),
           }
         : {}),
-    }) as Promise<unknown> as Promise<BalancePoint[]>;
-  };
-  if (!opts.dailyFrom) return read("balance_history");
+    }) as Promise<unknown> as Promise<BalancePoint[]>
+  }
+  if (!opts.dailyFrom) return read('balance_history')
   const [months, days] = await Promise.all([
-    read("balance_history_months", "date < {:cut}"),
-    read("balance_history", "date >= {:cut}"),
-  ]);
-  return [...months, ...days];
+    read('balance_history_months', 'date < {:cut}'),
+    read('balance_history', 'date >= {:cut}'),
+  ])
+  return [...months, ...days]
 }

@@ -150,6 +150,24 @@ function sort(app, rec, isNew) {
 }
 
 /**
+ * Whether a save changes nothing but `link_checked` (glue/links.js check()
+ * marking a new row tried): nothing sort() reads has moved, so it needn't
+ * sort the row again.
+ */
+function onlyMarkedTried(rec) {
+  var original = rec.original();
+  if (rec.getBool("link_checked") === original.getBool("link_checked"))
+    return false;
+  var fields = rec.collection().fields;
+  for (var i = 0; i < fields.length; i++) {
+    var name = fields[i].getName();
+    if (name === "link_checked" || name === "updated") continue;
+    if (rec.getString(name) !== original.getString(name)) return false;
+  }
+  return true;
+}
+
+/**
  * The person moves a transaction to `category`: it stays there, their rule
  * for its merchant becomes that category, and every other transaction of
  * the merchant's that they haven't moved by hand follows. Answers how many
@@ -328,6 +346,7 @@ function remove(app, owner, custom) {
 
 module.exports = {
   sort: sort,
+  onlyMarkedTried: onlyMarkedTried,
   ruleOf: ruleOf,
   rulesOf: rulesOf,
   recategorize: recategorize,

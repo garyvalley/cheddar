@@ -3,10 +3,10 @@ import {
   recurring,
   type Charge,
   type RecurringSummary,
-} from "~~/shared/recurring";
-import { listCategories } from "../categories";
-import type { Session } from "../session";
-import { transactionsBetween } from "../transactions";
+} from '~~/shared/recurring'
+import { listCategories } from '../categories'
+import type { Session } from '../session'
+import { transactionsBetween } from '../transactions'
 
 /**
  * The subscriptions and bills in the last few years' spending
@@ -17,16 +17,16 @@ export async function recurringCharges(
   today: string,
   account?: string,
 ): Promise<RecurringSummary> {
-  const from = `${Number(today.slice(0, 4)) - LOOKBACK_YEARS}${today.slice(4)}`;
+  const from = `${Number(today.slice(0, 4)) - LOOKBACK_YEARS}${today.slice(4)}`
   const [rows, list] = await Promise.all([
     // Spending only, and only once it has posted.
     transactionsBetween(s, from, null, {
       account,
       counted: true,
       merchants: true,
-      extra: "amount_cents < 0 && pending = false",
+      extra: 'amount_cents < 0 && pending = false',
     }) as Promise<Charge[]>,
     listCategories(s),
-  ]);
-  return recurring(rows, list, today);
+  ])
+  return recurring(rows, list, today)
 }

@@ -1,16 +1,16 @@
-import { asHeld, isInvestment, lastMonths, monthly } from "~~/shared/overview";
+import { asHeld, isInvestment, lastMonths, monthly } from '~~/shared/overview'
 import {
   PACE_MONTHS,
   debts,
   invested,
   savings,
   type Projections,
-} from "~~/shared/projections";
-import { expandSplits } from "~~/shared/splits";
-import { listAccounts } from "../accounts";
-import { listCategories } from "../categories";
-import { balanceHistory, transactionsBetween } from "../transactions";
-import type { Session } from "../session";
+} from '~~/shared/projections'
+import { expandSplits } from '~~/shared/splits'
+import { listAccounts } from '../accounts'
+import { listCategories } from '../categories'
+import { balanceHistory, transactionsBetween } from '../transactions'
+import type { Session } from '../session'
 
 /**
  * Projections' numbers (shared/projections.ts): the last whole months'
@@ -22,7 +22,7 @@ export async function projections(
   s: Session,
   today: string,
 ): Promise<Projections> {
-  const months = lastMonths(today, PACE_MONTHS + 1).slice(0, PACE_MONTHS);
+  const months = lastMonths(today, PACE_MONTHS + 1).slice(0, PACE_MONTHS)
   const [all, fetched, kept, list] = await Promise.all([
     listAccounts(s, true),
     transactionsBetween(s, `${months[0]}-01`, `${months.at(-1)}-31`, {
@@ -31,22 +31,22 @@ export async function projections(
     // A debt's pace needs only its oldest balance (shared/projections.ts).
     balanceHistory(s, { ownedOnly: true, dailyFrom: `${months[0]}-01` }),
     listCategories(s),
-  ]);
-  const rows = expandSplits(fetched);
+  ])
+  const rows = expandSplits(fetched)
   // Leaving one out changes what was earned and spent, not what a debt owes.
   const monthsIn = monthly(
-    rows.filter((r) => !r.excluded),
+    rows.filter(r => !r.excluded),
     months,
     list,
-  );
-  const { open, history } = asHeld(all, kept);
+  )
+  const { open, history } = asHeld(all, kept)
   return {
     months: monthsIn,
     savings: savings(monthsIn),
     invested_cents: invested(open),
     has_investments: open.some(
-      (a) => isInvestment(a.kind) && a.balance_cents !== null,
+      a => isInvestment(a.kind) && a.balance_cents !== null,
     ),
     debts: debts(open, rows, history, months),
-  };
+  }
 }

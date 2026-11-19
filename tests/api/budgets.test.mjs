@@ -144,7 +144,7 @@ describe('budgets', () => {
     assert.deepEqual([gifts.budget_cents, gifts.carry_cents], [10000, 0])
 
     // As if it had been on since two months ago: +$70 left, then $150 over.
-    const row = await (await fetch(`${PB}/api/collections/budgets/records?filter=${encodeURIComponent("category='gifts'")}`, { headers: asPb(c) })).json()
+    const row = await (await fetch(`${PB}/api/collections/budgets/records?filter=${encodeURIComponent('category=\'gifts\'')}`, { headers: asPb(c) })).json()
     const patched = await fetch(`${PB}/api/collections/budgets/records/${row.items[0].id}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json', ...asPb(c) }, body: JSON.stringify({ rollover_from: ago(2) }),
     })

@@ -50,14 +50,14 @@ export default async function up(pb) {
     verificationTemplate: {
       subject: 'Confirm your {APP_NAME} email',
       body: shell('Confirm your email', p('Tap the button to confirm this address for your Cheddar account.')
-        + button('{APP_URL}/verify-email?token={TOKEN}', 'Confirm email')
-        + p('If you didn\'t sign up for Cheddar, you can ignore this email.')),
+      + button('{APP_URL}/verify-email?token={TOKEN}', 'Confirm email')
+      + p('If you didn\'t sign up for Cheddar, you can ignore this email.')),
     },
     resetPasswordTemplate: {
       subject: 'Reset your {APP_NAME} password',
       body: shell('Reset your password', p('Tap the button to choose a new password. The link works for 30 minutes.')
-        + button('{APP_URL}/reset-password?token={TOKEN}', 'Choose a new password')
-        + p('If you didn\'t ask for this, you can ignore this email: your password stays as it is.')),
+      + button('{APP_URL}/reset-password?token={TOKEN}', 'Choose a new password')
+      + p('If you didn\'t ask for this, you can ignore this email: your password stays as it is.')),
     },
   })
 

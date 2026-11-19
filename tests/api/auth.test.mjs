@@ -258,7 +258,7 @@ describe('two-step sign-in', () => {
 
     // As every secret was before #39: plain. It still signs in, and the reseal seals it.
     await fetch(`${PB}/api/collections/user_totp/records/${row.id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', authorization: token }, body: JSON.stringify({ secret }),
+      method: 'PATCH', headers: { 'content-type': 'application/json', 'authorization': token }, body: JSON.stringify({ secret }),
     })
     const signIn = async (code) => {
       const b = client()
@@ -306,7 +306,7 @@ describe('two-step sign-in', () => {
     // The lock ends early: a superuser clears it, as the wait would.
     const unlock = async () => {
       await fetch(`${PB}/api/collections/user_totp/records/${(await row()).id}`, {
-        method: 'PATCH', headers: { 'content-type': 'application/json', authorization: token }, body: JSON.stringify({ locked_until: '' }),
+        method: 'PATCH', headers: { 'content-type': 'application/json', 'authorization': token }, body: JSON.stringify({ locked_until: '' }),
       })
     }
     const fiveWrong = async () => {

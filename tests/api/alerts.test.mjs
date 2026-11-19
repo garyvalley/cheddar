@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { PB, asPb, ready, superuser } from './helpers.mjs'
 
 const day = n => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
-const check = async c => {
+const check = async (c) => {
   const r = await c.call('POST', '/api/alerts/check', {})
   assert.equal(r.status, 200, JSON.stringify(r.json))
   return r.json.sent
@@ -17,7 +17,7 @@ const check = async c => {
 /** Alerts go only to a confirmed address: confirms `id`'s, as its link would. */
 async function confirmed(id) {
   const r = await fetch(`${PB}/api/collections/users/records/${id}`, {
-    method: 'PATCH', headers: { authorization: await superuser(), 'content-type': 'application/json' }, body: JSON.stringify({ verified: true }),
+    method: 'PATCH', headers: { 'authorization': await superuser(), 'content-type': 'application/json' }, body: JSON.stringify({ verified: true }),
   })
   assert.equal(r.status, 200, await r.text())
 }

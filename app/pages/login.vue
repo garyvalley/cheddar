@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PasskeyOptions } from '~~/shared/passkeys'
 import type { SignUpMode } from '~~/shared/sign-up'
+
 definePageMeta({ layout: 'auth', guestOnly: true })
 useHead({ title: 'Sign in' })
 

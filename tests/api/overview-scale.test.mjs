@@ -23,7 +23,7 @@ async function seed(su, owner, accounts) {
   }
   for (let i = 0; i < rows.length; i += 200) {
     const r = await fetch(`${PB}/api/batch`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: su },
+      method: 'POST', headers: { 'content-type': 'application/json', 'authorization': su },
       body: JSON.stringify({ requests: rows.slice(i, i + 200).map(body => ({ method: 'POST', url: '/api/collections/balance_history/records', body })) }),
     })
     assert.equal(r.status, 200, await r.text())

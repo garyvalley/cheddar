@@ -1,13 +1,13 @@
-import type { Account, Import, Transaction } from "./accounts.ts";
-import type { Goal } from "./goals.ts";
-import type { AlertSettings } from "./alerts.ts";
-import type { Budget } from "./budgets.ts";
-import type { Position } from "./holdings.ts";
-import type { ActivityEvent } from "./activity.ts";
-import type { CashflowItem } from "./cashflow.ts";
-import { kindLabel } from "./accounts.ts";
-import { categoryLabel, type Category } from "./categories.ts";
-import type { RuleFields } from "./rules.ts";
+import type { Account, Import, Transaction } from './accounts.ts'
+import type { Goal } from './goals.ts'
+import type { AlertSettings } from './alerts.ts'
+import type { Budget } from './budgets.ts'
+import type { Position } from './holdings.ts'
+import type { ActivityEvent } from './activity.ts'
+import type { CashflowItem } from './cashflow.ts'
+import { kindLabel } from './accounts.ts'
+import { categoryLabel, type Category } from './categories.ts'
+import type { RuleFields } from './rules.ts'
 
 /**
  * What an export holds, and the spreadsheets (CSV) made from it: Settings'
@@ -16,61 +16,61 @@ import type { RuleFields } from "./rules.ts";
  * nothing that reads them is ever handed one.
  */
 
-export const EXPORT_VERSION = 1;
+export const EXPORT_VERSION = 1
 
 export interface BalancePoint {
-  account: string;
-  date: string;
-  balance_cents: number;
+  account: string
+  date: string
+  balance_cents: number
 }
 
 export interface CategoryRule {
-  merchant: string;
-  category: string;
+  merchant: string
+  category: string
 }
 
 /** Everything a person has in Cheddar, as cheddar.json holds it. */
 export interface ExportData {
-  cheddar_export: typeof EXPORT_VERSION;
-  exported: string;
+  cheddar_export: typeof EXPORT_VERSION
+  exported: string
   profile: {
-    name: string;
-    email: string;
-    state: string;
-    filing_status: string;
-    theme: string;
-    appearance: string;
-    time_zone: string;
-  };
-  accounts: Account[];
-  transactions: (Transaction & { import: string })[];
-  imports: Import[];
-  balance_history: BalancePoint[];
-  goals: Goal[];
-  budgets: Budget[];
+    name: string
+    email: string
+    state: string
+    filing_status: string
+    theme: string
+    appearance: string
+    time_zone: string
+  }
+  accounts: Account[]
+  transactions: (Transaction & { import: string })[]
+  imports: Import[]
+  balance_history: BalancePoint[]
+  goals: Goal[]
+  budgets: Budget[]
   /** Receipts kept with transactions; each file is in the zip at `file`. */
-  receipts?: { id: string; transaction: string; name: string; type: string; size: number; created: string; file: string }[];
+  receipts?: { id: string, transaction: string, name: string, type: string, size: number, created: string, file: string }[]
   /** What they're emailed about (Settings → Alerts). */
-  alerts?: AlertSettings;
+  alerts?: AlertSettings
   /** What linked investment accounts hold, as their banks last reported it. */
-  holdings: Position[];
-  cashflow_items: CashflowItem[];
-  categories: Category[];
-  category_rules: CategoryRule[];
+  holdings: Position[]
+  cashflow_items: CashflowItem[]
+  categories: Category[]
+  category_rules: CategoryRule[]
   /** The rules the person wrote (Settings → Rules). */
-  rules: RuleFields[];
+  rules: RuleFields[]
   bank_links: {
-    institutions: string[];
-    status: string;
-    last_synced: string;
-    accounts: string[];
-  }[];
+    institutions: string[]
+    status: string
+    last_synced: string
+    accounts: string[]
+  }[]
   /** Recent activity: the last 90 days of sign-ins and security changes. */
-  activity: ActivityEvent[];
+  activity: ActivityEvent[]
 }
 
 /** A cell a spreadsheet could take for a formula (=, +, -, @, or a tab or return first). */
-const FORMULA = /^[=+\-@\t\r]/;
+const FORMULA = /^[=+\-@\t\r]/
 
 /**
  * One CSV cell. Text that a spreadsheet would run as a formula gets a `'`
@@ -78,11 +78,11 @@ const FORMULA = /^[=+\-@\t\r]/;
  * `=HYPERLINK(...)`. Numbers are written as they are, so amounts stay numbers.
  */
 export function csvCell(value: string | number | boolean): string {
-  if (typeof value === "number")
-    return Number.isFinite(value) ? String(value) : "";
-  let s = typeof value === "boolean" ? (value ? "yes" : "no") : value;
-  if (FORMULA.test(s)) s = `'${s}`;
-  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+  if (typeof value === 'number')
+    return Number.isFinite(value) ? String(value) : ''
+  let s = typeof value === 'boolean' ? (value ? 'yes' : 'no') : value
+  if (FORMULA.test(s)) s = `'${s}`
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
 }
 
 /**
@@ -93,124 +93,124 @@ export function toCsv(
   header: string[],
   rows: (string | number | boolean)[][],
 ): string {
-  return `\uFEFF${[header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n")}\r\n`;
+  return `\uFEFF${[header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n')}\r\n`
 }
 
 /** Cents as a plain decimal a spreadsheet reads as a number: -1234 is -12.34. */
-export const dollars = (cents: number): number => Math.round(cents) / 100;
+export const dollars = (cents: number): number => Math.round(cents) / 100
 
 /** A split's parts in one cell: "Groceries 80.00; Household 40.00". Empty for one that isn't split. */
 export function splitText(
-  t: Pick<Transaction, "splits">,
+  t: Pick<Transaction, 'splits'>,
   categories: Category[],
 ): string {
   return (t.splits ?? [])
     .map(
-      (p) =>
+      p =>
         `${categoryLabel(p.category, categories)} ${dollars(p.amount_cents).toFixed(2)}`,
     )
-    .join("; ");
+    .join('; ')
 }
 
 export function transactionsCsv(
   rows: Transaction[],
-  accounts: Pick<Account, "id" | "name">[],
+  accounts: Pick<Account, 'id' | 'name'>[],
   categories: Category[],
 ): string {
-  const names = new Map(accounts.map((a) => [a.id, a.name]));
+  const names = new Map(accounts.map(a => [a.id, a.name]))
   return toCsv(
     [
-      "Date",
-      "Account",
-      "Amount",
-      "Description",
-      "Payee",
-      "Category",
-      "Pending",
-      "Note",
-      "Tags",
-      "Left out",
-      "Split",
+      'Date',
+      'Account',
+      'Amount',
+      'Description',
+      'Payee',
+      'Category',
+      'Pending',
+      'Note',
+      'Tags',
+      'Left out',
+      'Split',
     ],
-    rows.map((t) => [
+    rows.map(t => [
       t.posted,
-      names.get(t.account) ?? "",
+      names.get(t.account) ?? '',
       dollars(t.amount_cents),
       t.description,
       t.payee,
       categoryLabel(t.category, categories),
       t.pending,
       t.note,
-      t.tags.join(", "),
+      t.tags.join(', '),
       t.excluded,
       splitText(t, categories),
     ]),
-  );
+  )
 }
 
 export function accountsCsv(accounts: Account[]): string {
   return toCsv(
     [
-      "Name",
-      "Kind",
-      "Institution",
-      "Last 4",
-      "Balance",
-      "Balance date",
-      "Linked",
-      "Closed on",
-      "Counted",
+      'Name',
+      'Kind',
+      'Institution',
+      'Last 4',
+      'Balance',
+      'Balance date',
+      'Linked',
+      'Closed on',
+      'Counted',
     ],
-    accounts.map((a) => [
+    accounts.map(a => [
       a.name,
       kindLabel(a.kind),
       a.institution,
       a.last4,
-      a.balance_cents === null ? "" : dollars(a.balance_cents),
+      a.balance_cents === null ? '' : dollars(a.balance_cents),
       a.balance_date,
       a.linked,
       a.closed_on,
       !a.excluded,
     ]),
-  );
+  )
 }
 
 export function balanceHistoryCsv(
   points: BalancePoint[],
-  accounts: Pick<Account, "id" | "name">[],
+  accounts: Pick<Account, 'id' | 'name'>[],
 ): string {
-  const names = new Map(accounts.map((a) => [a.id, a.name]));
+  const names = new Map(accounts.map(a => [a.id, a.name]))
   return toCsv(
-    ["Date", "Account", "Balance"],
-    points.map((p) => [
+    ['Date', 'Account', 'Balance'],
+    points.map(p => [
       p.date,
-      names.get(p.account) ?? "",
+      names.get(p.account) ?? '',
       dollars(p.balance_cents),
     ]),
-  );
+  )
 }
 
 /** The files in the zip, by name. */
 export function exportFiles(data: ExportData): Record<string, string> {
   return {
-    "accounts.csv": accountsCsv(data.accounts),
-    "transactions.csv": transactionsCsv(
+    'accounts.csv': accountsCsv(data.accounts),
+    'transactions.csv': transactionsCsv(
       data.transactions,
       data.accounts,
       data.categories,
     ),
-    "balance_history.csv": balanceHistoryCsv(
+    'balance_history.csv': balanceHistoryCsv(
       data.balance_history,
       data.accounts,
     ),
-    "cheddar.json": `${JSON.stringify(data, null, 2)}\n`,
-  };
+    'cheddar.json': `${JSON.stringify(data, null, 2)}\n`,
+  }
 }
 
 /** A download's file name for the transactions between two days: cheddar-2026-11-01-to-2026-11-30.csv. */
 export function csvName(from?: string, to?: string): string {
-  if (from && to) return `cheddar-transactions-${from}-to-${to}.csv`;
-  if (from) return `cheddar-transactions-from-${from}.csv`;
-  if (to) return `cheddar-transactions-to-${to}.csv`;
-  return "cheddar-transactions.csv";
+  if (from && to) return `cheddar-transactions-${from}-to-${to}.csv`
+  if (from) return `cheddar-transactions-from-${from}.csv`
+  if (to) return `cheddar-transactions-to-${to}.csv`
+  return 'cheddar-transactions.csv'
 }

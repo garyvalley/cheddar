@@ -33,7 +33,7 @@ describe('recent activity', () => {
     assert.deepEqual(got.slice(0, 2), ['password_changed', 'export'])
   })
 
-  test("shows nobody else's, and the record API writes none", async () => {
+  test('shows nobody else\'s, and the record API writes none', async () => {
     const owner = await ready()
     const other = await ready()
     const mine = (await other.c.call('GET', '/api/auth/activity')).json.activity

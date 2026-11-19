@@ -34,7 +34,7 @@ test('base64url and UTF-8 round trips', () => {
 test('cborItem reads maps, negatives, bytes and text', () => {
   const m = new Map([[1, 2], [-1, 1], ['fmt', 'none'], [-2, Buffer.from([1, 2, 3])], [300, 70000]])
   const { value } = w.cborItem(bytes(cbor(m)), 0)
-  assert.deepEqual(value, { 1: 2, '-1': 1, fmt: 'none', '-2': [1, 2, 3], 300: 70000 })
+  assert.deepEqual(value, { '1': 2, '-1': 1, 'fmt': 'none', '-2': [1, 2, 3], '300': 70000 })
   assert.throws(() => w.cborItem([0x5f], 0))
   assert.throws(() => w.cborItem([0x58, 10, 1], 0))
 })

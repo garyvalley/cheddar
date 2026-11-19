@@ -54,7 +54,7 @@ describe('devices', () => {
     assert.ok(await me(c))
   })
 
-  test("nobody signs out another person's device", async () => {
+  test('nobody signs out another person\'s device', async () => {
     const owner = await ready()
     const stranger = await ready()
     const theirs = (await owner.c.call('GET', '/api/auth/sessions')).json.sessions[0]
@@ -80,7 +80,7 @@ describe('devices', () => {
     const { c, id } = await ready()
     const [row] = await rows(id)
     await fetch(`${PB}/api/collections/sessions/records/${row.id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', authorization: await superuser() },
+      method: 'PATCH', headers: { 'content-type': 'application/json', 'authorization': await superuser() },
       body: JSON.stringify({ signed_in: Date.now() - 31 * 24 * 60 * 60 * 1000 }),
     })
     assert.equal(await me(c), null)

@@ -55,7 +55,8 @@ export async function startMock({ port = Number(process.env.PLAID_MOCK_PORT || 8
     let raw = ''
     for await (const chunk of req) raw += chunk
     let body
-    try { body = JSON.parse(raw || '{}') } catch { return error(res, 'INVALID_BODY') }
+    try { body = JSON.parse(raw || '{}') }
+    catch { return error(res, 'INVALID_BODY') }
     if (req.method !== 'POST') return error(res, 'NOT_FOUND', 404)
     if (body.client_id !== CLIENT_ID || body.secret !== SECRET) return error(res, 'INVALID_API_KEYS')
 

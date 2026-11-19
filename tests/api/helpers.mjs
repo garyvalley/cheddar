@@ -6,6 +6,7 @@ import { after } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { loadHookModule } from '../load-hook-module.mjs'
+
 export const APP = (process.env.APP_URL || 'http://localhost:8085').replace(/\/$/, '')
 export const PB = (process.env.PB_URL || 'http://127.0.0.1:8095').replace(/\/$/, '')
 export const totp = loadHookModule('pb_hooks/lib/totp.js')
@@ -57,14 +58,15 @@ export function client(from = ip()) {
       }
       const text = await r.text()
       let json
-      try { json = text ? JSON.parse(text) : null } catch { json = text }
+      try { json = text ? JSON.parse(text) : null }
+      catch { json = text }
       return { status: r.status, json, headers: r.headers }
     },
   }
 }
 
 /** Headers that call PocketBase directly as `c`: its token, and its device session. */
-export const asPb = c => ({ authorization: c.token, 'x-cheddar-session': c.sid })
+export const asPb = c => ({ 'authorization': c.token, 'x-cheddar-session': c.sid })
 
 export async function superuser() {
   const r = await fetch(`${PB}/api/collections/_superusers/auth-with-password`, {
