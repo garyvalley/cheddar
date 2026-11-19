@@ -2,6 +2,24 @@
 # Docker Hub's anonymous limit, shared by every build from the home
 # connection, ran out mid-deploy.
 
+# PocketBase, built here from its release tag with today's Go: the release
+# binaries carry the Go they were built with, and a Go security fix
+# (CVE-2026-97054, net/http) reaches Cheddar only once PocketBase ships
+# again. examples/base is the program PocketBase's own releases build. It's
+# pure Go, so it cross-compiles for the Pi with no emulation. x/net moves to
+# a fixed release, as in Litestream's build below.
+FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/golang:1-alpine AS pocketbase
+ARG PB_VERSION=0.40.6
+# No default: a default here overrides the value BuildKit supplies.
+ARG TARGETARCH
+WORKDIR /src
+RUN go mod init cheddar/pocketbase \
+    && go get github.com/pocketbase/pocketbase@v${PB_VERSION} golang.org/x/net@v0.62.0 \
+    && cp "$(go env GOMODCACHE)/github.com/pocketbase/pocketbase@v${PB_VERSION}/examples/base/main.go" . \
+    && go mod tidy \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath \
+        -ldflags "-s -w -X github.com/pocketbase/pocketbase.Version=${PB_VERSION}" -o /pocketbase .
+
 # Litestream, which streams the database to the NAS, encrypted with age
 # (k8s/backup/litestream.yaml, scripts/restore-drill.sh). 0.3.13 is the last
 # release that encrypts; its own binary is built with a 2023 Go and modules
@@ -26,28 +44,15 @@ RUN git init -q . \
 
 FROM public.ecr.aws/docker/library/alpine:3.24
 
-ARG PB_VERSION=0.40.6
-# Set by BuildKit from the target platform: arm64 for the Raspberry Pi
-# cluster, amd64 for CI's test and scan builds. PocketBase names its release
-# archives the same way.
-# No default: a default here overrides the value BuildKit supplies.
-ARG TARGETARCH
-
 # CI passes the commit as IMAGE_TAG: as an ARG it keys this layer's cache,
 # so each build picks up Alpine's security updates.
 ARG IMAGE_TAG
 RUN apk upgrade --no-cache && apk add --no-cache \
-    unzip \
     ca-certificates \
     curl \
     age
 
-RUN curl -fsSL -o /tmp/pb.zip \
-    "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${TARGETARCH}.zip" \
-    && unzip /tmp/pb.zip -d /pb/ \
-    && rm /tmp/pb.zip \
-    && chmod +x /pb/pocketbase
-
+COPY --from=pocketbase /pocketbase /pb/pocketbase
 COPY --from=litestream /litestream /usr/local/bin/litestream
 
 # Built in so that a deploy which changes only a hook still changes the
