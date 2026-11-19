@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // A transaction's `history` flag: set only by a bank sync, on the rows that
-// came with a new link's history (glue/bank_links.js, shared/review.ts), and
+// came with a new link's history (glue/sync_rows.js, shared/review.ts), and
 // kept out of Spending's review inbox. The record API's writes to it are
 // dropped, as categories.pb.js drops the category's.
 // ---------------------------------------------------------------------------

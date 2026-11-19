@@ -7,7 +7,6 @@ import { debtPlan, MAX_PAYOFF_MONTHS, project, STRATEGIES, strategyPlan, WITHDRA
 // each card and loan is being paid down. The assumptions are the person's to
 // change, and this browser remembers them.
 
-const { me } = useAuth()
 const { data: pj, error } = await useFetch<Projections>('/api/projections')
 const today = useToday()
 
@@ -22,33 +21,8 @@ const span = (months: number) => {
   return [y && `${y} yr`, m && `${m} mo`].filter(Boolean).join(' ') || 'this month'
 }
 
-// Assumptions, kept in this browser for this person.
-interface Saved { years: number, returnPct: number, monthly: string, extra: string, debts: Record<string, { payment?: string, apr?: string }> }
-const key = computed(() => `cheddar:projections:${me.value?.id ?? ''}`)
-const saved = reactive<Saved>({ years: 25, returnPct: 5, monthly: '', extra: '', debts: {} })
-onMounted(() => {
-  try {
-    const raw = localStorage.getItem(key.value)
-    if (raw) Object.assign(saved, JSON.parse(raw))
-  }
-  catch { /* nothing remembered */ }
-})
-watch(saved, () => {
-  try { localStorage.setItem(key.value, JSON.stringify(saved)) }
-  catch { /* not remembered, still works */ }
-}, { deep: true })
-
-/** A dollar amount typed in a box, as cents; null when it isn't one. */
-function dollars(text: string | undefined): number | null {
-  const t = (text ?? '').replace(/[$,\s]/g, '')
-  if (!/^\d+(\.\d{0,2})?$/.test(t)) return null
-  return Math.round(Number(t) * 100)
-}
-function rate(text: string | undefined): number | null {
-  const t = (text ?? '').replace(/[%\s]/g, '')
-  if (!/^\d+(\.\d+)?$/.test(t) || Number(t) > 100) return null
-  return Number(t) / 100
-}
+// Assumptions, kept in this browser for this person (useProjectionAssumptions).
+const { saved, setDebt } = useProjectionAssumptions()
 
 // Savings rate
 const sv = computed(() => pj.value?.savings)
@@ -63,8 +37,8 @@ const keptHeight = (m: { income_cents: number, spent_cents: number }) => {
 
 // Where it takes you
 const suggested = computed(() => Math.max(0, sv.value?.kept_cents ?? 0))
-const monthly = computed(() => dollars(saved.monthly) ?? suggested.value)
-const monthlyBad = computed(() => saved.monthly.trim() !== '' && dollars(saved.monthly) === null)
+const monthly = computed(() => parseDollars(saved.monthly) ?? suggested.value)
+const monthlyBad = computed(() => saved.monthly.trim() !== '' && parseDollars(saved.monthly) === null)
 const years = computed(() => Math.min(60, Math.max(1, Math.round(Number(saved.years) || 0))))
 const returnRate = computed(() => Math.min(15, Math.max(-5, Number(saved.returnPct) || 0)) / 100)
 const points = computed(() => project(pj.value?.invested_cents ?? 0, { years: years.value, annual_return: returnRate.value, monthly_cents: monthly.value }))
@@ -83,7 +57,7 @@ const worthArea = computed(() => `0,${H} ${worthLine.value} ${W},${H}`)
 // Debts: each estimate shows the payment and APR it rests on, and whose they are (shared/projections.ts debtPlan).
 const plans = computed(() => (pj.value?.debts ?? []).map((d) => {
   const mine = saved.debts[d.id] ?? {}
-  return { d, ...debtPlan(d, { payment_cents: dollars(mine.payment), apr: rate(mine.apr) }, today) }
+  return { d, ...debtPlan(d, { payment_cents: parseDollars(mine.payment), apr: parsePercent(mine.apr) }, today) }
 }))
 const dated = (p: { status: string }) => p.status === 'estimate' || p.status === 'paid'
 const debtFree = computed(() => {
@@ -103,8 +77,8 @@ function paceFrom(d: Debt) {
   return ''
 }
 // Every debt together (issue #112): an extra amount a month to one debt at a time, avalanche against snowball.
-const extra = computed(() => dollars(saved.extra) ?? 0)
-const extraBad = computed(() => saved.extra.trim() !== '' && dollars(saved.extra) === null)
+const extra = computed(() => parseDollars(saved.extra) ?? 0)
+const extraBad = computed(() => saved.extra.trim() !== '' && parseDollars(saved.extra) === null)
 const owing = computed(() => plans.value.filter(p => p.status !== 'paid'))
 const strategies = computed(() => {
   const list = owing.value.map(p => ({ id: p.d.id, name: p.d.name, owed_cents: p.d.owed_cents, payment_cents: p.payment_cents, apr: p.apr }))
@@ -120,9 +94,6 @@ const cheaper = computed(() => {
   if (!a || !b || a.months === null || b.months === null) return null
   return a.interest_cents === b.interest_cents ? null : a.interest_cents < b.interest_cents ? { by: a, other: b } : { by: b, other: a }
 })
-function setDebt(id: string, field: 'payment' | 'apr', value: string) {
-  saved.debts[id] = { ...saved.debts[id], [field]: value }
-}
 </script>
 
 <template>
