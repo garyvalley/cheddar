@@ -61,7 +61,11 @@ onRecordCreate((e) => {
 }, "transactions");
 
 onRecordUpdate((e) => {
-  require(`${__hooks}/glue/categories.js`).sort(e.app, e.record, false);
+  // glue/links.js check() saves each new row again only to mark it tried:
+  // sorting it twice was a third of a big import's time.
+  var categories = require(`${__hooks}/glue/categories.js`);
+  if (!categories.onlyMarkedTried(e.record))
+    categories.sort(e.app, e.record, false);
   e.next();
 }, "transactions");
 
