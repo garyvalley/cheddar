@@ -12,7 +12,7 @@ export function useProjectionAssumptions() {
   onMounted(() => {
     try {
       const raw = localStorage.getItem(key.value)
-      if (raw) Object.assign(saved, JSON.parse(raw))
+      if (raw) restore(saved, JSON.parse(raw))
     }
     catch { /* nothing remembered */ }
   })
@@ -25,6 +25,26 @@ export function useProjectionAssumptions() {
     saved.debts[id] = { ...saved.debts[id], [field]: value }
   }
   return { saved, setDebt }
+}
+
+/** Puts back what this browser kept, field by field: anything else in it is left out. */
+function restore(saved: Saved, kept: unknown) {
+  if (!kept || typeof kept !== 'object') return
+  const k = kept as Record<string, unknown>
+  if (typeof k.years === 'number') saved.years = k.years
+  if (typeof k.returnPct === 'number') saved.returnPct = k.returnPct
+  if (typeof k.monthly === 'string') saved.monthly = k.monthly
+  if (typeof k.extra === 'string') saved.extra = k.extra
+  if (k.debts && typeof k.debts === 'object') {
+    for (const [id, d] of Object.entries(k.debts as Record<string, unknown>)) {
+      if (!d || typeof d !== 'object' || id === '__proto__') continue
+      const { payment, apr } = d as Record<string, unknown>
+      saved.debts[id] = {
+        ...(typeof payment === 'string' ? { payment } : {}),
+        ...(typeof apr === 'string' ? { apr } : {}),
+      }
+    }
+  }
 }
 
 /** A dollar amount typed in a box, as cents; null when it isn't one. */
