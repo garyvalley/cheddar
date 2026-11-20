@@ -355,7 +355,79 @@ function holdingRows(json) {
   return rows
 }
 
+// /investments/transactions/get as Cheddar's kinds of investment activity:
+// a subtype says most (a dividend is type "cash"), then the type.
+var ACTIVITY_SUBTYPES = {
+  "dividend": "dividend", "qualified dividend": "dividend", "non-qualified dividend": "dividend",
+  "dividend reinvestment": "dividend", "long-term capital gain": "dividend", "short-term capital gain": "dividend",
+  "interest": "interest", "interest receivable": "interest", "interest reinvestment": "interest",
+  "contribution": "deposit", "deposit": "deposit", "transfer": "", "withdrawal": "withdrawal",
+  "distribution": "withdrawal", "account fee": "fee", "management fee": "fee", "fund fee": "fee",
+  "transfer fee": "fee", "trust fee": "fee", "margin expense": "fee", "tax": "fee", "tax withheld": "fee",
+}
+var ACTIVITY_TYPES = { buy: "buy", sell: "sell", fee: "fee", cash: "other", transfer: "other", cancel: "cancel" }
+
+/** What a piece of investment activity was: buy, sell, dividend, interest, deposit, withdrawal, fee, other or cancel. */
+function activityKind(type, subtype, amountCents) {
+  var t = String(type || "").toLowerCase()
+  var sub = String(subtype || "").toLowerCase()
+  if (t === "cancel") return "cancel"
+  var bySub = ACTIVITY_SUBTYPES[sub]
+  if (bySub) return bySub
+  // A transfer says only which way the cash went.
+  if (sub === "transfer" || t === "transfer") return amountCents > 0 ? "deposit" : amountCents < 0 ? "withdrawal" : "other"
+  return ACTIVITY_TYPES[t] || "other"
+}
+
+/**
+ * /investments/transactions/get as Cheddar's rows: buys, sells, dividends
+ * and the rest, one per activity, with the security's name and ticker.
+ * `amount_cents` is the cash it moved into the account (a sale or a
+ * dividend is more, a buy less): Plaid's sign turned round. A cancelled one
+ * and its cancellation are both left out.
+ */
+function activityRows(json) {
+  var j = json || {}
+  var securities = {}
+  ;(Array.isArray(j.securities) ? j.securities : []).forEach(function (sec) {
+    if (sec && sec.security_id) securities[sec.security_id] = sec
+  })
+  var list = Array.isArray(j.investment_transactions) ? j.investment_transactions : []
+  var cancelled = {}
+  list.forEach(function (t) {
+    if (t && t.cancel_transaction_id) cancelled[t.cancel_transaction_id] = true
+  })
+  var rows = []
+  list.forEach(function (t) {
+    if (!t || !t.account_id || !t.investment_transaction_id) return
+    if (cancelled[t.investment_transaction_id] || t.cancel_transaction_id) return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(t.date || ""))) return
+    var amount = toCents(num(t.amount))
+    if (amount === null) return
+    var cash = amount === 0 ? 0 : -amount
+    var kind = activityKind(t.type, t.subtype, cash)
+    if (kind === "cancel") return
+    var sec = securities[t.security_id] || {}
+    rows.push({
+      id: String(t.investment_transaction_id).slice(0, 200),
+      account: (PREFIX + t.account_id).slice(0, 200),
+      date: t.date,
+      kind: kind,
+      name: clean(t.name || sec.name).slice(0, 200),
+      security: clean(sec.name).slice(0, 200),
+      ticker: clean(sec.ticker_symbol).slice(0, 20),
+      quantity: num(t.quantity) || 0,
+      price_cents: toCents(num(t.price)),
+      amount_cents: cash,
+      fees_cents: toCents(num(t.fees)),
+    })
+  })
+  return rows
+}
+
 module.exports = {
+  activityRows: activityRows,
+  activityKind: activityKind,
   holdingRows: holdingRows,
   holdingsGap: holdingsGap,
   webhookUrl: webhookUrl,

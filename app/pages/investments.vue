@@ -3,6 +3,7 @@ import { formatCents, kindLabel, type AccountKind } from '~~/shared/accounts'
 import type { BankLinks } from '~~/shared/bank-links'
 import type { Portfolio } from '~~/shared/holdings'
 import type { Investments } from '~~/shared/investments'
+import type { Activity } from '~~/shared/investing'
 import { GROWTH_PERIODS, type GrowthPeriodId } from '~~/shared/overview'
 
 // The brokerage and retirement accounts on their own: what they hold, how
@@ -12,7 +13,7 @@ const [
   { data, error },
   { data: links },
 ] = await Promise.all([
-  useFetch<Investments & { holdings: Portfolio & { on: boolean } }>('/api/investments'),
+  useFetch<Investments & { holdings: Portfolio & { on: boolean }, activity: { rows: Activity[], income_12m_cents: number } }>('/api/investments'),
   useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) }),
 ])
 
@@ -59,6 +60,9 @@ const GAP: Record<string, string> = {
   consent: 'Its holdings haven\'t been shared with Cheddar yet.',
   empty: 'Its bank reports no positions.',
 }
+const accountName = (id: string) => accounts.value.find(a => a.id === id)?.name ?? ''
+// A position's change over the last 30 days, from its value on the first day Cheddar kept in them.
+const changeOf = (p: Portfolio['accounts'][string]['positions'][number]) => (p.change ? p.value_cents - p.change.from_cents : null)
 const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 </script>
 
@@ -208,12 +212,13 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
                   <span class="caption"> · as of {{ fetched(holdingsOf(a.id)!.as_of) }}</span>
                 </summary>
                 <table class="pos-table">
-                  <thead><tr><th scope="col">Holding</th><th scope="col" class="r">Quantity</th><th scope="col" class="r">Value</th></tr></thead>
+                  <thead><tr><th scope="col">Holding</th><th scope="col" class="r">Quantity</th><th scope="col" class="r">Value</th><th scope="col" class="r">30 days</th></tr></thead>
                   <tbody>
                     <tr v-for="(p, i) in holdingsOf(a.id)!.positions" :key="i">
                       <td><span class="block">{{ p.name }}</span><span class="caption">{{ [p.ticker, p.price_cents !== null && p.type !== 'cash' ? `${formatCents(p.price_cents)} each` : '', p.price_as_of && `price ${day(p.price_as_of)}`].filter(Boolean).join(' · ') }}</span></td>
                       <td class="r num">{{ p.type === 'cash' ? '' : qty(p.quantity) }}</td>
                       <td class="r num">{{ formatCents(p.value_cents) }}</td>
+                      <td class="r num" :class="changeOf(p) === null ? 'muted' : moneyTone(changeOf(p)!)" :title="p.change ? `Since ${day(p.change.since)}` : 'Shows once Cheddar has its value on an earlier day'">{{ changeOf(p) === null ? '—' : signed(changeOf(p)!) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -226,10 +231,12 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
           </li>
         </ul>
       </section>
+      <InvestmentsActivity v-if="showHoldings && data.activity" :rows="data.activity.rows" :income12m="data.activity.income_12m_cents" :account-name="accountName" />
+
       <p class="group-footer">
         Growth is the change in each account's balance less money moved in or out, so deposits don't count as gains; it isn't the return on what's held.
         Values are each account's balance as its bank reports it.
-        <template v-if="showHoldings">Holdings and allocation are as each bank last reported them, through Plaid, on the date shown. They show what's held, not what to hold.</template>
+        <template v-if="showHoldings">Holdings, allocation and activity are as each bank last reported them, through Plaid, on the date shown; a holding's 30-day change includes anything bought or sold. They show what's held, not what to hold.</template>
         <template v-else>Holdings aren't switched on for this Cheddar, so each account shows its balance only.</template>
       </p>
     </template>

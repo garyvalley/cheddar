@@ -3,6 +3,7 @@ import type { Goal } from './goals.ts'
 import type { AlertSettings } from './alerts.ts'
 import type { Budget } from './budgets.ts'
 import type { Position } from './holdings.ts'
+import type { Activity } from './investing.ts'
 import type { ActivityEvent } from './activity.ts'
 import type { CashflowItem } from './cashflow.ts'
 import { kindLabel } from './accounts.ts'
@@ -54,6 +55,10 @@ export interface ExportData {
   alerts?: AlertSettings
   /** What linked investment accounts hold, as their banks last reported it. */
   holdings: Position[]
+  /** What each security in them was worth, day by day (holding_history). */
+  holding_history?: { account: string, date: string, security: string, name: string, ticker: string, type: string, quantity: number, price_cents: number | null, value_cents: number }[]
+  /** Their buys, sells, dividends and the rest. */
+  investment_activity?: Omit<Activity, 'id'>[]
   cashflow_items: CashflowItem[]
   categories: Category[]
   category_rules: CategoryRule[]
