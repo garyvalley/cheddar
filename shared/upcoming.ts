@@ -1,5 +1,5 @@
 /**
- * Overview's "Coming up" card (issue #109): the next few days of bills and
+ * Spending's "Coming up" card (issue #109, on Overview until the bell): the next few days of bills and
  * planned money from the cash-flow forecast (shared/cashflow.ts: the
  * person's planned items and the recurring charges Cheddar found), and the
  * subscriptions whose price just went up (shared/recurring.ts's `change`).

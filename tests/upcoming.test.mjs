@@ -1,4 +1,4 @@
-// shared/upcoming.ts: Overview's "Coming up": the week ahead from the
+// shared/upcoming.ts: Spending's "Coming up": the week ahead from the
 // cash-flow forecast, and recent price rises.
 
 import { test } from 'node:test'

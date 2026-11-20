@@ -2,9 +2,10 @@
 import { formatCents } from '~~/shared/accounts'
 import type { Upcoming } from '~~/shared/upcoming'
 
-// Overview's "Coming up" (shared/upcoming.ts): the next week's bills and
-// planned money, and subscriptions whose price just went up. Hidden when
-// there's neither; loaded after the page so it never holds it up.
+// Spending's "Coming up this week" (shared/upcoming.ts): the next week's
+// bills and planned money, and subscriptions whose price just went up, from
+// the accounts the person owns. Hidden when there's neither; loaded after
+// the page so it never holds it up. The bell (AppBell) links here.
 const { data } = useFetch<Upcoming>('/api/upcoming', { lazy: true, server: false })
 const today = useToday()
 const tomorrow = computed(() => new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10))
@@ -13,12 +14,9 @@ const shown = computed(() => !!data.value && (data.value.events.length > 0 || da
 </script>
 
 <template>
-  <section v-if="shown && data" class="group" aria-labelledby="upcoming-title">
+  <section v-if="shown && data" id="upcoming" class="group" aria-labelledby="upcoming-title">
+    <h2 id="upcoming-title" class="group-title">Coming up this week</h2>
     <div class="card">
-      <div class="panel-head">
-        <h2 id="upcoming-title" class="panel-title">Coming up this week</h2>
-        <NuxtLink to="/cashflow" class="footnote">Cash flow</NuxtLink>
-      </div>
       <div v-for="r in data.rises" :key="`rise-${r.key}`" class="row rise" role="note">
         <AppIcon name="rise" class="warn-icon" />
         <span class="row-label">
@@ -37,6 +35,7 @@ const shown = computed(() => !!data.value && (data.value.events.length > 0 || da
       </ul>
       <p v-if="data.due_cents" class="row footnote total">{{ formatCents(data.due_cents) }} due out in the next {{ data.days }} days</p>
     </div>
+    <p class="group-footer">From the accounts you own: the usual charges Cheddar found, and what you planned in <NuxtLink to="/cashflow">Cash flow</NuxtLink>.</p>
   </section>
 </template>
 

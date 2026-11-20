@@ -25,6 +25,7 @@ const current = (to: string) => (to === '/' ? route.path === '/' : route.path ==
           >{{ item.label }}</NuxtLink>
         </nav>
         <div class="topbar-end">
+          <AppBell />
           <NuxtLink
             to="/settings" class="bar-link" :class="{ on: current('/settings') }" :title="me?.email"
             aria-label="Settings" :aria-current="current('/settings') ? 'page' : undefined"

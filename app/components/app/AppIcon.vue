@@ -17,6 +17,7 @@ const PATHS = {
   check: 'M5 12.5l4.5 4.5L19 7.5',
   chevron: 'M9.5 5.5 16 12l-6.5 6.5',
   rise: 'M3.5 17.5 9 12l4 4 7.5-7.5M15 8.5h5.5V14',
+  bell: 'M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2.2 2.2 0 0 0 4 0',
 } as const
 </script>
 
