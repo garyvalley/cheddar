@@ -228,6 +228,28 @@ describe('importing a statement', () => {
     assert.equal(r.json.import.added, 4000)
   })
 
+  test('PocketBase adds rows only to the person\'s own import, as the record API would take them', async () => {
+    const owner = await ready()
+    const other = await ready()
+    const a = await account(owner.c)
+    const imp = (await upload(owner.c, a.id, CSV)).json.import
+    const send = (c, rows) => fetch(`${PB}/api/imports/${imp.id}/rows`, {
+      method: 'POST', headers: { ...asPb(c), 'content-type': 'application/json' }, body: JSON.stringify({ rows }),
+    })
+    const row = { external_id: 'csv:by-hand', posted: '2026-11-05', amount_cents: -700, description: 'PIZZA PLACE', bank_category: 'FOOD_AND_DRINK', category: 'housing', history: true }
+    assert.equal((await send(other.c, [row])).status, 404)
+    assert.equal((await send(owner.c, [{ ...row, posted: 'soon' }])).status, 400)
+    assert.equal((await send(owner.c, Array.from({ length: 1001 }, (_, i) => ({ ...row, external_id: `x${i}` })))).status, 400)
+    const r = await send(owner.c, [row])
+    assert.equal(r.status, 200, await r.text())
+    const t = (await transactions(owner.c, a.id)).items.find(x => x.description === 'PIZZA PLACE')
+    assert.equal(t.category, 'dining', 'sorted by its words, not the category sent nor the bank\'s')
+    assert.equal(t.category_by, 'match')
+    // All or none: a row the account already has fails the lot.
+    assert.equal((await send(owner.c, [{ ...row, external_id: 'csv:new' }, row])).status, 400)
+    assert.equal((await transactions(owner.c, a.id)).items.filter(x => x.description === 'PIZZA PLACE').length, 1)
+  })
+
   test('undo removes what that import added, and only that', async () => {
     const { c } = await ready()
     const a = await account(c)

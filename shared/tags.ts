@@ -5,7 +5,7 @@
  * (`transactions.tags`, a list of words, or null), and the owner and, on a
  * shared account, the household's members may change them, like its note.
  *
- * Built for the hooks too (scripts/gen-hooks.mjs): pb_hooks/tags.pb.js
+ * Built for the hooks too (scripts/gen-hooks.mjs): pb_hooks/glue/transaction_guards.js
  * checks every record-API write with checkTags(). Pure: no Intl or DOM.
  */
 

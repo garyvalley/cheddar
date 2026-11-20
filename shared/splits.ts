@@ -13,7 +13,7 @@ import { parseAmount } from './transactions.ts'
  * later (a bank sync, a tip that posts, an edit to one added by hand), what's
  * left over still counts in the transaction's own category, so every total
  * still adds up to the money that moved, and the page says the split needs
- * fixing (leftOver()). pb_hooks/splits.pb.js checks every record-API write
+ * fixing (leftOver()). pb_hooks/glue/transaction_guards.js checks every record-API write
  * of them with checkStored(), from pb_hooks/lib/gen/splits.js: this file,
  * built for the hooks by scripts/gen-hooks.mjs.
  */
@@ -107,7 +107,7 @@ export function checkSplit(input: unknown, amount_cents: number, usable: (id: st
 }
 
 /**
- * A stored `splits` value as the record API is given it (pb_hooks/splits.pb.js):
+ * A stored `splits` value as the record API is given it (pb_hooks/glue/transaction_guards.js):
  * the parts to store, null when it isn't split, or a problem. However it was
  * written, a stored split is two to MAX_PARTS parts, each in a category of
  * its own the person may use, each going the same way as the transaction,

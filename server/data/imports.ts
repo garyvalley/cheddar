@@ -69,7 +69,12 @@ export function externalIds(rows: StatementRow[]): string[] {
   })
 }
 
-const BATCH = 200 // migrations/0003: the batch API's maxRequests
+/**
+ * Rows a request to PocketBase's POST /api/imports/:id/rows
+ * (pb_hooks/imports.pb.js): each request is one database transaction, so a
+ * big file holds the database a second or so at a time.
+ */
+const CHUNK = 500
 
 /**
  * Adds a statement's rows to an account, skipping each one it already has:
@@ -126,28 +131,21 @@ export async function importRows(
     last_date: range?.last ?? '',
   })
   try {
-    for (let i = 0; i < fresh.length; i += BATCH) {
-      const batch = s.createBatch()
-      for (const { row, id } of fresh.slice(i, i + BATCH)) {
-        batch.collection('transactions').create({
-          owner,
-          account,
-          import: record.id,
-          source: 'import',
-          external_id: id,
-          posted: row.posted,
-          amount_cents: row.amount_cents,
-          description: row.description,
-          // Another app's export (shared/app-exports.ts) brings its own;
-          // its category goes as bank_category, which the hooks keep only
-          // for a Cheddar id on an import (pb_hooks/categories.pb.js).
-          ...(row.payee ? { payee: row.payee } : {}),
-          ...(row.note ? { note: row.note } : {}),
-          ...(row.tags?.length ? { tags: row.tags } : {}),
-          ...(row.category ? { bank_category: `cheddar:${row.category}` } : {}),
-        })
-      }
-      await batch.send()
+    for (let i = 0; i < fresh.length; i += CHUNK) {
+      const rows = fresh.slice(i, i + CHUNK).map(({ row, id }) => ({
+        external_id: id,
+        posted: row.posted,
+        amount_cents: row.amount_cents,
+        description: row.description,
+        // Another app's export (shared/app-exports.ts) brings its own;
+        // its category goes as bank_category, which the hooks keep only
+        // as a Cheddar id (pb_hooks/glue/imports.js).
+        ...(row.payee ? { payee: row.payee } : {}),
+        ...(row.note ? { note: row.note } : {}),
+        ...(row.tags?.length ? { tags: row.tags } : {}),
+        ...(row.category ? { bank_category: `cheddar:${row.category}` } : {}),
+      }))
+      await s.send(`/api/imports/${record.id}/rows`, { method: 'POST', body: { rows } })
     }
   }
   catch (error) {
