@@ -7,7 +7,7 @@ type Body = AccountChange & { balance: unknown, yearly_change: unknown }
 
 /**
  * PATCH /api/accounts/:id { balance?, name?, kind?, institution?, last4?,
- * closed_on?, excluded?, yearly_change? }: any of them, alone or together.
+ * closed_on?, excluded?, yearly_change?, paid_in_full? }: any of them, alone or together.
  *
  * - `balance`: what an account no bank link keeps up to date holds today
  *   ("1,234.56"; for a card or loan, what's owed).
@@ -19,12 +19,15 @@ type Body = AccountChange & { balance: unknown, yearly_change: unknown }
  * - `excluded`: true leaves it out of every page's numbers.
  * - `yearly_change`: for property, the percent its value changes a year
  *   ("3", "-15", "" for none); pb_hooks/property.pb.js moves it on daily.
+ * - `paid_in_full`: for a credit card, 'yes' when it's paid in full each
+ *   month (Projections leaves it out of paying off debt), 'no' when it
+ *   isn't, '' to let Cheddar tell from its payments.
  */
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
   const s = sessionFor(event)
   const id = recordId(getRouterParam(event, 'id'), 'No such account')
-  const body = await readFields<Body>(event, ['balance', 'name', 'kind', 'institution', 'last4', 'closed_on', 'excluded', 'yearly_change'])
+  const body = await readFields<Body>(event, ['balance', 'name', 'kind', 'institution', 'last4', 'closed_on', 'excluded', 'yearly_change', 'paid_in_full'])
   const account = await attempt(() => getAccount(s, id), 'No such account')
   const today = await attempt(() => todayFor(s))
   const checked = checkAccountChange(body, account, today)

@@ -3,7 +3,8 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { debtPlan, debts, invested, monthsAfter, payoff, project, savings } from '../shared/projections.ts'
+import { debtPlan, debts, invested, monthsAfter, paysInFull, payoff, project, savings } from '../shared/projections.ts'
+import { checkAccountChange } from '../shared/accounts.ts'
 
 const acct = (id, kind, balance_cents, balance_date = '2026-11-09') => ({ id, name: id, kind, balance_cents, balance_date })
 const month = (m, income_cents, spent_cents) => ({ month: m, label: m, income_cents, spent_cents })
@@ -33,7 +34,7 @@ describe('debts', () => {
       { account: 'chk', posted: '2026-10-03', amount_cents: -50000 },
     ]
     const [d] = debts([acct('visa', 'credit_card', -300000), acct('chk', 'checking', 100)], rows, [], months)
-    assert.deepEqual(d, { id: 'visa', name: 'visa', kind: 'credit_card', owed_cents: 300000, paydown_cents: 40000, basis: 'transactions', pace_since: '2026-09' })
+    assert.deepEqual(d, { id: 'visa', name: 'visa', kind: 'credit_card', owed_cents: 300000, paydown_cents: 40000, basis: 'transactions', pace_since: '2026-09', paid_in_full: false, paid_in_full_source: 'inferred' })
   })
 
   test('without transactions, are paced by balances at least four weeks apart', () => {
@@ -49,20 +50,77 @@ describe('debts', () => {
     assert.equal(debts([acct('car', 'loan', -1000000)], [], history.slice(1), months)[0].paydown_cents, null)
   })
 
+  test('a loan is never paid in full; a card is when the person says so, or when its payments show it', () => {
+    const rows = ['2026-08', '2026-09', '2026-10'].flatMap(m => [
+      { account: 'visa', posted: `${m}-04`, amount_cents: -80000, description: 'GROCERIES' },
+      { account: 'visa', posted: `${m}-20`, amount_cents: 80000, description: 'PAYMENT THANK YOU' },
+    ])
+    const [loan] = debts([acct('car', 'loan', -100000)], rows, [], months)
+    assert.deepEqual([loan.paid_in_full, loan.paid_in_full_source], [null, null])
+    const [seen] = debts([acct('visa', 'credit_card', -90000)], rows, [], months)
+    assert.deepEqual([seen.paid_in_full, seen.paid_in_full_source], [true, 'inferred'])
+    const [no] = debts([{ ...acct('visa', 'credit_card', -90000), paid_in_full: 'no' }], rows, [], months)
+    assert.deepEqual([no.paid_in_full, no.paid_in_full_source], [false, 'entered'])
+    const [yes] = debts([{ ...acct('visa', 'credit_card', -900000), paid_in_full: 'yes' }], [], [], months)
+    assert.deepEqual([yes.paid_in_full, yes.paid_in_full_source], [true, 'entered'])
+  })
+
   test('leave out what owes nothing, and come biggest first', () => {
     const list = debts([acct('a', 'credit_card', 0), acct('b', 'loan', -100), acct('c', 'loan', -900), acct('d', 'loan', null, '')], [], [], ['2026-10'])
     assert.deepEqual(list.map(d => d.id), ['c', 'b'])
   })
 })
 
+describe('paid in full each month', () => {
+  const months = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']
+  const monthly = (list, charge = -50000, payment = 50000) => list.flatMap(m => [
+    { posted: `${m}-03`, amount_cents: charge, description: 'COFFEE' },
+    { posted: `${m}-25`, amount_cents: payment, description: 'AUTOPAY' },
+  ])
+
+  test('when payments cover the charges and it owes about a statement', () => {
+    assert.equal(paysInFull(60000, monthly(months), months), true)
+    // Up to two months' charges: a statement waiting to be paid, and this month's.
+    assert.equal(paysInFull(100000, monthly(months), months), true)
+  })
+
+  test('not when it carries a balance, pays less than it charges, or is charged interest', () => {
+    assert.equal(paysInFull(400000, monthly(months), months), false)
+    assert.equal(paysInFull(60000, monthly(months, -50000, 30000), months), false)
+    const interest = [...monthly(months), { posted: '2026-10-28', amount_cents: -1200, description: 'INTEREST CHARGE ON PURCHASES' }]
+    assert.equal(paysInFull(60000, interest, months), false)
+  })
+
+  test('needs a few months to tell, and a charge to go by', () => {
+    assert.equal(paysInFull(60000, monthly(['2026-09', '2026-10']), months), false)
+    assert.equal(paysInFull(60000, monthly(months, 0, 50000).filter(r => r.amount_cents), months), false)
+    assert.equal(paysInFull(60000, [], months), false)
+  })
+
+  test('is only a card\'s, and leaves a card that stops being one', () => {
+    const card = { name: 'Visa', kind: 'credit_card', institution: '', last4: '' }
+    assert.deepEqual(checkAccountChange({ paid_in_full: 'yes' }, card, '2026-11-20'), { ok: { paid_in_full: 'yes' } })
+    assert.deepEqual(checkAccountChange({ paid_in_full: '' }, card, '2026-11-20'), { ok: { paid_in_full: '' } })
+    assert.match(checkAccountChange({ paid_in_full: true }, card, '2026-11-20').problem, /yes, no/)
+    assert.match(checkAccountChange({ paid_in_full: 'yes' }, { ...card, kind: 'loan' }, '2026-11-20').problem, /credit card/)
+    assert.equal(checkAccountChange({ kind: 'loan' }, card, '2026-11-20').ok.paid_in_full, '')
+    assert.equal(checkAccountChange({ kind: 'credit_card' }, { ...card, kind: 'other' }, '2026-11-20').ok.paid_in_full, undefined)
+  })
+})
+
 describe('a debt\'s plan', () => {
-  const debt = (paydown_cents, owed_cents = 120000) => ({ id: 'v', name: 'Visa', kind: 'credit_card', owed_cents, paydown_cents, basis: paydown_cents === null ? null : 'transactions', pace_since: '' })
+  const debt = (paydown_cents, owed_cents = 120000) => ({ id: 'v', name: 'Visa', kind: 'credit_card', owed_cents, paydown_cents, basis: paydown_cents === null ? null : 'transactions', pace_since: '', paid_in_full: false, paid_in_full_source: 'inferred' })
   const none = { payment_cents: null, apr: null }
   const today = '2026-11-15'
 
   test('uses the inferred pace and says so, leaving interest out when no APR is entered', () => {
     const p = debtPlan(debt(40000), none, today)
     assert.deepEqual([p.status, p.payment_cents, p.payment_source, p.apr, p.when, p.payoff.interest_cents], ['estimate', 40000, 'inferred', null, '2027-02', 0])
+  })
+
+  test('has nothing to pay off for a card paid in full each month, whatever was entered', () => {
+    const p = debtPlan({ ...debt(-5000), paid_in_full: true }, { payment_cents: 20000, apr: 0.24 }, today)
+    assert.deepEqual([p.status, p.payoff, p.when], ['in_full', null, ''])
   })
 
   test('an entered payment and APR win, and recalculate the date and the interest', () => {

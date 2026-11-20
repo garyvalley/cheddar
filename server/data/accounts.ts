@@ -25,6 +25,7 @@ export const toAccount = (r: RecordModel, person: string): Account => ({
   shared: r.owner !== person,
   shared_with_household: !!r.shared_household,
   yearly_change_bp: r.yearly_change_bp ?? 0,
+  paid_in_full: r.paid_in_full ?? '',
 })
 
 export async function listAccounts(

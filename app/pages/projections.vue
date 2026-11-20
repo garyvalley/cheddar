@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatCents } from '~~/shared/accounts'
+import { formatCents, type PaidInFull } from '~~/shared/accounts'
 import { debtPlan, MAX_PAYOFF_MONTHS, project, STRATEGIES, strategyPlan, WITHDRAWAL_RATE, type Debt, type Projections } from '~~/shared/projections'
 
 // Projections only read what the accounts hold (set up in Settings): the
@@ -7,7 +7,7 @@ import { debtPlan, MAX_PAYOFF_MONTHS, project, STRATEGIES, strategyPlan, WITHDRA
 // each card and loan is being paid down. The assumptions are the person's to
 // change, and this browser remembers them.
 
-const { data: pj, error } = await useFetch<Projections>('/api/projections')
+const { data: pj, error, refresh } = await useFetch<Projections>('/api/projections')
 const today = useToday()
 
 const signed = (cents: number) => (cents > 0 ? `+${formatCents(cents)}` : formatCents(cents))
@@ -59,9 +59,12 @@ const plans = computed(() => (pj.value?.debts ?? []).map((d) => {
   const mine = saved.debts[d.id] ?? {}
   return { d, ...debtPlan(d, { payment_cents: parseDollars(mine.payment), apr: parsePercent(mine.apr) }, today) }
 }))
+// A card paid in full each month has nothing to pay off: it's listed on its own and counts in none of the dates.
+const toPay = computed(() => plans.value.filter(p => p.status !== 'in_full'))
+const inFull = computed(() => plans.value.filter(p => p.status === 'in_full'))
 const dated = (p: { status: string }) => p.status === 'estimate' || p.status === 'paid'
 const debtFree = computed(() => {
-  const all = plans.value
+  const all = toPay.value
   if (!all.length || !all.every(dated)) return null
   return all.reduce((m, p) => (p.when > m ? p.when : m), '')
 })
@@ -79,7 +82,7 @@ function paceFrom(d: Debt) {
 // Every debt together (issue #112): an extra amount a month to one debt at a time, avalanche against snowball.
 const extra = computed(() => parseDollars(saved.extra) ?? 0)
 const extraBad = computed(() => saved.extra.trim() !== '' && parseDollars(saved.extra) === null)
-const owing = computed(() => plans.value.filter(p => p.status !== 'paid'))
+const owing = computed(() => toPay.value.filter(p => p.status !== 'paid'))
 const strategies = computed(() => {
   const list = owing.value.map(p => ({ id: p.d.id, name: p.d.name, owed_cents: p.d.owed_cents, payment_cents: p.payment_cents, apr: p.apr }))
   const base = strategyPlan(list, 0, 'avalanche', today)
@@ -89,6 +92,15 @@ const sameOrder = computed(() => {
   const [a, b] = strategies.value.plans
   return !!a && !!b && a.order.map(d => d.id).join() === b.order.map(d => d.id).join()
 })
+// Whether a card is paid in full each month is the person's word on the account (PATCH /api/accounts/:id), or Cheddar's from its payments.
+const inFullAction = useAction()
+const savingInFull = ref('')
+async function setInFull(d: Debt, value: PaidInFull) {
+  savingInFull.value = d.id
+  const ok = await inFullAction.run(() => $fetch(`/api/accounts/${d.id}`, { method: 'PATCH', body: { paid_in_full: value } }))
+  if (ok) await refresh()
+  savingInFull.value = ''
+}
 const cheaper = computed(() => {
   const [a, b] = strategies.value.plans
   if (!a || !b || a.months === null || b.months === null) return null
@@ -154,18 +166,22 @@ const cheaper = computed(() => {
         <section class="group" aria-labelledby="debt-title">
           <h2 id="debt-title" class="group-title">Paying off debt</h2>
           <div v-if="plans.length" class="card">
-            <div class="card-pad hero">
+            <div v-if="!toPay.length" class="card-pad hero">
+              <p class="large-title" data-test="debt-free">Nothing to pay off</p>
+              <p class="footnote">You pay {{ inFull.length === 1 ? 'your card' : 'your cards' }} in full each month, so there's no debt to wait out.</p>
+            </div>
+            <div v-else class="card-pad hero">
               <p v-if="debtFree" class="num large-title" data-test="debt-free">{{ monthName(debtFree, true) }}</p>
               <p v-else class="num large-title loss" data-test="debt-free">Not yet</p>
               <p class="footnote">
-                <template v-if="debtFree">is when you'd be debt free at these payments, from {{ formatCents(plans.reduce((s, p) => s + p.d.owed_cents, 0)) }} owed today. An estimate.</template>
+                <template v-if="debtFree">is when you'd be debt free at these payments, from {{ formatCents(toPay.reduce((s, p) => s + p.d.owed_cents, 0)) }} owed today. An estimate.</template>
                 <template v-else>Not every debt below has a payoff date at its payment. Each says why.</template>
               </p>
               <p v-if="noRate.length" class="footnote warn-text" data-test="no-apr">
                 Interest isn't included for {{ names(noRate) }}: no APR entered, so {{ noRate.length === 1 ? 'its date is' : 'their dates are' }} sooner than it would really be. Enter the APR below.
               </p>
             </div>
-            <div v-for="p in plans" :key="p.d.id" class="debt" :data-test="`debt-${p.d.name}`">
+            <div v-for="p in toPay" :key="p.d.id" class="debt" :data-test="`debt-${p.d.name}`">
               <div class="row">
                 <span class="row-label">
                   <span class="block headline">{{ p.d.name }}</span>
@@ -208,10 +224,46 @@ const cheaper = computed(() => {
                   </span>
                 </label>
               </div>
+              <div v-if="p.d.paid_in_full !== null" class="in-full">
+                <label class="check">
+                  <input type="checkbox" :checked="false" :disabled="savingInFull === p.d.id" data-test="paid-in-full" @change="setInFull(p.d, 'yes')">
+                  <span>I pay it in full each month</span>
+                </label>
+                <span class="footnote source">
+                  Then it has nothing to pay off, and it's left out of the dates here.
+                  <template v-if="p.d.paid_in_full_source === 'entered'"><button class="link" type="button" @click="setInFull(p.d, '')">Let Cheddar tell from its payments</button></template>
+                </span>
+              </div>
             </div>
+            <div v-if="inFull.length" class="in-full-list" data-test="in-full">
+              <h3 class="headline card-pad sub-head">Paid in full each month</h3>
+              <div v-for="p in inFull" :key="p.d.id" class="debt" :data-test="`in-full-${p.d.name}`">
+                <div class="row">
+                  <span class="row-label">
+                    <span class="block headline">{{ p.d.name }}</span>
+                    <span class="footnote block">
+                      Nothing to pay off: only the latest statement is owed.
+                      <template v-if="p.d.paid_in_full_source === 'inferred'">Cheddar can tell from its payments: they cover what's charged, with no interest.</template>
+                    </span>
+                  </span>
+                  <span class="row-value"><span class="num block loss">{{ formatCents(-p.d.owed_cents) }}</span></span>
+                </div>
+                <div class="in-full">
+                  <label class="check">
+                    <input type="checkbox" :checked="true" :disabled="savingInFull === p.d.id" data-test="paid-in-full" @change="setInFull(p.d, 'no')">
+                    <span>I pay it in full each month</span>
+                  </label>
+                  <span class="footnote source">
+                    Untick it to see when it'd be paid off.
+                    <template v-if="p.d.paid_in_full_source === 'entered'"><button class="link" type="button" @click="setInFull(p.d, '')">Let Cheddar tell from its payments</button></template>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p v-if="inFullAction.error.value" class="card-pad notice notice-error" role="alert">{{ inFullAction.error.value }}</p>
             <p class="footnote card-pad note">
               Estimates, not promises: they assume the same payment every month, no new charges, and the APR above.
-              Past {{ MAX_PAYOFF_MONTHS / 12 }} years counts as never. This browser remembers what you enter.
+              Past {{ MAX_PAYOFF_MONTHS / 12 }} years counts as never. This browser remembers what you enter; whether a card is paid in full stays with the card (Settings can change it too).
             </p>
           </div>
           <div v-if="owing.length > 1" class="card strategies" data-test="strategies">
@@ -404,4 +456,9 @@ const cheaper = computed(() => {
 .warn-text { color: var(--warning); font-weight: 600; }
 .note { border-top: 0.5px solid var(--separator); color: var(--text-2); margin: 0; }
 @media (max-width: 30rem) { .debt-fields { grid-template-columns: 1fr; } }
+.in-full { display: flex; flex-direction: column; gap: 0.125rem; padding: 0 1rem 0.875rem; }
+.check { display: flex; gap: 0.625rem; align-items: center; min-height: 2.75rem; }
+.check input { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); }
+.in-full-list { border-top: var(--border); }
+.sub-head { margin: 0; padding-bottom: 0; }
 </style>

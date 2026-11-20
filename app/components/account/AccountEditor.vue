@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ACCOUNT_KINDS, isLiability, type Account, type AccountKind } from '~~/shared/accounts'
+import { ACCOUNT_KINDS, canPayInFull, isLiability, type Account, type AccountKind, type PaidInFull } from '~~/shared/accounts'
 import { changesOnItsOwn } from '~~/shared/property'
 
 // Everything a person can change about an account, linked or not: what it's
 // called and what kind it is, whether it's closed, and whether Cheddar counts it.
 // PATCH /api/accounts/:id takes the lot.
 const props = defineProps<{
-  account: Pick<Account, 'id' | 'name' | 'kind' | 'institution' | 'last4' | 'closed_on' | 'excluded' | 'linked' | 'yearly_change_bp'>
+  account: Pick<Account, 'id' | 'name' | 'kind' | 'institution' | 'last4' | 'closed_on' | 'excluded' | 'linked' | 'yearly_change_bp' | 'paid_in_full'>
 }>()
 const emit = defineEmits<{ done: [saved: boolean] }>()
 
@@ -21,7 +21,9 @@ const form = reactive({
   closed: !!a.closed_on,
   closedOn: a.closed_on || today,
   yearlyChange: a.yearly_change_bp ? String(a.yearly_change_bp / 100) : '',
+  paidInFull: (a.paid_in_full ?? '') as PaidInFull,
 })
+const card = computed(() => canPayInFull(form.kind))
 const grows = computed(() => !a.linked && changesOnItsOwn(form.kind))
 const action = useAction()
 
@@ -39,6 +41,7 @@ async function save() {
       excluded: !form.counted,
       closed_on: form.closed ? form.closedOn : '',
       ...(grows.value ? { yearly_change: form.yearlyChange } : {}),
+      ...(card.value ? { paid_in_full: form.paidInFull } : {}),
     },
   }))
   if (ok) emit('done', true)
@@ -62,6 +65,15 @@ async function save() {
       <span class="field-label">How much its value changes a year (optional)</span>
       <span class="pct"><input v-model="form.yearlyChange" class="input num" inputmode="decimal" placeholder="0" aria-describedby="yearly-help"><span aria-hidden="true">%</span></span>
       <span id="yearly-help" class="footnote block hint">3 for a home gaining 3% a year, -15 for a car losing 15%. Cheddar moves its value on each day, so it doesn't go out of date; a new value you type starts it again from there.</span>
+    </label>
+    <label v-if="card" class="field">
+      <span class="field-label">Paid in full each month?</span>
+      <select v-model="form.paidInFull" class="select" aria-describedby="in-full-help">
+        <option value="">Let Cheddar tell from its payments</option>
+        <option value="yes">Yes, every statement</option>
+        <option value="no">No, I'm paying it down</option>
+      </select>
+      <span id="in-full-help" class="footnote block hint">A card paid in full has nothing to pay off, so Projections leaves it out of paying off debt.</span>
     </label>
     <label class="field">
       <span class="field-label">Bank or card issuer (optional)</span>
