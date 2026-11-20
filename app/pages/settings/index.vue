@@ -25,8 +25,9 @@ const allOpen = computed(() => all.every(id => open.value.includes(id)))
       <SettingsRules />
     </SettingsCategory>
 
-    <SettingsCategory id="alerts" title="Alerts" sub="What Cheddar emails you about: big charges, low balances, bills, budgets, banks">
+    <SettingsCategory id="alerts" title="Alerts" sub="What Cheddar emails you about, and what the bell at the top lists">
       <SettingsAlerts />
+      <SettingsBell />
     </SettingsCategory>
 
     <SettingsCategory id="you" title="Profile and household" sub="Your name, state and filing status, and who you share with">

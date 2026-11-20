@@ -221,9 +221,16 @@ tunnel, repository secrets) and day-to-day operations.
   current balances of your own accounts with planned income and expenses and
   detected regular charges over 30, 60 or 90 days. Forecasts are estimates:
   Cheddar never schedules or makes payments. Goals and forecasts do not change
-  account balances or net worth. Overview's **Coming up this week** lists
+  account balances or net worth. Spending's **Coming up this week** lists
   the next seven days of it, and warns when a subscription's latest charge
   cost more than before.
+- **The bell** in the top bar lists what changed or needs you: a bank that
+  needs signing in again or stopped syncing, a low balance (the amount in your
+  email alerts), a budget passed, bills due in the next 3 days, a price rise,
+  a household invitation, new transactions since you last looked, an
+  out-of-date typed-in balance and a goal reached. Its badge counts the ones
+  you haven't seen; opening it marks them seen. Turn kinds off in Settings →
+  Alerts. Nothing is stored but which ones you've seen.
 - **Get alerts by email** (Settings → Alerts): a charge over an amount you
   pick, a checking or savings balance under one, bills and planned payments
   due in the next 3 days, a budget passed this month, a bank that needs you

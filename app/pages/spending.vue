@@ -416,6 +416,9 @@ async function confirmDelete() {
         </div>
 
         <div>
+          <!-- The next week's bills and planned money, and price rises (shared/upcoming.ts). -->
+          <SpendingUpcoming />
+
           <section v-if="count" class="group" aria-label="Every transaction">
             <div class="card">
               <NuxtLink :to="{ query: { ...route.query, category: 'all', page: undefined } }" class="row cat">

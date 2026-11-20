@@ -84,9 +84,6 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
     <!-- Set-up steps left, out-of-date balances, categories over budget. -->
     <OverviewSetup :accounts="list.accounts" :over-budget="ov?.over_budget ?? []" />
 
-    <!-- The next week's bills and planned money, and price rises (shared/upcoming.ts). -->
-    <OverviewUpcoming />
-
     <p v-if="error" class="notice notice-error group" role="alert">{{ errorMessage(error) }}</p>
 
     <div class="dash">

@@ -1,4 +1,4 @@
-// Overview's "Coming up" (GET /api/upcoming): the next week's usual charges
+// Spending's "Coming up" (GET /api/upcoming): the next week's usual charges
 // and planned items, and a subscription whose price just went up; the
 // caller's own only.
 
