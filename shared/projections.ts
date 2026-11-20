@@ -6,7 +6,7 @@
  * loan is paid off at the pace it's being paid down. Pure, so the unit tests,
  * the server and the page use the same sums.
  */
-import { isLiability } from './accounts.ts'
+import { canPayInFull, isLiability, type PaidInFull } from './accounts.ts'
 import { isInvestment, type BalancePoint, type Holding, type Month } from './overview.ts'
 
 /** How many whole months, before this one, the savings rate and debt pace are taken from. */
@@ -52,6 +52,55 @@ export interface Debt {
    * measured from; '' with no pace.
    */
   pace_since: string
+  /**
+   * A credit card paid in full each month: it owes only the latest
+   * statement, so there's no payoff to wait for and Projections leaves it
+   * out of paying off debt. Null for a loan.
+   */
+  paid_in_full: boolean | null
+  /**
+   * Whose that is: the person's, set on the account ('entered'), or
+   * Cheddar's from the card's payments ('inferred', paysInFull()); null for
+   * a loan.
+   */
+  paid_in_full_source: 'entered' | 'inferred' | null
+}
+
+/** A debt as debts() takes it: an account, with the person's word on paying it in full when it's a card. */
+export type DebtAccount = Holding & { paid_in_full?: PaidInFull }
+
+/** At least this many months of a card's transactions before Cheddar says it's paid in full. */
+export const IN_FULL_MONTHS = 3
+
+/**
+ * Whether a card's transactions look paid in full each month: over at least
+ * IN_FULL_MONTHS months, its payments covered (nearly) all its charges, it
+ * was charged no interest, and it owes no more than two months' charges now
+ * (a statement waiting to be paid, and this month's so far). A card carrying
+ * a balance owes more than that and is charged interest on it.
+ * `rows` are the card's own, in `months` ("YYYY-MM", oldest first).
+ */
+export function paysInFull(
+  owed_cents: number,
+  rows: { posted: string, amount_cents: number, description?: string }[],
+  months: string[],
+): boolean {
+  if (!rows.length) return false
+  const first = rows.reduce((m, r) => (r.posted.slice(0, 7) < m ? r.posted.slice(0, 7) : m), months.at(-1)!)
+  const span = months.length - months.indexOf(first)
+  if (span < IN_FULL_MONTHS) return false
+  let charged = 0
+  let paid = 0
+  for (const r of rows) {
+    if (r.amount_cents < 0) {
+      if (/\binterest\b/i.test(r.description ?? '')) return false
+      charged -= r.amount_cents
+    }
+    else paid += r.amount_cents
+  }
+  if (charged <= 0) return false
+  // A month's lag either end (last month's statement isn't due yet) is why it's nearly all.
+  return paid >= charged * 0.9 && owed_cents <= 2 * (charged / span)
 }
 
 const DAY = 86_400_000
@@ -60,6 +109,8 @@ const MONTH_DAYS = 365.25 / 12
 
 /**
  * Each card and loan that owes something, and how fast it's being paid down.
+ * A card says whether it's paid in full each month (the person's word,
+ * else paysInFull()).
  * The pace is the account's transactions over the whole months given
  * (`months`, "YYYY-MM", oldest first), counted from the first of them it has
  * any in: every payment in and charge out moves what's owed. An account
@@ -68,16 +119,21 @@ const MONTH_DAYS = 365.25 / 12
  * four weeks back.
  */
 export function debts(
-  accounts: Holding[],
-  rows: { account: string, posted: string, amount_cents: number }[],
+  accounts: DebtAccount[],
+  rows: { account: string, posted: string, amount_cents: number, description?: string }[],
   history: BalancePoint[],
   months: string[],
 ): Debt[] {
   const out: Debt[] = []
   for (const a of accounts) {
     if (!isLiability(a.kind) || a.balance_cents === null || a.balance_cents >= 0) continue
-    const debt: Debt = { id: a.id, name: a.name, kind: a.kind, owed_cents: -a.balance_cents, paydown_cents: null, basis: null, pace_since: '' }
+    const debt: Debt = { id: a.id, name: a.name, kind: a.kind, owed_cents: -a.balance_cents, paydown_cents: null, basis: null, pace_since: '', paid_in_full: null, paid_in_full_source: null }
     const mine = rows.filter(r => r.account === a.id && months.includes(r.posted.slice(0, 7)))
+    if (canPayInFull(a.kind)) {
+      const said = a.paid_in_full === 'yes' || a.paid_in_full === 'no'
+      debt.paid_in_full = said ? a.paid_in_full === 'yes' : paysInFull(debt.owed_cents, mine, months)
+      debt.paid_in_full_source = said ? 'entered' : 'inferred'
+    }
     if (mine.length) {
       const first = mine.reduce((m, r) => (r.posted.slice(0, 7) < m ? r.posted.slice(0, 7) : m), months.at(-1)!)
       const span = months.length - months.indexOf(first)
@@ -151,12 +207,13 @@ export interface DebtPlan {
   /** The rate the estimate charges; null when nobody entered one, so interest is left out. */
   apr: number | null
   /**
+   * in_full: a card paid in full each month, so nothing to pay off.
    * paid: nothing owed. estimate: a payoff date, with `apr` or (null) none.
    * no_pace: no payment to go by. not_shrinking: the balance isn't coming
    * down lately. outpaced: the payment doesn't outrun the interest (or
    * would take past MAX_PAYOFF_MONTHS).
    */
-  status: 'paid' | 'estimate' | 'no_pace' | 'not_shrinking' | 'outpaced'
+  status: 'in_full' | 'paid' | 'estimate' | 'no_pace' | 'not_shrinking' | 'outpaced'
   payoff: Payoff | null
   /** The payoff month, "YYYY-MM", or ''. */
   when: string
@@ -166,7 +223,8 @@ export interface DebtPlan {
  * A debt's payoff estimate, with what it rests on: the payment (the
  * person's, else the pace Cheddar measured) and the APR (only the person's:
  * without one, interest is left out and the page says so). No date when
- * there's no payment to go by or the balance isn't coming down.
+ * there's no payment to go by or the balance isn't coming down, and none
+ * for a card paid in full each month, which has nothing to pay off.
  */
 export function debtPlan(d: Debt, input: DebtInput, today: string): DebtPlan {
   const entered = input.payment_cents !== null && input.payment_cents > 0
@@ -175,6 +233,7 @@ export function debtPlan(d: Debt, input: DebtInput, today: string): DebtPlan {
   const payment_source = entered ? 'entered' : inferred ? 'inferred' : null
   const apr = input.apr
   const base = { payment_cents, payment_source, apr, payoff: null, when: '' } as const
+  if (d.paid_in_full) return { ...base, status: 'in_full' }
   if (d.owed_cents <= 0) return { ...base, status: 'paid', payoff: { months: 0, interest_cents: 0 }, when: monthsAfter(today, 0) }
   if (!payment_source) return { ...base, status: d.paydown_cents === null ? 'no_pace' : 'not_shrinking' }
   const p = payoff(d.owed_cents, payment_cents, apr ?? 0)

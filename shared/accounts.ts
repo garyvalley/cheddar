@@ -45,7 +45,15 @@ export interface Account {
   shared_with_household?: boolean
   /** A property's value change a year, in basis points (shared/property.ts); 0 for none. */
   yearly_change_bp?: number
+  /** A credit card: whether the person said it's paid in full each month (shared/projections.ts); '' lets Cheddar tell. */
+  paid_in_full?: PaidInFull
 }
+
+/** The person's word on a card being paid in full each month: yes, no, or '' to let Cheddar tell from its payments. */
+export type PaidInFull = '' | 'yes' | 'no'
+
+/** Only a credit card can be paid in full each month; a loan is paid down. */
+export const canPayInFull = (kind: string) => kind === 'credit_card'
 
 export interface NewAccount {
   name: string
@@ -125,6 +133,7 @@ export interface AccountChange extends Partial<NewAccount> {
   closed_on?: string
   excluded?: boolean
   yearly_change_bp?: number
+  paid_in_full?: PaidInFull
 }
 
 const isDay = (v: string) =>
@@ -168,6 +177,15 @@ export function checkAccountChange(
     out.yearly_change_bp = rate.ok
   }
   else if (out.kind && changesOnItsOwn(current.kind) && !changesOnItsOwn(kind)) out.yearly_change_bp = 0
+  // So does paying in full to a card: one that stops being a card drops it.
+  if (input.paid_in_full !== undefined) {
+    if (input.paid_in_full !== '' && input.paid_in_full !== 'yes' && input.paid_in_full !== 'no')
+      return { problem: 'Say yes, no, or \'\' to let Cheddar tell whether it\'s paid in full each month.' }
+    if (input.paid_in_full && !canPayInFull(kind))
+      return { problem: 'Only a credit card is paid in full each month.' }
+    out.paid_in_full = input.paid_in_full
+  }
+  else if (out.kind && canPayInFull(current.kind) && !canPayInFull(kind)) out.paid_in_full = ''
   if (input.closed_on !== undefined) {
     const day
       = typeof input.closed_on === 'string' ? input.closed_on.trim() : null

@@ -81,7 +81,7 @@ const asOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString(
 // A typed-in balance past its kind's age (shared/accounts.ts) is marked, as Overview counts it.
 const stale = (a: Account) => isStale(a, today)
 
-const detail = (a: Account) => [kindLabel(a.kind), a.institution, linkOf.value.has(a.id) && 'Linked', a.last4 && `••${a.last4}`, yearlyChangeWords(a.yearly_change_bp ?? 0), a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' · ')
+const detail = (a: Account) => [kindLabel(a.kind), a.institution, linkOf.value.has(a.id) && 'Linked', a.last4 && `••${a.last4}`, yearlyChangeWords(a.yearly_change_bp ?? 0), a.paid_in_full === 'yes' && 'Paid in full monthly', a.closed_on && `Closed ${closedDay(a.closed_on)}`].filter(Boolean).join(' · ')
 </script>
 
 <template>

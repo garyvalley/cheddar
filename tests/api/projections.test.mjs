@@ -54,6 +54,28 @@ describe('projections', () => {
     assert.deepEqual(p.debts.map(d => [d.name, d.owed_cents, d.paydown_cents, d.basis]), [['Visa', 120000, 40000, 'transactions']])
   })
 
+  test('leave out a card the person pays in full each month, and only a card can be', async () => {
+    const { c } = await ready()
+    const card = await account(c, { name: 'Visa', kind: 'credit_card' })
+    await c.call('PATCH', `/api/accounts/${card.id}`, { balance: '1200' })
+    const visa = async () => (await c.call('GET', '/api/projections')).json.debts.find(d => d.id === card.id)
+    const before = await visa()
+    assert.deepEqual([before.paid_in_full, before.paid_in_full_source], [false, 'inferred'])
+    const r = await c.call('PATCH', `/api/accounts/${card.id}`, { paid_in_full: 'yes' })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    assert.equal(r.json.account.paid_in_full, 'yes')
+    const d = await visa()
+    assert.deepEqual([d.owed_cents, d.paid_in_full, d.paid_in_full_source], [120000, true, 'entered'])
+    assert.equal((await c.call('PATCH', `/api/accounts/${card.id}`, { paid_in_full: 'maybe' })).status, 400)
+    assert.equal((await c.call('PATCH', `/api/accounts/${card.id}`, { paid_in_full: '' })).json.account.paid_in_full, '')
+    assert.equal((await visa()).paid_in_full_source, 'inferred')
+    const loan = await account(c, { name: 'Car', kind: 'loan' })
+    assert.equal((await c.call('PATCH', `/api/accounts/${loan.id}`, { paid_in_full: 'yes' })).status, 400)
+    // A card that becomes a loan drops it.
+    await c.call('PATCH', `/api/accounts/${card.id}`, { paid_in_full: 'yes' })
+    assert.equal((await c.call('PATCH', `/api/accounts/${card.id}`, { kind: 'loan' })).json.account.paid_in_full, '')
+  })
+
   test('are each person\'s own', async () => {
     const owner = await ready()
     const other = await ready()
