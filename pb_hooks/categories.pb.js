@@ -19,55 +19,13 @@
 // A person's own categories count as spending, and their rules work just as
 // the built-in ones' do.
 //
-// Only these hooks write a transaction's category, so no client can mark one
+// Only the hooks write a transaction's category, so no client can mark one
 // as chosen by hand and no rule is ever overwritten unseen. Rules live in
 // `category_rules`, which only the hooks read (migrations/0006_categories.mjs).
 // ---------------------------------------------------------------------------
 
-onRecordCreateRequest((e) => {
-  if (!e.hasSuperuserAuth()) {
-    // An import from another app (Mint, Monarch, YNAB: shared/app-exports.ts)
-    // may say which of Cheddar's built-in categories it was in, as
-    // "cheddar:<id>"; it's read as a bank's category is, so the person's
-    // own rules still come first.
-    var from = e.record.getString("bank_category");
-    var keep =
-      e.record.getString("source") === "import" &&
-      /^cheddar:[a-z]{2,20}$/.test(from);
-    ["category", "category_by", "merchant_key", "bank_category"].forEach(
-      function (f) {
-        e.record.set(f, "");
-      },
-    );
-    if (keep) e.record.set("bank_category", from);
-  }
-  e.next();
-}, "transactions");
-
-onRecordUpdateRequest((e) => {
-  if (!e.hasSuperuserAuth()) {
-    var original = e.record.original();
-    var fields = ["category", "category_by", "merchant_key", "bank_category"];
-    fields.forEach(function (f) {
-      e.record.set(f, original.getString(f));
-    });
-  }
-  e.next();
-}, "transactions");
-
-onRecordCreate((e) => {
-  require(`${__hooks}/glue/categories.js`).sort(e.app, e.record, true);
-  e.next();
-}, "transactions");
-
-onRecordUpdate((e) => {
-  // glue/links.js check() saves each new row again only to mark it tried:
-  // sorting it twice was a third of a big import's time.
-  var categories = require(`${__hooks}/glue/categories.js`);
-  if (!categories.onlyMarkedTried(e.record))
-    categories.sort(e.app, e.record, false);
-  e.next();
-}, "transactions");
+// What the record API may write, and the sort on every save, are
+// transactions.pb.js's (glue/transaction_guards.js, glue/categories.js sort()).
 
 routerAdd(
   "POST",

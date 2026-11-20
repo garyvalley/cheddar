@@ -79,6 +79,29 @@ describe('links', () => {
     assert.notEqual(alone.category_by, 'link')
   })
 
+  test('an imported statement\'s rows are matched as they\'re written, within the file too', async () => {
+    const { c } = await ready()
+    const checking = await account(c, 'Everyday')
+    const card = await account(c, 'Card', 'credit_card')
+    const out = await add(c, checking, daysAgo(5), '-250.00', 'CARD PAYMENT')
+    const csv = 'Date,Description,Amount\n'
+      + `${daysAgo(4)},PAYMENT RECEIVED,250.00\n`
+      + `${daysAgo(30)},GARDEN SUPPLY CO,-80.00\n`
+      + `${daysAgo(10)},GARDEN SUPPLY CO,30.00\n`
+    const r = await c.call('POST', '/api/imports', { account: card.id, filename: 'card.csv', text: csv })
+    assert.equal(r.status, 201, JSON.stringify(r.json))
+    const rows = (await c.call('GET', `/api/transactions?account=${card.id}`)).json.items
+    const paid = rows.find(t => t.amount_cents === 25000)
+    assert.deepEqual(paid.link, { kind: 'transfer', other: { posted: daysAgo(5), account: checking.id } })
+    assert.equal(paid.category, 'transfer')
+    assert.equal((await byId(c, out.id)).link.kind, 'transfer', 'linked back')
+    const buy = rows.find(t => t.amount_cents === -8000)
+    const back = rows.find(t => t.amount_cents === 3000)
+    assert.equal(back.link.kind, 'refund')
+    assert.equal(back.category, buy.category)
+    assert.equal(buy.link.kind, 'refund')
+  })
+
   test('the record API can\'t write a match, and only the owner unlinks', async () => {
     const { c } = await ready()
     const { c: stranger } = await ready()

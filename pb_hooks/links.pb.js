@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // Matching transfers and refunds (glue/links.js, shared/links.ts). Only
-// these hooks write `link`, `link_kind`, `link_checked` and `link_off`: the
+// the hooks write `link`, `link_kind`, `link_checked` and `link_off`: the
 // record API's writes to them are dropped.
 //
 //   POST /api/transactions/{id}/unlink -> { unlinked }
@@ -10,32 +10,8 @@
 //     neither is matched again.
 // ---------------------------------------------------------------------------
 
-onRecordCreateRequest((e) => {
-  if (!e.hasSuperuserAuth())
-    ["link", "link_kind", "link_checked", "link_off"].forEach(function (f) {
-      e.record.set(f, f === "link_checked" || f === "link_off" ? false : "");
-    });
-  e.next();
-}, "transactions");
-
-onRecordUpdateRequest((e) => {
-  if (!e.hasSuperuserAuth()) {
-    var original = e.record.original();
-    ["link", "link_kind", "link_checked", "link_off"].forEach(function (f) {
-      e.record.set(f, original.get(f));
-    });
-  }
-  e.next();
-}, "transactions");
-
-onRecordAfterCreateSuccess((e) => {
-  try {
-    require(`${__hooks}/glue/links.js`).check(e.app, e.record);
-  } catch (err) {
-    console.log("[links] couldn't match " + e.record.id + ": " + err);
-  }
-  e.next();
-}, "transactions");
+// What the record API may write, and the try as each row is created, are
+// transactions.pb.js's (glue/transaction_guards.js, glue/links.js matchNew()).
 
 onRecordAfterDeleteSuccess((e) => {
   try {

@@ -2,8 +2,9 @@
 
 // ---------------------------------------------------------------------------
 // Matching transfers and refunds (pb_hooks/links.pb.js, shared/links.ts).
-// A transaction is tried once as it's created, and the backfill tries the
-// ones saved before this ran. A match links both rows to each other and
+// A transaction is tried once as it's created (matchNew(), from
+// pb_hooks/transactions.pb.js), and the backfill tries the ones saved before
+// this ran (check()). A match links both rows to each other and
 // saves them, which sorts them again (glue/categories.js sort(): a transfer
 // as Transfers, a refund into its purchase's category). Required inside a
 // handler body, not at file scope (glue/bank_links.js says why).
@@ -90,7 +91,31 @@ function pick(list, id) {
 }
 
 /**
- * Tries to match `rec` (saved already), and marks it tried. Answers
+ * A new row, sorted but not yet written (pb_hooks/transactions.pb.js): tried
+ * against the rows already there, and marked tried. A match is set on it,
+ * and it's sorted again by its kind; answers the matched row, to be linked
+ * back by linkBack() once the new one has its id, or null.
+ */
+function matchNew(app, rec) {
+  var match = partnerOf(app, rec);
+  rec.set("link_checked", true);
+  if (!match) return null;
+  rec.set("link", match.rec.id);
+  rec.set("link_kind", match.kind);
+  return match;
+}
+
+/** The row matchNew() found, linked back to the new one, now written. */
+function linkBack(app, rec, match) {
+  match.rec.set("link", rec.id);
+  match.rec.set("link_kind", match.kind);
+  match.rec.set("link_checked", true);
+  app.save(match.rec);
+}
+
+/**
+ * Tries to match `rec` (saved already), and marks it tried: the backfill's
+ * way, for rows saved before matching existed. Answers
  * whether it was linked.
  */
 function check(app, rec) {
@@ -166,6 +191,8 @@ function refundCategory(app, rec) {
 }
 
 module.exports = {
+  matchNew: matchNew,
+  linkBack: linkBack,
   check: check,
   unlink: unlink,
   released: released,

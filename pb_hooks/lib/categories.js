@@ -133,15 +133,36 @@ function plain(text) {
   return String(text || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim()
 }
 
-/** What a description says it is, or "". */
+// The phrases by their first word, so a description's words each look up
+// only the phrases that could start there: the hooks' JS runs every phrase
+// against every word of a few thousand rows slowly. A first word ending in *
+// goes under its first letter, the rest under the whole word: [category's
+// place in WORDS, phrase].
+var STARTS = {}
+var STARRED = {}
+PHRASES.forEach(function (p, i) {
+  p[1].forEach(function (phrase) {
+    var first = phrase[0]
+    var star = first.charAt(first.length - 1) === "*"
+    var index = star ? STARRED : STARTS
+    var key = star ? "_" + first.charAt(0) : "_" + first
+    ;(index[key] = index[key] || []).push([i, phrase])
+  })
+})
+
+/** What a description says it is, or "": the category earliest in WORDS whose phrase appears in it. */
 function fromWords(text) {
   var t = plain(text)
   if (!t) return ""
   var words = t.split(" ")
-  for (var i = 0; i < PHRASES.length; i++) {
-    for (var k = 0; k < PHRASES[i][1].length; k++) if (hasPhrase(words, PHRASES[i][1][k])) return PHRASES[i][0]
+  var best = PHRASES.length
+  for (var w = 0; w < words.length; w++) {
+    var found = (STARTS["_" + words[w]] || []).concat(STARRED["_" + words[w].charAt(0)] || [])
+    for (var k = 0; k < found.length; k++) {
+      if (found[k][0] < best && hasPhrase(words.slice(w, w + found[k][1].length), found[k][1])) best = found[k][0]
+    }
   }
-  return ""
+  return best < PHRASES.length ? PHRASES[best][0] : ""
 }
 
 // Card processors and bank wording in front of the merchant's own name.

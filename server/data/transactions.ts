@@ -297,7 +297,7 @@ export async function editTransaction(
       tags,
     }).filter(([, v]) => v !== undefined),
   )
-  // An empty list undoes a split (pb_hooks/splits.pb.js checks the parts).
+  // An empty list undoes a split (pb_hooks/glue/transaction_guards.js checks the parts).
   if (change.splits) body.splits = change.splits.length ? change.splits : null
   return toTransaction(
     await s.collection('transactions').update(id, body),
