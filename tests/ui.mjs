@@ -189,7 +189,7 @@ try {
   await page.getByText('1 transaction for “farmers”, any date').waitFor()
   await page.getByRole('button', { name: /^Change Farmers market/ }).click()
   await page.getByLabel('Note (optional)').fill('Paid cash')
-  await page.getByLabel('Leave out of spending, Overview, Projections and Taxes').check()
+  await page.getByLabel('Leave out of spending, Overview, Trends and Taxes').check()
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await page.getByRole('status').filter({ hasText: 'Farmers market is left out of spending and taxes now.' }).waitFor()
   await page.getByText('Left out', { exact: true }).waitFor()

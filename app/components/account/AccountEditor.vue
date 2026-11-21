@@ -73,7 +73,7 @@ async function save() {
         <option value="yes">Yes, every statement</option>
         <option value="no">No, I'm paying it down</option>
       </select>
-      <span id="in-full-help" class="footnote block hint">A card paid in full has nothing to pay off, so Projections leaves it out of paying off debt.</span>
+      <span id="in-full-help" class="footnote block hint">A card paid in full has nothing to pay off, so Trends leaves it out of paying off debt.</span>
     </label>
     <label class="field">
       <span class="field-label">Bank or card issuer (optional)</span>
@@ -99,7 +99,7 @@ async function save() {
     <div class="field">
       <label class="check">
         <input v-model="form.counted" type="checkbox">
-        <span>Count it in Overview, Spending, Projections and Taxes</span>
+        <span>Count it in Overview, Spending, Trends and Taxes</span>
       </label>
       <span class="footnote block">
         Untick it for an account that isn't yours to count, such as a joint account.

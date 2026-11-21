@@ -26,7 +26,7 @@ const compact = compactCents
     <div class="panel-head">
       <h2 id="flow-title" class="panel-title">Income and spending</h2>
       <span class="head-tools">
-        <NuxtLink to="/reports" class="panel-link">Trends</NuxtLink>
+        <NuxtLink to="/trends" class="panel-link">Trends</NuxtLink>
         <template v-if="hasMonths && shown">
           <label class="visually-hidden" for="month-pick">Month</label>
           <select id="month-pick" class="select month-pick" :value="shown.month" @change="selected = ($event.target as HTMLSelectElement).value">

@@ -157,7 +157,7 @@ const todayLabel = computed(() => new Date(`${today}T12:00:00Z`).toLocaleDateStr
         <section class="card tile kept-area" aria-labelledby="kept-title">
           <div class="tile-head">
             <h2 id="kept-title" class="tile-label">Savings rate</h2>
-            <NuxtLink to="/projections" class="panel-link">Projections</NuxtLink>
+            <NuxtLink to="/trends?view=projections" class="panel-link">Projections</NuxtLink>
           </div>
           <template v-if="kept">
             <p class="num tile-value" :class="moneyTone(kept.cents)" data-test="kept">{{ Math.round(kept.rate * 100) }}%</p>

@@ -249,7 +249,7 @@ watch(() => props.items, () => {
           </div>
           <label class="check">
             <input v-model="form.excluded" type="checkbox">
-            <span>Leave out of spending, Overview, Projections and Taxes</span>
+            <span>Leave out of spending, Overview, Trends and Taxes</span>
           </label>
           <p class="footnote">
             <template v-if="t.shared">Shared by {{ t.owner_name || 'another household member' }}<template v-if="t.owner_name">, in their account</template>. You can change its name, note, tags, or whether it counts.</template>

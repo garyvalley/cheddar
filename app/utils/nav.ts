@@ -4,6 +4,6 @@ export const NAV = [
   { to: '/spending', label: 'Spending', icon: 'spending' },
   { to: '/investments', label: 'Investments', icon: 'investments' },
   { to: '/goals', label: 'Goals', icon: 'goals' },
-  { to: '/projections', label: 'Projections', icon: 'projections' },
+  { to: '/trends', label: 'Trends', icon: 'trends' },
   { to: '/taxes', label: 'Taxes', icon: 'taxes' },
 ] as const
