@@ -3,17 +3,17 @@ import { formatCents, kindLabel, type AccountKind } from '~~/shared/accounts'
 import type { BankLinks } from '~~/shared/bank-links'
 import type { Portfolio } from '~~/shared/holdings'
 import type { Investments } from '~~/shared/investments'
-import type { Activity } from '~~/shared/investing'
+import type { InvestmentsReport } from '~~/shared/investment-history'
 import { GROWTH_PERIODS, type GrowthPeriodId } from '~~/shared/overview'
 
 // The brokerage and retirement accounts on their own: what they hold, how
-// they grew, and their value month by month. Read only: they're linked in
+// they grew, and how they changed month by month or quarter by quarter. Read only: they're linked in
 // Settings and added or edited there too.
 const [
   { data, error },
   { data: links },
 ] = await Promise.all([
-  useFetch<Investments & { holdings: Portfolio & { on: boolean }, activity: { rows: Activity[], income_12m_cents: number } }>('/api/investments'),
+  useFetch<InvestmentsReport>('/api/investments'),
   useFetch<BankLinks>('/api/bank-links', { key: 'bank-links', default: () => ({ enabled: false, links: [] }) }),
 ])
 
@@ -30,19 +30,7 @@ const signed = (cents: number) => (cents > 0 ? `+${formatCents(cents)}` : format
 const percent = (rate: number) => `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(rate * 100).toFixed(Math.abs(rate) < 0.1 ? 2 : 1)}%`
 const detail = (a: Investments['accounts'][number]) => [kindLabel(a.kind as AccountKind), a.institution, a.last4 && `••${a.last4}`, a.closed_on && `Closed ${day(a.closed_on)}`].filter(Boolean).join(' · ')
 
-// Value at each month's end, as bars on one scale from $0.
-const months = computed(() => data.value?.months ?? [])
-const valued = computed(() => months.value.filter(m => m.value_cents !== null).length)
-function niceCeiling(cents: number) {
-  if (cents <= 0) return 100_00
-  const p = 10 ** Math.floor(Math.log10(cents))
-  return ([1, 2, 2.5, 5, 10].find(s => s * p >= cents) ?? 10) * p
-}
-const top = computed(() => niceCeiling(Math.max(...months.value.map(m => m.value_cents ?? 0), 0)))
-const height = (cents: number | null) => `${Math.max(0, Math.min(100, ((cents ?? 0) / top.value) * 100))}%`
-const compact = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100)
-const picked = ref('')
-const shown = computed(() => months.value.find(m => m.month === picked.value) ?? months.value.at(-1))
+const today = useToday()
 // Holdings (shared/holdings.ts): what each account holds and the allocation across them.
 const hold = computed(() => data.value?.holdings)
 const showHoldings = computed(() => !!hold.value && (hold.value.on || hold.value.allocation.length > 0))
@@ -63,7 +51,6 @@ const GAP: Record<string, string> = {
 const accountName = (id: string) => accounts.value.find(a => a.id === id)?.name ?? ''
 // A position's change over the last 30 days, from its value on the first day Cheddar kept in them.
 const changeOf = (p: Portfolio['accounts'][string]['positions'][number]) => (p.change ? p.value_cents - p.change.from_cents : null)
-const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 </script>
 
 <template>
@@ -123,43 +110,7 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
         </section>
       </div>
 
-      <section class="card panel" aria-labelledby="history-title">
-        <div class="panel-head">
-          <h2 id="history-title" class="panel-title">Value by month</h2>
-          <span v-if="shown" class="footnote" aria-live="polite">
-            {{ monthName(shown.month) }}: <span class="num">{{ shown.value_cents === null ? '—' : formatCents(shown.value_cents) }}</span>
-          </span>
-        </div>
-        <div class="card-pad">
-          <div class="chart" aria-hidden="true">
-            <div class="axis">
-              <span>{{ compact(top) }}</span>
-              <span>{{ compact(top / 2) }}</span>
-              <span>$0</span>
-            </div>
-            <div class="plot">
-              <div class="grid"><i /><i /><i /></div>
-              <button
-                v-for="m in months" :key="m.month" class="month" :class="{ on: shown?.month === m.month }" tabindex="-1"
-                @click="picked = m.month" @mouseenter="picked = m.month"
-              >
-                <span class="bars"><span v-if="m.value_cents !== null" class="bar" :style="{ height: height(m.value_cents) }" /></span>
-                <span class="tick-label">{{ m.label.slice(0, 1) }}<span class="wide">{{ m.label.slice(1) }}</span></span>
-              </button>
-            </div>
-          </div>
-          <p v-if="valued < 2" class="footnote chart-note">Each month fills in as Cheddar sees your balances. Linked accounts add one every day.</p>
-          <div class="visually-hidden">
-            <table>
-              <caption>Value of your investment accounts at each month's end</caption>
-              <thead><tr><th>Month</th><th>Value</th></tr></thead>
-              <tbody>
-                <tr v-for="m in months" :key="m.month"><td>{{ monthName(m.month) }}</td><td>{{ m.value_cents === null ? 'No balance yet' : formatCents(m.value_cents) }}</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+      <InvestmentsTimeline v-if="data.timeline?.month.length" :timeline="data.timeline" :holdings-on="showHoldings" />
 
       <section v-if="showHoldings && hold" class="card panel" aria-labelledby="alloc-title">
         <div class="panel-head">
@@ -231,12 +182,13 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
           </li>
         </ul>
       </section>
+      <InvestmentsOptions v-if="data.options?.length" :options="data.options" :account-name="accountName" :today="today" />
       <InvestmentsActivity v-if="showHoldings && data.activity" :rows="data.activity.rows" :income12m="data.activity.income_12m_cents" :account-name="accountName" />
 
       <p class="group-footer">
         Growth is the change in each account's balance less money moved in or out, so deposits don't count as gains; it isn't the return on what's held.
         Values are each account's balance as its bank reports it.
-        <template v-if="showHoldings">Holdings, allocation and activity are as each bank last reported them, through Plaid, on the date shown; a holding's 30-day change includes anything bought or sold. They show what's held, not what to hold.</template>
+        <template v-if="showHoldings">Holdings, allocation and activity are as each bank last reported them, through Plaid, on the date shown; a holding's 30-day change includes anything bought or sold. Over time's market gain or loss is each period's change in value less money moved in or out, so it includes dividends; values reach back only as far as Cheddar has seen them. They show what's held, not what to hold.</template>
         <template v-else>Holdings aren't switched on for this Cheddar, so each account shows its balance only.</template>
       </p>
     </template>
@@ -254,29 +206,6 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
 .tile-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
 .tile-pick { width: auto; min-height: 1.75rem; padding: 0.125rem 0.5rem; font-size: 0.8125rem; }
 .panel { margin-bottom: 1.5rem; }
-
-/* Value is one series, in the theme's accent: green and red mean gain and loss only. */
-.chart { display: flex; gap: 0.5rem; height: 12rem; }
-.axis {
-  display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 1.375rem;
-  font-size: 0.6875rem; color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums;
-}
-.axis span { line-height: 0; }
-.plot { position: relative; flex: 1; display: flex; min-width: 0; }
-.grid { position: absolute; inset: 0 0 1.375rem; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
-.grid i { border-top: var(--border); }
-.grid i:last-child { border-top-color: var(--text-3); }
-.month {
-  position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch;
-  border: 0; background: none; padding: 0; font: inherit; cursor: pointer; color: var(--text-3);
-}
-.month.on { color: var(--text); }
-.month.on .bars { background: var(--surface-2); }
-.bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; border-radius: 4px 4px 0 0; padding: 0 2px; }
-.bar { width: min(1.25rem, 60%); border-radius: 3px 3px 0 0; background: var(--accent); }
-.tick-label { height: 1.375rem; display: flex; align-items: center; justify-content: center; font-size: 0.6875rem; }
-.month.on .tick-label { font-weight: 600; }
-.chart-note { margin: 0.75rem 0 0; }
 
 .list { list-style: none; margin: 0; padding: 0; }
 .positions { padding: 0 1.25rem 0.75rem; }
@@ -306,7 +235,6 @@ const monthName = (month: string) => new Date(`${month}-15T00:00:00Z`).toLocaleD
   .tiles > :first-child { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
-  .wide { display: none; }
   .tile { padding: 0.875rem 1rem 1rem; }
   .tile-value { font-size: 1.5rem; }
 }

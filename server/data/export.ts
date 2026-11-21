@@ -142,6 +142,7 @@ export async function exportData(
       price_cents: a.price_cents || null,
       amount_cents: a.amount_cents ?? 0,
       fees_cents: a.fees_cents || null,
+      security_type: a.security_type ?? '',
     })),
     cashflow_items: cashflowItems,
     categories,

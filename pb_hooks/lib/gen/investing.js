@@ -22,7 +22,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // shared/investing.ts
 var investing_exports = {};
 __export(investing_exports, {
+  ACTIVITY_KINDS: () => ACTIVITY_KINDS,
   ACTIVITY_LABELS: () => ACTIVITY_LABELS,
+  ACTIVITY_READING: () => ACTIVITY_READING,
   FIRST_DAYS: () => FIRST_DAYS,
   OVERLAP_DAYS: () => OVERLAP_DAYS,
   activityFrom: () => activityFrom,
@@ -32,8 +34,10 @@ __export(investing_exports, {
   securityKey: () => securityKey
 });
 module.exports = __toCommonJS(investing_exports);
+var ACTIVITY_READING = 2;
 var FIRST_DAYS = 730;
 var OVERLAP_DAYS = 30;
+var ACTIVITY_KINDS = ["buy", "sell", "dividend", "interest", "deposit", "withdrawal", "fee", "exercise", "assignment", "expire", "other"];
 var ACTIVITY_LABELS = {
   buy: "Bought",
   sell: "Sold",
@@ -42,6 +46,9 @@ var ACTIVITY_LABELS = {
   deposit: "Deposit",
   withdrawal: "Withdrawal",
   fee: "Fee",
+  exercise: "Exercised",
+  assignment: "Assigned",
+  expire: "Expired",
   other: "Other"
 };
 function shift(ymd, n) {
@@ -67,9 +74,9 @@ function dayRows(positions) {
   }
   return [...by.values()];
 }
-function activityFrom(newest, today) {
+function activityFrom(newest, today, stale = false) {
   const first = shift(today, -FIRST_DAYS);
-  if (!/^\d{4}-\d{2}-\d{2}/.test(newest)) return first;
+  if (stale || !/^\d{4}-\d{2}-\d{2}/.test(newest)) return first;
   const from = shift(newest.slice(0, 10), -OVERLAP_DAYS);
   if (from < first) return first;
   return from > today ? today : from;

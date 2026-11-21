@@ -249,8 +249,12 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
         { investment_transaction_id: `div-${ira}`, account_id: ira, security_id: 'vti', date: daysAgo(10), name: 'VTI DIVIDEND', quantity: 0, amount: -31.5, type: 'cash', subtype: 'qualified dividend', iso_currency_code: 'USD' },
         { investment_transaction_id: `sell-${ira}`, account_id: ira, security_id: 'bnd', date: daysAgo(5), name: 'SELL BND', quantity: -5, price: 80, amount: -400, type: 'sell', subtype: 'sell', iso_currency_code: 'USD' },
         { investment_transaction_id: `old-${ira}`, account_id: ira, security_id: 'vti', date: daysAgo(800), name: 'BUY VTI', quantity: 1, price: 100, amount: 100, type: 'buy', subtype: 'buy', iso_currency_code: 'USD' },
+        // A call bought for $250 that expired.
+        { investment_transaction_id: `opt-${ira}`, account_id: ira, security_id: 'call', date: daysAgo(30), name: 'BUY CALL', quantity: 1, price: 2.5, amount: 250, type: 'buy', subtype: 'buy', iso_currency_code: 'USD' },
+        { investment_transaction_id: `exp-${ira}`, account_id: ira, security_id: 'call', date: daysAgo(3), name: 'CALL EXPIRED', quantity: -1, amount: 0, type: 'transfer', subtype: 'expire', iso_currency_code: 'USD' },
       ],
     }
+    bank.activity.securities = [...bank.activity.securities, { security_id: 'call', name: 'VTI Jan 15 2027 400 Call', ticker_symbol: 'VTI270115C00400000', type: 'derivative' }]
     const tokens = mock.linkTokens.length
     const { link: l } = await link(c, bank)
     assert.deepEqual(mock.linkTokens.slice(tokens).map(b => b.optional_products), [['investments']])
@@ -268,8 +272,22 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.deepEqual(inv.holdings.allocation.map(a => [a.label, a.value_cents]), [['ETFs', 600000], ['Bonds', 400000], ['Cash', 12003]])
     assert.equal(inv.holdings.covered_cents, 1012003)
     // Activity, newest first and kept apart from spending; the first day kept has no change yet.
-    assert.deepEqual(inv.activity.rows.map(a => [a.kind, a.ticker, a.amount_cents]), [['sell', 'BND', 40000], ['dividend', 'VTI', 3150], ['buy', 'VTI', -500000]])
+    assert.deepEqual(inv.activity.rows.map(a => [a.kind, a.ticker, a.amount_cents]), [
+      ['expire', 'VTI270115C00400000', 0], ['sell', 'BND', 40000], ['dividend', 'VTI', 3150], ['buy', 'VTI270115C00400000', -25000], ['buy', 'VTI', -500000],
+    ])
     assert.equal(inv.activity.income_12m_cents, 3150)
+    // Over time: twelve months and eight quarters, the one running now holding what's held today.
+    assert.deepEqual([inv.timeline.month.length, inv.timeline.quarter.length], [12, 8])
+    const thisMonth = inv.timeline.month.at(-1)
+    assert.deepEqual(thisMonth.holdings.filter(h => !h.option && h.quantity).map(h => [h.ticker, h.quantity, h.value_cents]), [['VTI', 20, 600000], ['BND', 50, 400000]])
+    // Shares worked back before the buy 40 days ago: no VTI three months back.
+    assert.equal(inv.timeline.month.at(-4).holdings.find(h => h.ticker === 'VTI')?.quantity ?? 0, 0)
+    // The expired call: $250 out, nothing back.
+    assert.deepEqual(inv.options.map(o => [o.ticker, o.status, o.result_cents]), [['VTI270115C00400000', 'expired', -25000]])
+    // Each row keeps how it was read, so a later change can read them again.
+    const kept = (await pb('GET', `/api/collections/investment_activity/records?perPage=50&filter=${encodeURIComponent(`external_id ~ '${ira}'`)}`, await superuser())).json.items
+    assert.deepEqual([...new Set(kept.map(r => r.reading))], [2])
+    assert.equal(kept.find(r => r.external_id === `opt-${ira}`).security_type, 'derivative')
     assert.equal(mine.positions[0].change, null)
     assert.equal((await c.call('GET', '/api/transactions?q=DIVIDEND')).json.total, 0)
     const days = (await pb('GET', '/api/collections/holding_history/records?perPage=50', asPb(c))).json.items
@@ -303,8 +321,18 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
     const after = (await c.call('GET', '/api/investments')).json
     assert.deepEqual(after.holdings.accounts[account.id].positions.map(p => p.ticker), ['VTI', 'CUR:USD'])
-    assert.deepEqual(bank.calls.slice(before).filter(x => x.path === '/investments/transactions/get').map(x => x.from)[0], daysAgo(35))
-    assert.equal(after.activity.rows.length, 3)
+    assert.deepEqual(bank.calls.slice(before).filter(x => x.path === '/investments/transactions/get').map(x => x.from)[0], daysAgo(33))
+    assert.equal(after.activity.rows.length, 5)
+
+    // A row read an older way: the next sync asks for the two years again.
+    const su = await superuser()
+    await pb('PATCH', `/api/collections/investment_activity/records/${kept[0].id}`, su, { reading: 1 })
+    const reread = bank.calls.length
+    await allowSync(l.id)
+    await c.call('POST', `/api/bank-links/${l.id}/sync`, {})
+    assert.equal(bank.calls.slice(reread).filter(x => x.path === '/investments/transactions/get').map(x => x.from)[0], daysAgo(730))
+    assert.equal((await pb('GET', `/api/collections/investment_activity/records/${kept[0].id}`, su)).json.reading, 2)
+    assert.equal((await c.call('GET', '/api/investments')).json.activity.rows.length, 5)
     const today = (await pb('GET', '/api/collections/holding_history/records?perPage=50', asPb(c))).json.items
     assert.deepEqual(today.map(d => d.security).sort(), ['cash', 'vti'])
 

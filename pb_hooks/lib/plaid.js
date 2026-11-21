@@ -356,18 +356,21 @@ function holdingRows(json) {
 }
 
 // /investments/transactions/get as Cheddar's kinds of investment activity:
-// a subtype says most (a dividend is type "cash"), then the type.
+// a subtype says most (a dividend is type "cash"), then the type. A
+// reinvestment buys shares with a dividend already counted on its own row,
+// so it's a buy; an option's exercise, assignment and expiry are their own.
 var ACTIVITY_SUBTYPES = {
   "dividend": "dividend", "qualified dividend": "dividend", "non-qualified dividend": "dividend",
-  "dividend reinvestment": "dividend", "long-term capital gain": "dividend", "short-term capital gain": "dividend",
-  "interest": "interest", "interest receivable": "interest", "interest reinvestment": "interest",
+  "dividend reinvestment": "buy", "long-term capital gain": "dividend", "short-term capital gain": "dividend",
+  "interest": "interest", "interest receivable": "interest", "interest reinvestment": "buy",
+  "exercise": "exercise", "assignment": "assignment", "expire": "expire",
   "contribution": "deposit", "deposit": "deposit", "transfer": "", "withdrawal": "withdrawal",
   "distribution": "withdrawal", "account fee": "fee", "management fee": "fee", "fund fee": "fee",
   "transfer fee": "fee", "trust fee": "fee", "margin expense": "fee", "tax": "fee", "tax withheld": "fee",
 }
 var ACTIVITY_TYPES = { buy: "buy", sell: "sell", fee: "fee", cash: "other", transfer: "other", cancel: "cancel" }
 
-/** What a piece of investment activity was: buy, sell, dividend, interest, deposit, withdrawal, fee, other or cancel. */
+/** What a piece of investment activity was: buy, sell, dividend, interest, deposit, withdrawal, fee, exercise, assignment, expire, other or cancel. */
 function activityKind(type, subtype, amountCents) {
   var t = String(type || "").toLowerCase()
   var sub = String(subtype || "").toLowerCase()
@@ -420,6 +423,7 @@ function activityRows(json) {
       price_cents: toCents(num(t.price)),
       amount_cents: cash,
       fees_cents: toCents(num(t.fees)),
+      security_type: SECURITY_TYPES.indexOf(String(sec.type || "").toLowerCase()) !== -1 ? String(sec.type).toLowerCase() : "",
     })
   })
   return rows
