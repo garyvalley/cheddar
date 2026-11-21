@@ -14,6 +14,7 @@ watch(grain, () => { picked.value = '' })
 const shown = computed(() => periods.value.find(p => p.id === picked.value) ?? periods.value.at(-1))
 const index = computed(() => (shown.value ? periods.value.indexOf(shown.value) : -1))
 const valued = computed(() => periods.value.filter(p => p.value_cents !== null).length)
+const anyEstimated = computed(() => periods.value.some(p => p.estimated))
 const step = (by: number) => {
   const next = periods.value[index.value + by]
   if (next) picked.value = next.id
@@ -69,7 +70,7 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
             v-for="p in periods" :key="p.id" class="period" :class="{ on: shown?.id === p.id }" tabindex="-1"
             @click="picked = p.id" @mouseenter="picked = p.id"
           >
-            <span class="bars"><span v-if="p.value_cents !== null" class="bar" :style="{ height: height(p.value_cents) }" /></span>
+            <span class="bars"><span v-if="p.value_cents !== null" class="bar" :class="{ est: p.estimated }" :style="{ height: height(p.value_cents) }" /></span>
             <span class="swing">
               <span v-if="p.gain_cents" class="move" :class="moneyTone(p.gain_cents)" :style="{ height: swingHeight(p.gain_cents) }" />
             </span>
@@ -77,8 +78,8 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
           </button>
         </div>
       </div>
-      <p class="footnote chart-key">Bars are the value at each {{ periodWord }}'s end; below them, what the market did (<span class="gain">up</span> or <span class="loss">down</span>), leaving out money moved in or out.</p>
-      <p v-if="valued < 2" class="footnote">Values fill in as Cheddar sees your balances, one a day for a linked account. Share counts reach back as far as your brokerage's activity.</p>
+      <p class="footnote chart-key">Bars are the value at each {{ periodWord }}'s end; below them, what the market did (<span class="gain">up</span> or <span class="loss">down</span>), leaving out money moved in or out.<template v-if="anyEstimated"> Paler bars are estimates, from before Cheddar kept your balances.</template></p>
+      <p v-if="valued < 2" class="footnote">Values fill in as Cheddar sees your balances, one a day for a linked account. Before that they're estimated from your brokerage's activity, as far back as it goes.</p>
 
       <div v-if="shown" class="picked" aria-live="polite" data-test="timeline-period">
         <div class="picked-head">
@@ -87,7 +88,10 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
           <button type="button" class="btn btn-plain step" :disabled="index >= periods.length - 1" aria-label="Later" @click="step(1)">›</button>
         </div>
         <dl class="figures">
-          <div><dt>Value at the end</dt><dd class="num">{{ shown.value_cents === null ? '—' : formatCents(shown.value_cents) }}</dd></div>
+          <div>
+            <dt>Value at the end</dt>
+            <dd class="num" data-test="period-value">{{ shown.value_cents === null ? '—' : `${shown.estimated ? '≈ ' : ''}${formatCents(shown.value_cents)}` }}<span v-if="shown.estimated" class="caption"> estimated</span></dd>
+          </div>
           <div>
             <dt>Market gain or loss</dt>
             <dd class="num" :class="shown.gain_cents === null ? 'muted' : moneyTone(shown.gain_cents)" data-test="period-gain">
@@ -127,7 +131,7 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
             </tbody>
           </table>
           <p v-if="shown.valued" class="footnote">A holding's change in value is the market's part, with this {{ periodWord }}'s buys and sales of it left out.</p>
-          <p v-if="!shown.valued" class="footnote">Cheddar hadn't kept each holding's value then: shares are worked back from what's held now and your brokerage's buys and sales since.</p>
+          <p v-if="!shown.valued" class="footnote">Cheddar hadn't kept each holding's value then: shares are worked back from what's held now and your brokerage's buys and sales since, and valued at each one's last trade price by then (or today's, for one not traded yet).</p>
         </template>
       </div>
 
@@ -139,7 +143,7 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
             <tbody>
               <tr v-for="p in [...periods].reverse()" :key="p.id">
                 <th scope="row"><button type="button" class="link-btn" @click="picked = p.id">{{ p.label }}</button></th>
-                <td class="r num">{{ p.value_cents === null ? '—' : formatCents(p.value_cents) }}</td>
+                <td class="r num">{{ p.value_cents === null ? '—' : `${p.estimated ? '≈ ' : ''}${formatCents(p.value_cents)}` }}</td>
                 <td class="r num" :class="p.gain_cents === null ? 'muted' : moneyTone(p.gain_cents)">{{ p.gain_cents === null ? '—' : signed(p.gain_cents) }}</td>
                 <td class="r num">{{ p.moved_in_cents ? signed(p.moved_in_cents) : '—' }}</td>
                 <td class="r num" :class="moneyTone(p.income_cents)">{{ p.income_cents ? signed(p.income_cents) : '—' }}</td>
@@ -175,6 +179,7 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
 .period.on .bars, .period.on .swing { background: var(--surface-2); }
 .bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; border-radius: 4px 4px 0 0; padding: 0 2px; }
 .bar { width: min(1.25rem, 60%); border-radius: 3px 3px 0 0; background: var(--accent); }
+.bar.est { opacity: 0.45; }
 .swing { position: relative; height: 4rem; border-bottom: var(--border); }
 .swing::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed var(--text-3); opacity: 0.6; }
 .move { position: absolute; left: 50%; transform: translateX(-50%); width: min(0.75rem, 45%); border-radius: 2px; }
