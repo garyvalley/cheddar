@@ -56,7 +56,7 @@ const stale = computed(() => props.accounts.filter(a => isStale(a, today)))
         <NuxtLink to="/settings#accounts" class="row step">
           <span class="row-label">
             <span class="step-label">{{ stale.length === 1 ? '1 balance is out of date' : `${stale.length} balances are out of date` }}</span>
-            <span class="footnote">{{ stale.map(a => a.name).join(', ') }}: net worth, growth and Projections use {{ stale.length === 1 ? 'it' : 'them' }}. Bring {{ stale.length === 1 ? 'it' : 'them' }} up to date in Settings.</span>
+            <span class="footnote">{{ stale.map(a => a.name).join(', ') }}: net worth, growth and Trends use {{ stale.length === 1 ? 'it' : 'them' }}. Bring {{ stale.length === 1 ? 'it' : 'them' }} up to date in Settings.</span>
           </span>
           <AppIcon name="chevron" class="chev" />
         </NuxtLink>

@@ -47,7 +47,7 @@ const { operatorName: name } = useRuntimeConfig().public
     <section class="card card-pad">
       <h2 class="headline">Cookies and your browser</h2>
       <p class="footnote">
-        Cheddar sets only the cookies that keep you signed in. Your Projections assumptions are kept in your browser, not on the
+        Cheddar sets only the cookies that keep you signed in. Your assumptions on Trends' Projections are kept in your browser, not on the
         server. There are no tracking or advertising cookies, so there's nothing to opt out of.
       </p>
     </section>

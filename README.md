@@ -109,7 +109,7 @@ tunnel, repository secrets) and day-to-day operations.
   - In Safari, tap Share, then Add to Home Screen.
   - In Chrome on Android, tap ⋮, then Install app.
 - **Set up your accounts** (Settings → Accounts and banks). It's the only
-  place accounts are added; Overview, Spending, Investments, Projections and
+  place accounts are added; Overview, Spending, Investments, Trends and
   Taxes have no setup of their own, and are worked out from what these
   accounts hold. Settings' categories open and close on their headings, and
   all start closed.
@@ -178,7 +178,7 @@ tunnel, repository secrets) and day-to-day operations.
     does not pause automatic categorization.
   - **Add one by hand** (cash, or one a statement missed) to an account that
     isn't linked. Open any transaction to give it a name of your own, add a
-    note, or **leave it out** of spending, Overview, Projections and Taxes
+    note, or **leave it out** of spending, Overview, Trends and Taxes
     (a reimbursed work expense) while it stays listed. One added by hand can
     be changed entirely or deleted.
   - Every transaction is sorted into a category on its own: by your rule for
@@ -212,10 +212,12 @@ tunnel, repository secrets) and day-to-day operations.
     pick "Not a match" if Cheddar got it wrong.
   - **Download CSV** saves the transactions for the period, account and
     category you're looking at as a spreadsheet, tags included.
-- **Reports** (linked from Spending and Overview's chart) show trends over
-  6 months to 5 years: income against spending month by month, any category
-  or merchant over time, where the income went (a money-flow chart), and a
-  year in review against the same months the year before.
+- **Trends** has two halves. History shows 6 months to 5 years: income
+  against spending month by month, any category or merchant over time, where
+  the income went (a money-flow chart), and a year in review against the same
+  months the year before. Projections shows your savings rate, your
+  investments grown on, and when each debt is paid off. Overview keeps a
+  12-month summary chart that links there.
 - **Plan ahead.** Goals (linked from Overview) track a target, an earmarked
   amount and an optional date. Cash flow (linked from Spending) combines the
   current balances of your own accounts with planned income and expenses and
@@ -243,7 +245,7 @@ tunnel, repository secrets) and day-to-day operations.
   access is granted. Household members can see selected accounts and their
   transactions, and edit transaction names, notes, tags and exclusions. Only the
   owner can manage accounts, balances, bank links, categories and merchant
-  rules. Unshared accounts, tax settings, Projections, cash-flow schedules and
+  rules. Unshared accounts, tax settings, Trends' projections, cash-flow schedules and
   personal exports remain private. Removing a member or unsharing an account
   revokes access immediately.
 - **Export your data** (Settings → Your data): a zip of `accounts.csv`,
