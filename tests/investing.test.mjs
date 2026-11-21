@@ -72,3 +72,28 @@ describe('investment activity', () => {
     assert.equal(incomeBetween([a('2025-11-18', 'dividend', 999), a('2025-11-19', 'dividend', 100), a('2026-06-01', 'interest', 5), a('2026-06-01', 'sell', 100000)], '2025-11-19', '2026-11-19'), 105)
   })
 })
+
+describe('reading options and reinvestments', () => {
+  test('an option\'s exercise, assignment and expiry are their own kinds, with the security\'s type', () => {
+    const rows = plaid.activityRows({
+      securities: [
+        { security_id: 'c', name: 'AAPL Dec 18 2026 200 Call', ticker_symbol: 'AAPL261218C00200000', type: 'derivative' },
+        { security_id: 'v', name: 'Vanguard Total Stock Market ETF', ticker_symbol: 'VTI', type: 'etf' },
+      ],
+      investment_transactions: [
+        { investment_transaction_id: 'e', account_id: 'a', security_id: 'c', date: '2026-11-01', quantity: -1, amount: 0, type: 'transfer', subtype: 'exercise' },
+        { investment_transaction_id: 'g', account_id: 'a', security_id: 'c', date: '2026-11-02', quantity: 1, amount: 0, type: 'transfer', subtype: 'assignment' },
+        { investment_transaction_id: 'x', account_id: 'a', security_id: 'c', date: '2026-11-03', quantity: -1, amount: 0, type: 'transfer', subtype: 'expire' },
+        // A reinvested dividend buys shares: the dividend itself is on its own row.
+        { investment_transaction_id: 'r', account_id: 'a', security_id: 'v', date: '2026-11-04', quantity: 0.1, amount: 30, type: 'buy', subtype: 'dividend reinvestment' },
+      ],
+    })
+    assert.deepEqual(rows.map(r => [r.id, r.kind, r.security_type, r.amount_cents]), [['e', 'exercise', 'derivative', 0], ['g', 'assignment', 'derivative', 0], ['x', 'expire', 'derivative', 0], ['r', 'buy', 'etf', -3000]])
+  })
+
+  test('activity read an older way is asked for again from two years back', () => {
+    assert.equal(activityFrom('2026-11-10', '2026-11-19', true), '2024-11-19')
+    assert.equal(gen.activityFrom('2026-11-10', '2026-11-19', true), '2024-11-19')
+    assert.equal(gen.ACTIVITY_READING, 2)
+  })
+})

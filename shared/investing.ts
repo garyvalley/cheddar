@@ -8,12 +8,22 @@
  * spending or income.
  */
 
+/**
+ * How activity is read (pb_hooks/lib/plaid.js activityRows): each row keeps
+ * the reading it was saved with, and a sync with older rows in the last
+ * FIRST_DAYS asks for all of them again. 2: options' exercise, assignment
+ * and expiry, reinvestments as buys, and the security's type.
+ */
+export const ACTIVITY_READING = 2
+
 /** How far back a link's first activity call reaches: Plaid keeps 24 months. */
 export const FIRST_DAYS = 730
 /** A later call starts this long before the newest activity kept, so late or corrected ones arrive. */
 export const OVERLAP_DAYS = 30
 
-export type ActivityKind = 'buy' | 'sell' | 'dividend' | 'interest' | 'deposit' | 'withdrawal' | 'fee' | 'other'
+export type ActivityKind = 'buy' | 'sell' | 'dividend' | 'interest' | 'deposit' | 'withdrawal' | 'fee' | 'exercise' | 'assignment' | 'expire' | 'other'
+
+export const ACTIVITY_KINDS: ActivityKind[] = ['buy', 'sell', 'dividend', 'interest', 'deposit', 'withdrawal', 'fee', 'exercise', 'assignment', 'expire', 'other']
 
 export const ACTIVITY_LABELS: Record<ActivityKind, string> = {
   buy: 'Bought',
@@ -23,6 +33,9 @@ export const ACTIVITY_LABELS: Record<ActivityKind, string> = {
   deposit: 'Deposit',
   withdrawal: 'Withdrawal',
   fee: 'Fee',
+  exercise: 'Exercised',
+  assignment: 'Assigned',
+  expire: 'Expired',
   other: 'Other',
 }
 
@@ -42,6 +55,8 @@ export interface Activity {
   /** The cash it moved into the account: a sale or a dividend is more, a buy less. */
   amount_cents: number
   fees_cents: number | null
+  /** The security's kind as the bank gives it ("derivative" for an option), or ''. */
+  security_type: string
 }
 
 /** One security's value on a day in an account (holding_history). */
@@ -88,11 +103,12 @@ export function dayRows(positions: PositionLike[]) {
 
 /**
  * The first day of activity to ask for: OVERLAP_DAYS before the newest kept
- * ('' with none), or FIRST_DAYS before `today`; never after today.
+ * ('' with none), or FIRST_DAYS before `today` when there's none or some was
+ * read an older way (`stale`); never after today.
  */
-export function activityFrom(newest: string, today: string): string {
+export function activityFrom(newest: string, today: string, stale = false): string {
   const first = shift(today, -FIRST_DAYS)
-  if (!/^\d{4}-\d{2}-\d{2}/.test(newest)) return first
+  if (stale || !/^\d{4}-\d{2}-\d{2}/.test(newest)) return first
   const from = shift(newest.slice(0, 10), -OVERLAP_DAYS)
   if (from < first) return first
   return from > today ? today : from

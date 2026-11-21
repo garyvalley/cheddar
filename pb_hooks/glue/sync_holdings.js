@@ -102,7 +102,8 @@ function keepDay(txApp, owner, account, today, positions) {
 /**
  * The investment accounts' buys, sells, dividends and the rest, kept in
  * `investment_activity`: from a month before the newest kept (two years
- * back the first time) to today, each added once by its id, or updated.
+ * back the first time, or when some was read an older way) to today, each
+ * added once by its id, or updated.
  */
 function syncActivity(app, owner, provider, access, invested, today) {
   var accounts = {};
@@ -118,11 +119,17 @@ function syncActivity(app, owner, provider, access, invested, today) {
   });
   if (!ids.length) return;
   var newest = "";
+  var stale = false;
+  var first = investing.activityFrom("", today);
   ids.forEach(function (id) {
     var last = app.findRecordsByFilter("investment_activity", "account = {:a}", "-date", 1, 0, { a: id })[0];
     if (last && last.getString("date") > newest) newest = last.getString("date");
+    // Rows read an older way (ACTIVITY_READING) are asked for again, all of them, and read anew.
+    if (!stale) {
+      stale = app.findRecordsByFilter("investment_activity", "account = {:a} && reading < {:r} && date >= {:from}", "", 1, 0, { a: id, r: investing.ACTIVITY_READING, from: first }).length > 0;
+    }
   });
-  var got = provider.activity(access, investing.activityFrom(newest, today), today);
+  var got = provider.activity(access, investing.activityFrom(newest, today, stale), today);
   if (got.status !== "ok") return;
   app.runInTransaction(function (txApp) {
     var collection = txApp.findCollectionByNameOrId("investment_activity");
@@ -141,6 +148,8 @@ function syncActivity(app, owner, provider, access, invested, today) {
       ["date", "kind", "name", "security", "ticker", "quantity", "amount_cents"].forEach(function (f) {
         rec.set(f, a[f]);
       });
+      rec.set("security_type", a.security_type || "");
+      rec.set("reading", investing.ACTIVITY_READING);
       rec.set("price_cents", a.price_cents === null ? 0 : a.price_cents);
       rec.set("fees_cents", a.fees_cents === null ? 0 : a.fees_cents);
       txApp.save(rec);

@@ -1,7 +1,18 @@
-import { growthStart, isInvestment } from '~~/shared/overview'
-import { investments, type Investments } from '~~/shared/investments'
+import type { RecordModel } from 'pocketbase'
+import { asHeld, growthStart, isInvestment } from '~~/shared/overview'
+import { investments } from '~~/shared/investments'
 import { portfolio, type Portfolio, type Position } from '~~/shared/holdings'
-import { incomeBetween, positionChanges, securityKey, type Activity, type ActivityKind } from '~~/shared/investing'
+import { ACTIVITY_KINDS, incomeBetween, positionChanges, securityKey, type Activity, type ActivityKind } from '~~/shared/investing'
+import {
+  GRAINS,
+  optionContracts,
+  periodsBack,
+  timeline,
+  type CurrentPosition,
+  type Grain,
+  type HistoryDay,
+  type InvestmentsReport,
+} from '~~/shared/investment-history'
 import { listLinks } from '../bank-links'
 import { expandSplits } from '~~/shared/splits'
 import { counted } from '../accounts'
@@ -13,12 +24,17 @@ import type { Session } from '../session'
  * brokerage and retirement accounts, their history, and the transfers in and
  * out of them, which aren't growth.
  */
-export async function investmentsReport(
-  s: Session,
-  today: string,
-): Promise<Investments & { holdings: Portfolio & { on: boolean }, activity: InvestmentActivity }> {
+export async function investmentsReport(s: Session, today: string): Promise<InvestmentsReport> {
   const all = (await counted(s)).filter(a => isInvestment(a.kind))
-  if (!all.length) return { ...investments([], [], [], today), holdings: { ...portfolio([], [], false), on: false }, activity: { rows: [], income_12m_cents: 0 } }
+  if (!all.length) {
+    return {
+      ...investments([], [], [], today),
+      holdings: { ...portfolio([], [], false), on: false },
+      activity: { rows: [], income_12m_cents: 0 },
+      timeline: { month: [], quarter: [] },
+      options: [],
+    }
+  }
   const ids = new Set(all.map(a => a.id))
   // Daily balances for the last year (the longest period but "All"), each month's first and last before.
   const history = (
@@ -33,28 +49,77 @@ export async function investmentsReport(
       extra: `(${[...ids].filter(id => /^[a-z0-9]{15}$/.test(id)).map(id => `account = '${id}'`).join(' || ') || 'id = \'\''})`,
     }),
   ).filter(r => ids.has(r.account) && r.category === 'transfer')
-  const [holdings, activity] = await Promise.all([holdingsOf(s, all, today), activityOf(s, ids, today)])
-  return { ...investments(all, history, transfers, today), holdings, activity }
+  const periods = Object.fromEntries(GRAINS.map(g => [g.id, periodsBack(today, g.id, g.count)])) as Record<Grain, ReturnType<typeof periodsBack>>
+  const [positions, activityRows, days] = await Promise.all([
+    s.collection('holdings').getFullList({ sort: '-value_cents' }),
+    activityOf(s, ids, today),
+    periodEnds(s, Object.values(periods).flatMap(list => [dayBefore(list[0]!.from), ...list.map(p => p.to)]), today),
+  ])
+  const holdings = await holdingsOf(s, all, positions, today)
+  const current: CurrentPosition[] = positions.map(r => ({
+    account: r.account,
+    name: r.name ?? '',
+    ticker: r.ticker ?? '',
+    type: r.type || 'other',
+    quantity: r.quantity ?? 0,
+    value_cents: r.value_cents ?? 0,
+  }))
+  // Share counts are worked back only for accounts whose positions Cheddar has.
+  const covered = new Set(Object.entries(holdings.accounts).filter(([, h]) => !h.gap && h.positions.length).map(([id]) => id))
+  const { open, history: held } = asHeld(all, history)
+  const now = new Map(open.filter(a => a.balance_cents !== null).map(a => [a.id, a.balance_cents!]))
+  const timelineOf = (g: Grain) => timeline({ periods: periods[g], balances: held, now, covered, current, history: days, activity: activityRows, transfers })
+  return {
+    ...investments(all, history, transfers, today),
+    holdings,
+    activity: { rows: activityRows.slice(0, ACTIVITY_SHOWN), income_12m_cents: incomeBetween(activityRows, shiftYears(today, -1), today) },
+    timeline: { month: timelineOf('month'), quarter: timelineOf('quarter') },
+    options: optionContracts(activityRows, current.filter(p => covered.has(p.account))),
+  }
 }
 
-export interface InvestmentActivity {
-  /** The newest first, at most ACTIVITY_SHOWN. */
-  rows: Activity[]
-  /** Dividends and interest over the last 12 months. */
-  income_12m_cents: number
+/**
+ * holding_history near each of `ends` (each period's end, and the day
+ * before each grain's first): the week up to it, which holds the
+ * last day each account synced in all but a link left a week or more
+ * without one. Read as the person, so only their own.
+ */
+async function periodEnds(s: Session, ends: string[], today: string): Promise<HistoryDay[]> {
+  const week = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 6 * 86400000).toISOString().slice(0, 10)
+  const days = [...new Set(ends.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today))]
+  if (!days.length) return []
+  const params: Record<string, string> = {}
+  const clauses = days.map((d, i) => {
+    params[`f${i}`] = week(d)
+    params[`t${i}`] = d
+    return `(date >= {:f${i}} && date <= {:t${i}})`
+  })
+  const rows = await s.collection('holding_history').getFullList({
+    fields: 'account,date,security,name,ticker,type,value_cents,quantity',
+    filter: s.filter(`(${clauses.join(' || ')})`, params),
+  })
+  return rows.map(r => ({
+    account: r.account,
+    date: r.date,
+    security: r.security,
+    name: r.name ?? '',
+    ticker: r.ticker ?? '',
+    type: r.type ?? '',
+    value_cents: r.value_cents ?? 0,
+    quantity: r.quantity ?? 0,
+  }))
 }
 
 const ACTIVITY_SHOWN = 200
-const KINDS = new Set<ActivityKind>(['buy', 'sell', 'dividend', 'interest', 'deposit', 'withdrawal', 'fee', 'other'])
+const KINDS = new Set<ActivityKind>(ACTIVITY_KINDS)
 
 /**
- * The investment accounts' buys, sells, dividends and the rest
- * (`investment_activity`, the person's own by its rules), newest first, and
- * what dividends and interest paid over the last year.
+ * The investment accounts' buys, sells, dividends and the rest over the
+ * last two years (`investment_activity`, the person's own by its rules),
+ * newest first.
  */
-async function activityOf(s: Session, ids: Set<string>, today: string): Promise<InvestmentActivity> {
-  const from = shiftYears(today, -1)
-  const rows = (
+async function activityOf(s: Session, ids: Set<string>, today: string): Promise<Activity[]> {
+  return (
     await s.collection('investment_activity').getFullList({ sort: '-date,-created', filter: s.filter('date >= {:from}', { from: shiftYears(today, -2) }) })
   )
     .filter(r => ids.has(r.account))
@@ -70,9 +135,11 @@ async function activityOf(s: Session, ids: Set<string>, today: string): Promise<
       price_cents: r.price_cents || null,
       amount_cents: r.amount_cents ?? 0,
       fees_cents: r.fees_cents || null,
+      security_type: r.security_type ?? '',
     }))
-  return { rows: rows.slice(0, ACTIVITY_SHOWN), income_12m_cents: incomeBetween(rows, from, today) }
 }
+
+const dayBefore = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
 
 function shiftYears(today: string, n: number): string {
   const d = new Date(`${today}T00:00:00Z`)
@@ -89,12 +156,12 @@ function shiftYears(today: string, n: number): string {
 async function holdingsOf(
   s: Session,
   all: { id: string, balance_cents: number | null, owned?: boolean, closed_on: string }[],
+  rows: RecordModel[],
   today: string,
 ): Promise<Portfolio & { on: boolean }> {
   const open = all.filter(a => !(a.closed_on && a.closed_on <= today))
-  const [links, rows, days] = await Promise.all([
+  const [links, days] = await Promise.all([
     listLinks(s).catch(() => ({ enabled: false, links: [], holdings: false })),
-    s.collection('holdings').getFullList({ sort: '-value_cents' }),
     s.collection('holding_history').getFullList({
       fields: 'account,date,security,value_cents,quantity',
       filter: s.filter('date >= {:from}', { from: new Date(Date.parse(`${today}T00:00:00Z`) - 31 * 86400000).toISOString().slice(0, 10) }),
