@@ -280,6 +280,9 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     assert.deepEqual([inv.timeline.month.length, inv.timeline.quarter.length], [12, 8])
     const thisMonth = inv.timeline.month.at(-1)
     assert.deepEqual(thisMonth.holdings.filter(h => !h.option && h.quantity).map(h => [h.ticker, h.quantity, h.value_cents]), [['VTI', 20, 600000], ['BND', 50, 400000]])
+    // Last month has no balance kept: its value is estimated from the activity (it began 40 days ago).
+    assert.equal(inv.timeline.month.at(-2).estimated, true)
+    assert.equal(typeof inv.timeline.month.at(-2).value_cents, 'number')
     // Shares worked back before the buy 40 days ago: no VTI three months back.
     assert.equal(inv.timeline.month.at(-4).holdings.find(h => h.ticker === 'VTI')?.quantity ?? 0, 0)
     // The expired call: $250 out, nothing back.

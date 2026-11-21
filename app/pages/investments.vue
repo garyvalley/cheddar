@@ -188,7 +188,7 @@ const changeOf = (p: Portfolio['accounts'][string]['positions'][number]) => (p.c
       <p class="group-footer">
         Growth is the change in each account's balance less money moved in or out, so deposits don't count as gains; it isn't the return on what's held.
         Values are each account's balance as its bank reports it.
-        <template v-if="showHoldings">Holdings, allocation and activity are as each bank last reported them, through Plaid, on the date shown; a holding's 30-day change includes anything bought or sold. Over time's market gain or loss is each period's change in value less money moved in or out, so it includes dividends; values reach back only as far as Cheddar has seen them. They show what's held, not what to hold.</template>
+        <template v-if="showHoldings">Holdings, allocation and activity are as each bank last reported them, through Plaid, on the date shown; a holding's 30-day change includes anything bought or sold. Over time's market gain or loss is each period's change in value less money moved in or out, so it includes dividends; before Cheddar kept an account's balance, its value is estimated: its cash now less every movement since (exact while the bank's activity is complete) plus its shares then at their last trade prices, so a holding not traded for a while counts at an older price. They show what's held, not what to hold.</template>
         <template v-else>Holdings aren't switched on for this Cheddar, so each account shows its balance only.</template>
       </p>
     </template>

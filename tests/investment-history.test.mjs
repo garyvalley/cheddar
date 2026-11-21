@@ -128,8 +128,9 @@ describe('timeline', () => {
       transfers: [],
     })
     const shares = p => Object.fromEntries(p.holdings.map(h => [h.ticker, [h.quantity, h.quantity_change, h.value_cents]]))
-    // January: worked back (VTI 20 − 5 − 5 = 10, BND 20 + 5 = 25), no values.
-    assert.deepEqual(shares(t[0]), { VTI: [10, null, null], BND: [25, null, null] })
+    // January: worked back (VTI 20 − 5 − 5 = 10, BND 20 + 5 = 25), valued at the last trade's price (VTI's $280 on Jan 10),
+    // or today's for one not traded yet (BND's $80).
+    assert.deepEqual(shares(t[0]), { VTI: [10, null, 280000], BND: [25, null, 200000] })
     assert.equal(t[0].valued, false)
     // February: kept that day.
     assert.deepEqual(shares(t[1]), { VTI: [15, 5, 430000], BND: [25, 0, 200000] })
@@ -153,8 +154,8 @@ describe('timeline', () => {
       transfers: [],
     })
     assert.deepEqual(t.map(p => p.holdings.map(h => [h.ticker, h.quantity, h.quantity_change])), [
-      [['ARKK', 30, null], ['VTI', 10, null]],
-      [['ARKK', 0, -30], ['VTI', 10, 0]],
+      [['VTI', 10, null], ['ARKK', 30, null]],
+      [['VTI', 10, 0], ['ARKK', 0, -30]],
       [['VTI', 10, 0]],
     ])
   })
@@ -172,5 +173,41 @@ describe('timeline', () => {
     })
     assert.deepEqual(t.map(p => [p.options_cents, p.options_ended, p.bought_cents]), [[-30000, 0, 0], [50000, 1, 30000], [0, 0, 0]])
     assert.equal(t[0].holdings.find(h => h.option)?.quantity, 1)
+  })
+})
+
+describe('estimated values before Cheddar kept balances', () => {
+  test('cash worked back exactly, shares at their trade prices; real balances win', () => {
+    const periods = periodsBack('2026-03-20', 'month', 3)
+    const t = timeline({
+      periods,
+      // A balance kept only from February's end.
+      balances: [{ account: 'ira', date: '2026-02-28', balance_cents: 900000 }],
+      now: new Map([['ira', 1000000]]),
+      covered: new Set(['ira']),
+      // $6,000 in VTI (20 at $300) and $4,000 cash now.
+      current: [pos('VTI', 20, 600000, 'etf'), { ...pos('CUR:USD', 4000, 400000), type: 'cash' }],
+      history: [],
+      activity: [
+        act('2025-12-15', 'deposit', '', 0, 500000),
+        act('2026-01-05', 'buy', 'VTI', 10, -250000), // $250 a share
+        act('2026-03-02', 'buy', 'VTI', 10, -290000), // $290 a share
+        act('2026-03-10', 'dividend', 'VTI', 0, 5000),
+      ],
+      transfers: [],
+    })
+    // January's end: cash = $4,000 − ($50 dividend − $2,900 buy) = $6,850, plus 10 VTI at $250 = $9,350, estimated.
+    assert.deepEqual([t[0].value_cents, t[0].estimated], [935000, true])
+    // February's end: its real balance.
+    assert.deepEqual([t[1].value_cents, t[1].estimated, t[1].change_cents], [900000, false, -35000])
+    // March: today.
+    assert.deepEqual([t[2].value_cents, t[2].estimated], [1000000, false])
+  })
+
+  test('no estimate before an account\'s first activity, or without its positions', () => {
+    const periods = periodsBack('2026-03-20', 'month', 3)
+    const base = { periods, balances: [], now: new Map([['ira', 100000]]), history: [], transfers: [], current: [pos('VTI', 1, 100000, 'etf')], activity: [act('2026-02-10', 'buy', 'VTI', 1, -90000)] }
+    assert.deepEqual(timeline({ ...base, covered: new Set(['ira']) }).map(p => p.value_cents), [null, 90000, 100000])
+    assert.deepEqual(timeline({ ...base, covered: new Set() }).map(p => p.value_cents), [null, null, 100000])
   })
 })
