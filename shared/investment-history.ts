@@ -87,8 +87,10 @@ export interface TimelinePeriod extends Period {
   /** How many options closed, expired, were exercised or assigned. */
   options_ended: number
   holdings: PeriodHolding[]
-  /** Whether holdings' values are from that time (else share counts only). */
+  /** Whether holdings' values are from that time (else share counts, and values estimated from trade prices). */
   valued: boolean
+  /** Whether the value at the end is estimated for some account: no balance kept then (estimateValue()). */
+  estimated: boolean
   activity: number
 }
 
@@ -233,8 +235,12 @@ export function timeline(input: {
   for (const a of activity) nameOf(activityKey(a), { name: a.security || a.name, ticker: a.ticker, security_type: a.security_type })
 
   /** Each covered account's shares of each security at the end of `date`: now, less what's changed since. */
+  const sharesCache = new Map<string, Map<string, number>>()
   function sharesAt(date: string): Map<string, number> {
+    const had = sharesCache.get(date)
+    if (had) return had
     const out = new Map(held)
+    sharesCache.set(date, out)
     for (const a of trades) {
       if (a.date <= date) continue
       const s = activityKey(a)
@@ -242,6 +248,58 @@ export function timeline(input: {
       out.set(keyOf(a.account, s), (out.get(keyOf(a.account, s)) ?? 0) - shares(a))
     }
     return out
+  }
+
+  // What one share (or contract) was worth at each trade: its cash over its shares. Banks give no past prices.
+  const trades_ = new Map<string, { date: string, unit: number }[]>()
+  for (const a of activity) {
+    if ((a.kind !== 'buy' && a.kind !== 'sell') || !a.quantity || !a.amount_cents) continue
+    const s = activityKey(a)
+    if (!s || s === 'cash') continue
+    const list = trades_.get(s) ?? []
+    list.push({ date: a.date, unit: Math.abs(a.amount_cents) / Math.abs(a.quantity) })
+    trades_.set(s, list)
+  }
+  for (const list of trades_.values()) list.sort((a, b) => a.date.localeCompare(b.date))
+  const unitNow = new Map<string, number>()
+  for (const c of current) {
+    const s = securityKey(c)
+    if (s && s !== 'cash' && Math.abs(c.quantity) > 1e-9) unitNow.set(s, c.value_cents / c.quantity)
+  }
+  /** A share's value on `date`: its last trade by then, else today's price, else its first trade after. */
+  function unitAt(s: string, date: string): number | null {
+    const list = trades_.get(s) ?? []
+    let unit: number | null = null
+    for (const t of list) {
+      if (t.date > date) break
+      unit = t.unit
+    }
+    return unit ?? unitNow.get(s) ?? list[0]?.unit ?? null
+  }
+  const firstActivity = new Map<string, string>()
+  for (const a of activity) if (!firstActivity.has(a.account) || a.date < firstActivity.get(a.account)!) firstActivity.set(a.account, a.date)
+
+  /**
+   * An account's value at the end of `date` when no balance was kept then:
+   * its cash now less every cash movement since (exact while the activity
+   * is complete), plus its shares then at their trade prices. Only for an
+   * account whose positions and activity Cheddar has, back to its first
+   * activity; null otherwise.
+   */
+  function estimateValue(account: string, date: string): number | null {
+    if (!covered.has(account) || !firstActivity.has(account) || date < firstActivity.get(account)!) return null
+    const positions = current.filter(c => c.account === account)
+    const invested = positions.filter(c => securityKey(c) !== 'cash').reduce((n, c) => n + c.value_cents, 0)
+    let cash = now.has(account) ? now.get(account)! - invested : positions.filter(c => securityKey(c) === 'cash').reduce((n, c) => n + c.value_cents, 0)
+    for (const a of activity) if (a.account === account && a.date > date) cash -= a.amount_cents
+    let value = cash
+    for (const [k, q] of sharesAt(date)) {
+      if (!k.startsWith(`${account}|`) || Math.abs(q) < 1e-9) continue
+      const unit = unitAt(k.slice(account.length + 1), date)
+      if (unit === null) return null
+      value += q * unit
+    }
+    return Math.round(value)
   }
 
   function holdingsAt(p: Period): { rows: Map<string, { quantity: number, value: number | null }>, valued: boolean } {
@@ -262,14 +320,15 @@ export function timeline(input: {
         }
         continue
       }
-      // Not kept then: shares worked back from today, values unknown.
+      // Not kept then: shares worked back from today, valued at their trade prices.
       if (p.to !== today) valued = false
       for (const [k, q] of worked) {
         if (!k.startsWith(`${account}|`) || Math.abs(q) < 1e-9) continue
         const s = k.slice(account.length + 1)
         const r = rows.get(s) ?? { quantity: 0, value: 0 }
         r.quantity += q
-        r.value = null
+        const unit = p.to === today ? null : unitAt(s, p.to)
+        r.value = p.to === today ? null : r.value === null || unit === null ? null : r.value + Math.round(q * unit)
         rows.set(s, r)
       }
       // The period running now: today's positions are what's held.
@@ -285,9 +344,19 @@ export function timeline(input: {
     return { rows, valued }
   }
 
-  const valueAt = (p: Period) => {
-    if (p.to === today) return now
-    return balancesOn(balances, p.to)
+  /** Each account's value at the period's end: its balance then, else an estimate (estimateValue()). */
+  const valueAt = (p: Period): { values: Map<string, number>, estimated: boolean } => {
+    if (p.to === today) return { values: now, estimated: false }
+    const values = balancesOn(balances, p.to)
+    let estimated = false
+    for (const account of covered) {
+      if (values.has(account)) continue
+      const v = estimateValue(account, p.to)
+      if (v === null) continue
+      values.set(account, v)
+      estimated = true
+    }
+    return { values, estimated }
   }
 
   const before: Period = (() => {
@@ -295,11 +364,11 @@ export function timeline(input: {
     const d = new Date(Date.parse(`${first.from}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
     return { id: '', label: '', short: '', from: '0000-01-01', to: d }
   })()
-  let prevValues = valueAt(before)
+  let prevValues = valueAt(before).values
   let prevHoldings = periods.length ? holdingsAt(before) : null
 
   return periods.map((p) => {
-    const values = valueAt(p)
+    const { values, estimated } = valueAt(p)
     const value = values.size ? [...values.values()].reduce((n, c) => n + c, 0) : null
     // The change counts accounts with a value at both ends; one added since isn't growth.
     const both = [...values.keys()].filter(id => prevValues.has(id))
@@ -357,6 +426,7 @@ export function timeline(input: {
       options_ended: contracts.filter(c => c.status !== 'open' && inPeriod(c.ended)).length,
       holdings,
       valued: end.valued,
+      estimated,
       activity: rows.length,
     }
     prevValues = values
