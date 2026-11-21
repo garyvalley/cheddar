@@ -241,7 +241,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
         { account_id: ira, security_id: 'usd', quantity: 120.03, institution_price: 1, institution_value: 120.03, iso_currency_code: 'USD' },
       ],
     }
-    // Buys, a dividend and a sale (three, so they take two pages), plus one outside the two years asked for.
+    // Buys, a dividend, a sale and an option (five, so they take three pages), plus one outside the two years asked for.
     bank.activity = {
       securities: bank.holdings.securities,
       investment_transactions: [
@@ -259,7 +259,7 @@ describe('bank links', { skip: !process.env.PLAID_MOCK_PORT && 'PLAID_MOCK_PORT 
     const { link: l } = await link(c, bank)
     assert.deepEqual(mock.linkTokens.slice(tokens).map(b => b.optional_products), [['investments']])
     assert.equal(l.holdings, 'ok')
-    assert.deepEqual(bank.calls.filter(x => x.path === '/investments/transactions/get').map(x => [x.from, x.offset]), [[daysAgo(730), 0], [daysAgo(730), 2]])
+    assert.deepEqual(bank.calls.filter(x => x.path === '/investments/transactions/get').map(x => [x.from, x.offset]), [[daysAgo(730), 0], [daysAgo(730), 2], [daysAgo(730), 4]])
 
     const inv = (await c.call('GET', '/api/investments')).json
     const account = inv.accounts.find(a => a.name === 'Rollover IRA')

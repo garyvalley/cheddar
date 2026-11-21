@@ -97,7 +97,8 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
           </div>
           <div><dt>Moved in</dt><dd class="num">{{ signed(shown.moved_in_cents) }}</dd></div>
           <div><dt>Dividends and interest</dt><dd class="num" :class="moneyTone(shown.income_cents)">{{ signed(shown.income_cents) }}</dd></div>
-          <div v-if="shown.bought_cents || shown.sold_cents"><dt>Bought · sold</dt><dd class="num">{{ formatCents(shown.bought_cents) }} · {{ formatCents(shown.sold_cents) }}</dd></div>
+          <div v-if="shown.bought_cents"><dt>Bought</dt><dd class="num">{{ formatCents(shown.bought_cents) }}</dd></div>
+          <div v-if="shown.sold_cents"><dt>Sold</dt><dd class="num">{{ formatCents(shown.sold_cents) }}</dd></div>
           <div v-if="shown.options_cents || shown.options_ended">
             <dt>Options' cash</dt>
             <dd class="num">{{ signed(shown.options_cents) }}<span v-if="shown.options_ended" class="caption"> · {{ shown.options_ended }} ended</span></dd>
@@ -120,11 +121,12 @@ function sharesMoved(h: TimelinePeriod['holdings'][number]) {
                 </td>
                 <td class="r num">
                   <span class="block" :class="h.value_cents === null ? 'muted' : ''">{{ h.value_cents === null ? '—' : formatCents(h.value_cents) }}</span>
-                  <span v-if="h.value_change_cents" class="caption" :class="moneyTone(h.value_change_cents)">{{ signed(h.value_change_cents) }}</span>
+                  <span v-if="h.value_change_cents" class="caption" :class="moneyTone(h.value_change_cents)" title="The market's part: buys and sales of it this period left out">{{ signed(h.value_change_cents) }}</span>
                 </td>
               </tr>
             </tbody>
           </table>
+          <p v-if="shown.valued" class="footnote">A holding's change in value is the market's part, with this {{ periodWord }}'s buys and sales of it left out.</p>
           <p v-if="!shown.valued" class="footnote">Cheddar hadn't kept each holding's value then: shares are worked back from what's held now and your brokerage's buys and sales since.</p>
         </template>
       </div>

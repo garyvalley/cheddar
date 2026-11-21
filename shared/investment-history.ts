@@ -64,6 +64,7 @@ export interface PeriodHolding {
   quantity_change: number | null
   /** Its value at the period's end, when Cheddar kept the positions then. */
   value_cents: number | null
+  /** The market's part of its change in value: buys and sales of it in the period left out. */
   value_change_cents: number | null
 }
 
@@ -312,6 +313,13 @@ export function timeline(input: {
     const stockRows = rows.filter(a => !optionRows.includes(a))
 
     const end = holdingsAt(p)
+    // Cash each security's trades took or brought in the period: a holding's change in value leaves them out.
+    const traded = new Map<string, number>()
+    for (const a of rows) {
+      if (a.kind === 'dividend' || a.kind === 'interest' || !covered.has(a.account)) continue
+      const s = activityKey(a)
+      if (s && s !== 'cash') traded.set(s, (traded.get(s) ?? 0) + a.amount_cents)
+    }
     const holdings: PeriodHolding[] = [...new Set([...end.rows.keys(), ...(prevHoldings?.rows.keys() ?? [])])]
       .map((s) => {
         const r = end.rows.get(s)
@@ -329,7 +337,7 @@ export function timeline(input: {
           quantity,
           quantity_change: p === periods[0] ? null : quantity - (was?.quantity ?? 0),
           value_cents: value,
-          value_change_cents: p === periods[0] || value === null || wasValue === null || !end.valued || !prevHoldings?.valued ? null : value - wasValue,
+          value_change_cents: p === periods[0] || value === null || wasValue === null || !end.valued || !prevHoldings?.valued ? null : value - wasValue + (traded.get(s) ?? 0),
         }
       })
       // Gone before this period and not back: nothing to show.

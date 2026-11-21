@@ -134,9 +134,9 @@ describe('timeline', () => {
     // February: kept that day.
     assert.deepEqual(shares(t[1]), { VTI: [15, 5, 430000], BND: [25, 0, 200000] })
     assert.equal(t[1].valued, true)
-    // March, running now: today's positions, with their change in value.
+    // March, running now: today's positions, with the market's part of their change (the $1,450 buy and $400 sale left out).
     assert.deepEqual(t[2].holdings.map(h => [h.ticker, h.quantity, h.quantity_change, h.value_cents, h.value_change_cents]), [
-      ['VTI', 20, 5, 600000, 170000], ['BND', 20, -5, 160000, -40000],
+      ['VTI', 20, 5, 600000, 25000], ['BND', 20, -5, 160000, 0],
     ])
     assert.deepEqual([t[2].bought_cents, t[2].sold_cents, t[0].bought_cents], [145000, 40000, 140000])
   })
